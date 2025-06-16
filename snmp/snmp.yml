@@ -1,5 +1,5 @@
 modules:
-  Cisco:
+  CISCO:
     walk:
       - 1.4.6.1.4.3.9.9.244.1.2.1.1.7
     metrics:

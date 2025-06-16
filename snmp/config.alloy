@@ -11,7 +11,7 @@ prometheus.exporter.snmp "snmp_exporter" {
 
     target "tm" {
         address     = "snmpd"
-        module      = "Cisco"
+        module      = "CISCO"
         walk_params = "Cisco"
         labels = {
             "ilo_node" = "switch",
