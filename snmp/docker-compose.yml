@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+
+  loki:
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.5.0}
+    ports:
+      - 3100:3100/tcp
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml
+
+
+  prometheus:
+     image: prom/prometheus:${PROMETHEUS_VERSION:-v3.3.0}
+     command:
+       - --web.enable-remote-write-receiver
+       - --config.file=/etc/prometheus/prometheus.yml
+     ports:
+      - 9090:9090/tcp
+     volumes:
+        - ./prom-config.yaml:/etc/prometheus/prometheus.yml
+
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-11.6.1}
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+    ports:
+      - 3000:3000/tcp
+    entrypoint:
+       - sh
+       - -euc
+       - |
+         mkdir -p /etc/grafana/provisioning/datasources
+         cat <<EOF > /etc/grafana/provisioning/datasources/ds.yaml
+         apiVersion: 1
+         datasources:
+         - name: Loki
+           type: loki
+           access: proxy
+           orgId: 1
+           url: http://loki:3100
+           basicAuth: false
+           isDefault: false
+           version: 1
+           editable: false
+         - name: Prometheus
+           type: prometheus
+           orgId: 1
+           url: http://prometheus:9090
+           basicAuth: false
+           isDefault: true
+           version: 1
+           editable: false
+         EOF
+         /run.sh
+
+  alloy:
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.8.2}
+    ports:
+      - 12345:12345
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy
+      - ./snmp.yml:/etc/alloy/snmp.yml
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy

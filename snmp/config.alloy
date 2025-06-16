@@ -1,0 +1,43 @@
+// --- Remote Write to Prometheus ---
+prometheus.remote_write "remote" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+
+// --- SNMP Exporter Configuration ---
+prometheus.exporter.snmp "snmp_exporter" {
+    config_file = "/etc/snmp/snmp.yml"
+
+    target "tm" {
+        address     = "snmpd"
+        module      = "Cisco"
+        walk_params = "Cisco"
+        labels = {
+            "ilo_node" = "switch",
+        }
+    }
+
+    walk_param "cisco" {
+        retries = "2"
+        timeout = "30s"
+    }
+}
+
+// --- SNMP Scrape Configuration ---
+discovery.relabel "snmp_targets" {
+  targets = prometheus.exporter.snmp.snmp_exporter.targets
+  rule {
+    target_label = "job"
+    replacement  = "smpt"
+  }
+}
+
+prometheus.scrape "snmp_targets" {
+  scrape_interval = "30s"
+  targets         = discovery.relabel.snmp_targets.output
+  forward_to      = [prometheus.remote_write.remote.receiver]
+}
+
+// --- Enable Live Debugging ---
+livedebugging {}
