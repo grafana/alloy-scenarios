@@ -1,0 +1,22 @@
+auths:
+  public_v1:
+    community: <community>
+    security_level: noAuthNoPriv
+    version: 1
+  public_v2:
+    community: <community>
+    security_level: noAuthNoPriv
+    version: 2
+
+modules:
+  CISCO:
+    walk:
+      - 1.4.6.1.4.3.9.9.244.1.2.1.1.7
+    metrics:
+      - name: ifInterface
+        oid: 1.4.6.1.4.3.9.9.244.1.2.1.1.7
+        type: gauge
+        help: A unique value, greater than zero, for each interface
+        indexes:
+          - labelname: ifInterface
+            type: gauge
