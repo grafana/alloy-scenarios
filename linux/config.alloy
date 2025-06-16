@@ -1,4 +1,4 @@
-// This a block relabels metrics coming from node_exporter to add standard labels
+// This block relabels metrics coming from node_exporter to add standard labels
 discovery.relabel "integrations_node_exporter" {
   targets = prometheus.exporter.unix.integrations_node_exporter.targets
 
