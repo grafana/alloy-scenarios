@@ -1,15 +1,5 @@
-auths:
-  public_v1:
-    community: <community>
-    security_level: noAuthNoPriv
-    version: 1
-  public_v2:
-    community: <community>
-    security_level: noAuthNoPriv
-    version: 2
-
 modules:
-  CISCO:
+  Cisco:
     walk:
       - 1.4.6.1.4.3.9.9.244.1.2.1.1.7
     metrics:
@@ -20,3 +10,13 @@ modules:
         indexes:
           - labelname: ifInterface
             type: gauge
+auths:
+  public_v1:
+    community: <community>
+    security_level: noAuthNoPriv
+    version: 1
+  public_v2:
+    community: <community>
+    security_level: noAuthNoPriv
+    version: 2
+
