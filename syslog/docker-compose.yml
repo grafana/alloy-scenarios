@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # Rsyslog service
   rsyslog:
-    image: rsyslog/syslog_appliance_alpine:latest
+    image: rsyslog/syslog_appliance_alpine:latest@sha256:c0dd7cad9ff3234967ff59879590175b7590e8a5f5621ec49a85aff546b44a3b
     container_name: rsyslog
     ports:
       - "514:514/udp"     # Standard syslog UDP port
