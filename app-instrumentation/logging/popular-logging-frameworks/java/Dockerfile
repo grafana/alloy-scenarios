@@ -1,4 +1,4 @@
-FROM openjdk:26-slim
+FROM openjdk:26-slim@sha256:63814a9d8bbea6d39d5ce9c91843bec5e9d9d1d1bc2bade4bb57ba70c0839553
 
 WORKDIR /app
 
