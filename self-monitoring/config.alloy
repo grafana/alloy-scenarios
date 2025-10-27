@@ -1,0 +1,79 @@
+
+
+prometheus.exporter.self "integrations_alloy_health" { }
+
+discovery.relabel "integrations_alloy_health" {
+	targets = prometheus.exporter.self.integrations_alloy_health.targets
+
+	rule {
+		target_label = "instance"
+		replacement  = constants.hostname
+	}
+
+	rule {
+		target_label = "container"
+		replacement  = "alloy"
+	}
+}
+
+prometheus.scrape "integrations_alloy_health" {
+	targets = array.concat(
+		discovery.relabel.integrations_alloy_health.output,
+	)
+	forward_to = [prometheus.relabel.integrations_alloy_health.receiver]
+	job_name   = "integrations/alloy"
+}
+
+prometheus.relabel "integrations_alloy_health" {
+	forward_to = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.remote_write "default" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}
+
+
+// ###############################
+// #### Logging Configuration ####
+// ###############################
+
+// Discover Docker containers and extract metadata.
+discovery.docker "linux" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Define a relabeling rule to create a service name from the container name.
+discovery.relabel "logs_integrations_docker" {
+      targets = []
+  
+  // Extract the docker-compose service name from container names like
+  // /grafana-pathfinder-app-alloy-1 -> alloy
+  rule {
+      source_labels = ["__meta_docker_container_name"]
+      regex = "^/(?:.+-)?([^-]+)-(?:\\d+)$"
+      target_label = "container"
+  }
+
+     rule {
+        target_label = "instance"
+        replacement  = constants.hostname
+    }
+
+  }
+
+
+// Configure a loki.source.docker component to collect logs from Docker containers.
+loki.source.docker "default" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.docker.linux.targets
+  relabel_rules = discovery.relabel.logs_integrations_docker.rules
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

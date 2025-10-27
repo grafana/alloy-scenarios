@@ -33,6 +33,7 @@ The centralized approach allows you to manage all Docker image versions in a sin
 | [Game of Tracing](game-of-tracing/) | Learn traces through a strategic game |
 | [Kafka](kafka/) | Learn how to use Grafana Alloy to monitor logs from Kafka. |
 | [Popular Logging Frameworks](app-instrumentation/logging/popular-logging-frameworks/) | Learn how to use Grafana Alloy to parse logs from popular logging frameworks. |
+| [Self-Monitoring](self-monitoring/) | Learn how to configure Grafana Alloy to monitor itself, collecting its own metrics and logs. |
 
 ## Contributing
 
