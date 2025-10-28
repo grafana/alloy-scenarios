@@ -1,5 +1,5 @@
 flask==2.3.3
-requests==2.32.4
+requests==2.32.5
 opentelemetry-api
 opentelemetry-sdk
 opentelemetry-exporter-otlp 
