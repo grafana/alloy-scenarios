@@ -27,7 +27,7 @@ services:
       - prometheus
 
   memcached:
-    image: memcached:1.6.38@sha256:768b8b14b264b87cdde0d4bc0e800c332b8563ce19fd15ce98945c4441b98146
+    image: memcached:1.6.39@sha256:4737e17016e4d65ad8007408ec1816096c4ebec04cfa89a5265a3edd3f4ca552
     container_name: memcached
     ports:
       - "11211:11211"
