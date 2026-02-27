@@ -15,131 +15,169 @@
     }
 </script>
 
-<div class="row">
+<!-- Game HUD -->
+<div class="game-hud" id="gameHud">
+    <div class="hud-item {{ faction }}">
+        {% if faction == 'southern' %}
+        <i class="fas fa-sun" style="color: var(--southern-gold);"></i>
+        {% else %}
+        <i class="fas fa-snowflake" style="color: var(--northern-blue);"></i>
+        {% endif %}
+        <span class="hud-value">{{ faction|capitalize }}</span>
+    </div>
+    <div class="hud-divider"></div>
+    <div class="hud-item">
+        <i class="fas fa-coins" style="color: var(--southern-gold);"></i>
+        <span>Resources:</span>
+        <span class="hud-value" id="hudResources">0</span>
+    </div>
+    <div class="hud-divider"></div>
+    <div class="hud-item">
+        <i class="fas fa-shield-alt" style="color: #ef4444;"></i>
+        <span>Armies:</span>
+        <span class="hud-value" id="hudArmies">0</span>
+    </div>
+    <div class="hud-divider"></div>
+    <div class="hud-item">
+        <i class="fas fa-map-marked-alt" style="color: #22c55e;"></i>
+        <span>Territory:</span>
+        <span class="hud-value" id="hudTerritory">0/8</span>
+    </div>
+    <div class="ms-auto">
+        <button id="refreshMapBtn" class="btn btn-outline-light btn-sm">
+            <i class="fas fa-sync-alt"></i>
+        </button>
+    </div>
+</div>
+
+<div class="row g-3">
     <!-- Game Map -->
-    <div class="col-md-9">
-        <div class="card shadow mb-4">
-            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                <h4 class="mb-0">War of Kingdoms Map</h4>
-                <button id="refreshMapBtn" class="btn btn-outline-light btn-sm">
-                    <i class="fas fa-sync-alt"></i> Refresh
-                </button>
+    <div class="col-lg-9">
+        <div id="mapContainer" class="position-relative w-100" style="height: 65vh; min-height: 400px;">
+            <!-- Map Canvas -->
+            <canvas id="mapCanvas" class="h-100 w-100"></canvas>
+
+            <!-- Location Markers (added dynamically) -->
+            <div id="mapMarkers"></div>
+
+            <!-- Alert messages -->
+            <div id="mapAlert" class="position-absolute top-0 start-0 end-0 alert alert-danger m-3 d-none">
+                An error occurred
             </div>
-            <div class="card-body position-relative" style="height: 75vh;">
-                <div id="mapContainer" class="position-relative h-100 w-100 border rounded bg-light">
-                    <!-- Map Canvas -->
-                    <canvas id="mapCanvas" class="h-100 w-100"></canvas>
-                    
-                    <!-- Location Markers (Will be added dynamically by JavaScript) -->
-                    <div id="mapMarkers"></div>
-                    
-                    <!-- Alert messages will show here -->
-                    <div id="mapAlert" class="position-absolute top-0 start-0 end-0 alert alert-danger m-3 d-none">
-                        An error occurred
+
+            <!-- Game Over Overlay -->
+            <div id="gameOverOverlay" class="position-absolute top-0 start-0 w-100 h-100 d-none">
+                <div class="h-100 d-flex flex-column justify-content-center align-items-center text-center p-4">
+                    <h1 id="gameOverTitle" class="mb-4"></h1>
+                    <p id="gameOverMessage" class="mb-5 fs-4"></p>
+                    <div id="victoryAnimation" class="d-none">
+                        <i class="fas fa-crown fa-5x mb-4 victory-icon" style="color: var(--southern-gold);"></i>
                     </div>
-                    
-                    <!-- Game Over Overlay -->
-                    <div id="gameOverOverlay" class="position-absolute top-0 start-0 w-100 h-100 d-none">
-                        <div class="h-100 d-flex flex-column justify-content-center align-items-center text-center p-4">
-                            <h1 id="gameOverTitle" class="mb-4 victory-text"></h1>
-                            <p id="gameOverMessage" class="mb-5 fs-4"></p>
-                            <div id="victoryAnimation" class="d-none">
-                                <i class="fas fa-crown fa-5x text-warning mb-4 victory-icon"></i>
-                            </div>
-                            <div id="defeatAnimation" class="d-none">
-                                <i class="fas fa-skull-crossbones fa-5x text-danger mb-4 defeat-icon"></i>
-                            </div>
-                            <a href="/restart-game" class="btn btn-primary btn-lg mt-4">
-                                <i class="fas fa-redo-alt me-2"></i> Restart Game
-                            </a>
-                        </div>
+                    <div id="defeatAnimation" class="d-none">
+                        <i class="fas fa-skull-crossbones fa-5x mb-4 defeat-icon" style="color: #ef4444;"></i>
                     </div>
+                    <a href="/restart-game" class="btn btn-primary btn-lg mt-4">
+                        <i class="fas fa-redo-alt me-2"></i>Restart Game
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Event Feed -->
+        <div class="event-feed mt-2" id="eventFeed">
+            <div class="event-feed-header">
+                <i class="fas fa-scroll me-1"></i> Battle Log
+            </div>
+            <div id="eventFeedBody">
+                <div class="event-item">
+                    <span class="event-time">--:--</span>
+                    <span class="event-icon neutral"><i class="fas fa-flag"></i></span>
+                    <span class="event-message">Game started. Select a location on the map to begin.</span>
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- Right Panel - Location Info & Actions -->
-    <div class="col-md-3">
+
+    <!-- Right Panel -->
+    <div class="col-lg-3 action-panel">
         <!-- AI Opponent Control -->
-        <div class="card shadow mb-3">
-            <div class="card-header bg-secondary text-white">
-                <h5 class="mb-0">AI Opponent</h5>
+        <div class="card ai-toggle-card mb-3">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-robot me-2"></i>AI Opponent</h6>
             </div>
-            <div class="card-body">
+            <div class="card-body py-2">
                 <div class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" id="aiToggle" role="switch">
-                    <label class="form-check-label" for="aiToggle">
-                        Enable AI Opponent
+                    <label class="form-check-label small" for="aiToggle">
+                        Enable AI
                     </label>
                 </div>
-                <div id="aiStatus" class="mt-2 small text-muted">
-                    AI is inactive
+                <div id="aiStatus" class="mt-1 small" style="color: var(--text-muted);">
+                    <span class="ai-status-dot inactive"></span>AI is inactive
                 </div>
             </div>
         </div>
-        
-        <div class="card shadow mb-4">
-            <div class="card-header bg-dark text-white">
-                <h5 class="mb-0" id="locationName">Select a Location</h5>
+
+        <!-- Location Details -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h6 class="mb-0" id="locationName">Select a Location</h6>
             </div>
             <div class="card-body">
-                <div id="emptyState" class="text-center py-5">
-                    <i class="fas fa-map-marker-alt fa-3x text-muted mb-3"></i>
-                    <p>Click on a location on the map to view details and perform actions</p>
+                <div id="emptyState" class="text-center py-4">
+                    <i class="fas fa-map-marker-alt fa-2x mb-2" style="color: var(--text-muted);"></i>
+                    <p class="small mb-0" style="color: var(--text-secondary);">Click on a location on the map</p>
                 </div>
-                
+
                 <div id="locationDetails" style="display: none;">
                     <div class="d-flex justify-content-between mb-3">
-                        <span><strong>Faction:</strong></span>
-                        <span id="locationFaction" class="badge bg-primary">Neutral</span>
+                        <span class="small" style="color: var(--text-secondary);">Faction</span>
+                        <span id="locationFaction" class="badge">Neutral</span>
                     </div>
-                    
-                    <div class="progress mb-2">
-                        <div id="resourcesBar" class="progress-bar bg-warning" role="progressbar" style="width: 0%">0</div>
+
+                    <!-- Resources bar -->
+                    <div class="d-flex justify-content-between mb-1">
+                        <small style="color: var(--text-secondary);"><i class="fas fa-coins me-1" style="color: var(--southern-gold);"></i>Resources</small>
+                        <small id="resourcesValue" class="fw-bold">0</small>
                     </div>
-                    <div class="d-flex justify-content-between mb-3">
-                        <small>Resources</small>
-                        <small id="resourcesValue">0</small>
+                    <div class="progress mb-3">
+                        <div id="resourcesBar" class="progress-bar bg-warning" role="progressbar" style="width: 0%"></div>
                     </div>
-                    
-                    <div class="progress mb-2">
-                        <div id="armyBar" class="progress-bar bg-danger" role="progressbar" style="width: 0%">0</div>
+
+                    <!-- Army bar -->
+                    <div class="d-flex justify-content-between mb-1">
+                        <small style="color: var(--text-secondary);"><i class="fas fa-shield-alt me-1" style="color: #ef4444;"></i>Army</small>
+                        <small id="armyValue" class="fw-bold">0</small>
                     </div>
-                    <div class="d-flex justify-content-between mb-3">
-                        <small>Army</small>
-                        <small id="armyValue">0</small>
+                    <div class="progress mb-3">
+                        <div id="armyBar" class="progress-bar bg-danger" role="progressbar" style="width: 0%"></div>
                     </div>
-                    
+
                     <div id="actionButtons">
-                        <!-- Only show Collect Resources button for capitals -->
                         <button id="collectResourcesBtn" class="btn btn-warning btn-sm w-100 mb-2" style="display: none;">
                             <i class="fas fa-coins me-1"></i> Collect Resources
                             <small id="resourceCooldown" class="d-none">(Wait: <span>0</span>s)</small>
                         </button>
-                        
-                        <!-- Only show Create Army button for capitals -->
+
                         <button id="createArmyBtn" class="btn btn-danger btn-sm w-100 mb-2" style="display: none;">
-                            <i class="fas fa-shield-alt me-1"></i> Create Army (30 resources)
+                            <i class="fas fa-shield-alt me-1"></i> Create Army <small class="opacity-75">(30 res)</small>
                         </button>
 
-                        <!-- All Out Attack button for capitals -->
-                        <button id="allOutAttackBtn" class="btn btn-danger btn-sm w-100 mb-2" style="display: none;">
+                        <button id="allOutAttackBtn" class="btn btn-sm w-100 mb-2" style="display: none; background: linear-gradient(135deg, #ef4444, #991b1b); border: none; color: #fff;">
                             <i class="fas fa-skull-crossbones me-1"></i> All Out Attack
-                            <small class="d-block">Send all armies to enemy capital</small>
+                            <small class="d-block opacity-75">Send all armies to enemy capital</small>
                         </button>
-                        
-                        <!-- Add Send Resources button for villages -->
+
                         <button id="sendResourcesBtn" class="btn btn-success btn-sm w-100 mb-2" style="display: none;">
                             <i class="fas fa-route me-1"></i> Send Resources to Capital
                         </button>
-                        
-                        <button id="moveArmyBtn" class="btn btn-success btn-sm w-100" data-bs-toggle="modal" data-bs-target="#moveArmyModal">
+
+                        <button id="moveArmyBtn" class="btn btn-info btn-sm w-100" data-bs-toggle="modal" data-bs-target="#moveArmyModal">
                             <i class="fas fa-people-arrows me-1"></i> Move Army
                         </button>
                     </div>
-                    
-                    <div id="actionStatus" class="alert alert-info mt-3" style="display: none;">
+
+                    <div id="actionStatus" class="alert alert-info mt-3 small" style="display: none;">
                         Action result will appear here
                     </div>
                 </div>
@@ -157,12 +195,11 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p>Select a destination for your army from <span id="sourceLocationName">this location</span>:</p>
-                
+                <p>Select a destination for your army from <strong id="sourceLocationName">this location</strong>:</p>
+
                 <div class="list-group" id="destinationsList" role="listbox" aria-label="Available destinations">
-                    <!-- Destinations will be added here via JavaScript -->
                 </div>
-                
+
                 <div id="moveArmyStatus" class="alert alert-warning mt-3" style="display: none;" role="alert">
                     Status message will appear here
                 </div>
@@ -177,172 +214,11 @@
 
 {% block extra_css %}
 <style>
-    #mapContainer {
-        overflow: hidden;
-    }
-    
-    .location-marker {
-        position: absolute;
-        transform: translate(-50%, -50%);
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: bold;
-        cursor: pointer;
-        border: 2px solid #fff;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
-        transition: all 0.2s ease;
-        z-index: 10;
-    }
-    
-    .location-marker:hover {
-        transform: translate(-50%, -50%) scale(1.1);
-    }
-    
-    .location-marker.selected {
-        box-shadow: 0 0 15px #fff, 0 0 20px #fff;
-    }
-    
-    .location-marker.capital {
-        width: 50px;
-        height: 50px;
-    }
-    
-    .location-marker.lannister {
-        background-color: #8B0000;
-    }
-    
-    .location-marker.stark {
-        background-color: #343a40;
-    }
-    
-    .location-marker.neutral {
-        background-color: #6c757d;
-    }
-    
-    .badge.lannister {
-        background-color: #8B0000 !important;
-    }
-    
-    .badge.stark {
-        background-color: #343a40 !important;
-    }
-    
-    .badge.neutral {
-        background-color: #6c757d !important;
-    }
-    
     #mapCanvas {
         position: absolute;
         top: 0;
         left: 0;
         z-index: 5;
-    }
-    
-    .destination-item {
-        cursor: pointer;
-    }
-    
-    .destination-item:hover {
-        background-color: #f8f9fa;
-    }
-    
-    /* Game Over Styles */
-    #gameOverOverlay {
-        background-color: rgba(0, 0, 0, 0.8);
-        z-index: 100;
-        color: white;
-    }
-    
-    .victory-text {
-        text-shadow: 0 0 10px gold;
-        animation: victoryPulse 2s infinite;
-    }
-    
-    .defeat-text {
-        text-shadow: 0 0 10px darkred;
-        animation: defeatPulse 2s infinite;
-    }
-    
-    .victory-icon {
-        animation: bounce 2s infinite;
-    }
-    
-    .defeat-icon {
-        animation: shake 2s infinite;
-    }
-    
-    @keyframes victoryPulse {
-        0% { text-shadow: 0 0 10px gold; }
-        50% { text-shadow: 0 0 20px gold, 0 0 30px yellow; }
-        100% { text-shadow: 0 0 10px gold; }
-    }
-    
-    @keyframes defeatPulse {
-        0% { text-shadow: 0 0 10px darkred; }
-        50% { text-shadow: 0 0 20px red, 0 0 30px darkred; }
-        100% { text-shadow: 0 0 10px darkred; }
-    }
-    
-    @keyframes bounce {
-        0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
-        40% { transform: translateY(-30px); }
-        60% { transform: translateY(-15px); }
-    }
-    
-    @keyframes shake {
-        0%, 100% { transform: translateX(0); }
-        10%, 30%, 50%, 70%, 90% { transform: translateX(-10px); }
-        20%, 40%, 60%, 80% { transform: translateX(10px); }
-    }
-
-    /* Transfer indicators */
-    .transfer-indicator {
-        position: absolute;
-        transform-origin: 50% 50%;
-        z-index: 15;
-        opacity: 0.9;
-        pointer-events: none;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 24px;
-        color: white;
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-        background: rgba(0, 0, 0, 0.6);
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-    }
-
-    .transfer-indicator.southern {
-        border: 2px solid #8B0000;
-    }
-
-    .transfer-indicator.northern {
-        border: 2px solid #343a40;
-    }
-
-    .transfer-indicator.attack i {
-        color: #ff4444;
-    }
-
-    .transfer-indicator.resources i {
-        color: #ffd700;
-    }
-
-    .southern-icon {
-        background-color: #ffd700;
-        color: #8B0000;
-    }
-    
-    .northern-icon {
-        background-color: #f8f9fa;
-        color: #343a40;
     }
 </style>
 {% endblock %}
@@ -351,7 +227,7 @@
 <script>
     // Parse the JSON data from the template
     const templateData = JSON.parse(document.getElementById('templateData').textContent);
-    
+
     // Store the current game state
     let gameState = {
         locations: templateData.locations,
@@ -362,221 +238,277 @@
         winner: templateData.winner,
         victoryMessage: templateData.victoryMessage
     };
-    
+
+    // Event feed log (client-side)
+    let eventLog = [];
+
+    // Animation tracking -- prevents map refresh from destroying in-flight animations
+    let activeAnimations = 0;
+    let pendingRefresh = false;
+
     // DOM elements
     const mapContainer = document.getElementById('mapContainer');
     const mapCanvas = document.getElementById('mapCanvas');
     const markersContainer = document.getElementById('mapMarkers');
     const gameOverOverlay = document.getElementById('gameOverOverlay');
-    
-    // Initialize the map
+
+    // --- HUD ---
+    function updateHUD() {
+        let totalResources = 0;
+        let totalArmies = 0;
+        let territoryCount = 0;
+        const totalLocations = Object.keys(gameState.locations).length;
+
+        for (const [id, loc] of Object.entries(gameState.locations)) {
+            if (loc.faction === gameState.playerFaction) {
+                totalResources += loc.resources;
+                totalArmies += loc.army;
+                territoryCount++;
+            }
+        }
+
+        document.getElementById('hudResources').textContent = totalResources;
+        document.getElementById('hudArmies').textContent = totalArmies;
+        document.getElementById('hudTerritory').textContent = `${territoryCount}/${totalLocations}`;
+    }
+
+    // --- Event Feed ---
+    function addEvent(message, faction, icon) {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const factionClass = faction || 'neutral';
+        const iconClass = icon || 'fa-circle';
+
+        eventLog.push({ time: timeStr, message, factionClass, iconClass });
+
+        const feedBody = document.getElementById('eventFeedBody');
+        const eventEl = document.createElement('div');
+        eventEl.className = 'event-item';
+        eventEl.innerHTML = `
+            <span class="event-time">${timeStr}</span>
+            <span class="event-icon ${factionClass}"><i class="fas ${iconClass}"></i></span>
+            <span class="event-message">${message}</span>
+        `;
+
+        // Insert at top (newest first)
+        feedBody.insertBefore(eventEl, feedBody.firstChild.nextSibling);
+
+        // Keep max 30 events
+        while (feedBody.children.length > 31) {
+            feedBody.removeChild(feedBody.lastChild);
+        }
+    }
+
+    // --- Map Init ---
     function initMap() {
         clearMap();
         drawConnections();
         createLocationMarkers();
-        
-        // Hide location details initially
+        updateHUD();
+
         document.getElementById('locationDetails').style.display = 'none';
         document.getElementById('emptyState').style.display = 'block';
-        
-        // Check if game is over
+
         checkGameOver();
     }
-    
-    // Check if game is over and show appropriate animations
+
     function checkGameOver() {
         if (gameState.gameOver) {
-            // Set victory/defeat message
             const isWinner = gameState.winner === gameState.playerFaction;
             const gameOverTitle = document.getElementById('gameOverTitle');
             const gameOverMessage = document.getElementById('gameOverMessage');
-            
+
             if (isWinner) {
                 gameOverTitle.textContent = "VICTORY!";
                 gameOverTitle.classList.add('victory-text');
                 gameOverMessage.textContent = gameState.victoryMessage;
-                
-                // Show victory animation
                 document.getElementById('victoryAnimation').classList.remove('d-none');
                 document.getElementById('defeatAnimation').classList.add('d-none');
             } else {
                 gameOverTitle.textContent = "DEFEAT!";
                 gameOverTitle.classList.add('defeat-text');
-                
                 if (gameState.winner === 'southern') {
                     gameOverMessage.textContent = "The Southern Kingdom has conquered your capital! Glory to the South!";
                 } else {
                     gameOverMessage.textContent = "The Northern Kingdom has conquered your capital! Victory through unity!";
                 }
-                
-                // Show defeat animation
                 document.getElementById('victoryAnimation').classList.add('d-none');
                 document.getElementById('defeatAnimation').classList.remove('d-none');
             }
-            
-            // Show game over overlay
+
             gameOverOverlay.classList.remove('d-none');
-            
-            // Disable action buttons
-            document.querySelectorAll('#actionButtons button').forEach(button => {
-                button.disabled = true;
-            });
+            document.querySelectorAll('#actionButtons button').forEach(b => b.disabled = true);
         }
     }
-    
-    // Clear the map
+
     function clearMap() {
-        // Clear markers
         markersContainer.innerHTML = '';
-        
-        // Clear canvas
         const ctx = mapCanvas.getContext('2d');
         ctx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
     }
-    
-    // Draw connections between locations
+
+    // --- Draw Connections (faction-colored) ---
     function drawConnections() {
         const canvas = mapCanvas;
         canvas.width = mapContainer.clientWidth;
         canvas.height = mapContainer.clientHeight;
         const ctx = canvas.getContext('2d');
-        
+
+        // Subtle grid overlay
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)';
+        ctx.lineWidth = 1;
+        const gridSize = 40;
+        for (let x = 0; x < canvas.width; x += gridSize) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+        }
+        for (let y = 0; y < canvas.height; y += gridSize) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+        }
+
         // Draw connections
-        ctx.strokeStyle = 'rgba(200, 200, 200, 0.7)';
         ctx.lineWidth = 2;
-        
+
         gameState.connections.forEach(connection => {
             const loc1 = gameState.locations[connection[0]];
             const loc2 = gameState.locations[connection[1]];
-            
+
             if (loc1 && loc2) {
                 const x1 = mapContainer.clientWidth * (loc1.x / 100);
                 const y1 = mapContainer.clientHeight * (loc1.y / 100);
                 const x2 = mapContainer.clientWidth * (loc2.x / 100);
                 const y2 = mapContainer.clientHeight * (loc2.y / 100);
-                
+
+                // Determine line color based on factions
+                const f1 = loc1.faction;
+                const f2 = loc2.faction;
+
+                if (f1 !== 'neutral' && f1 === f2) {
+                    // Both same faction — faction color
+                    if (f1 === 'southern') {
+                        ctx.strokeStyle = 'rgba(255, 215, 0, 0.35)';
+                    } else {
+                        ctx.strokeStyle = 'rgba(79, 195, 247, 0.35)';
+                    }
+                    ctx.setLineDash([]);
+                } else if (f1 !== 'neutral' && f2 !== 'neutral' && f1 !== f2) {
+                    // Enemy territories — red dashed
+                    ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
+                    ctx.setLineDash([8, 6]);
+                } else {
+                    // Neutral connections
+                    ctx.strokeStyle = 'rgba(120, 144, 156, 0.2)';
+                    ctx.setLineDash([]);
+                }
+
                 ctx.beginPath();
                 ctx.moveTo(x1, y1);
                 ctx.lineTo(x2, y2);
                 ctx.stroke();
+                ctx.setLineDash([]);
             }
         });
     }
-    
-    // Create markers for all locations
+
+    // --- Create Location Markers (with labels) ---
     function createLocationMarkers() {
         for (const [locationId, locationData] of Object.entries(gameState.locations)) {
             const marker = document.createElement('div');
             marker.id = `marker-${locationId}`;
             marker.className = `location-marker ${locationData.faction} ${locationData.type}`;
             marker.dataset.locationId = locationId;
-            
-            // Position the marker
             marker.style.left = `${locationData.x}%`;
             marker.style.top = `${locationData.y}%`;
-            
-            // Add icon or text inside marker
+
+            // Icon
             let icon = document.createElement('i');
             if (locationData.type === 'capital') {
-                if (locationData.faction === 'southern') {
-                    icon.className = 'fas fa-sun';
-                } else if (locationData.faction === 'northern') {
-                    icon.className = 'fas fa-snowflake';
-                } else {
-                    icon.className = 'fas fa-chess-rook';
-                }
+                icon.className = locationData.faction === 'southern' ? 'fas fa-sun' :
+                                 locationData.faction === 'northern' ? 'fas fa-snowflake' :
+                                 'fas fa-chess-rook';
             } else {
                 icon.className = 'fas fa-map-marker-alt';
             }
             marker.appendChild(icon);
-            
-            // Add a small badge showing army size if there are troops
+
+            // Army badge
             if (locationData.army > 0) {
                 const armyBadge = document.createElement('span');
                 armyBadge.className = 'position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger';
                 armyBadge.textContent = locationData.army;
+                armyBadge.style.fontSize = '0.65em';
+                armyBadge.style.zIndex = '20';
                 marker.appendChild(armyBadge);
             }
-            
-            // Add click handler
+
+            // Location label below marker
+            const label = document.createElement('span');
+            label.className = 'location-label';
+            label.textContent = locationData.name;
+            marker.appendChild(label);
+
+            // Click handler
             marker.addEventListener('click', () => selectLocation(locationId));
-            
-            // Add to container
+
             markersContainer.appendChild(marker);
         }
     }
-    
-    // Select a location and show its details
+
+    // --- Select Location ---
     function selectLocation(locationId) {
-        // Unselect previously selected marker
         if (gameState.selectedLocation) {
             const prevMarker = document.getElementById(`marker-${gameState.selectedLocation}`);
             if (prevMarker) prevMarker.classList.remove('selected');
         }
-        
-        // Update the selected location
+
         gameState.selectedLocation = locationId;
-        
-        // Highlight the selected marker
+
         const marker = document.getElementById(`marker-${locationId}`);
         if (marker) marker.classList.add('selected');
-        
-        // Get location data
+
         const location = gameState.locations[locationId];
-        
-        // Update location details panel
+
         document.getElementById('locationName').textContent = location.name;
-        document.getElementById('locationFaction').textContent = location.faction.charAt(0).toUpperCase() + location.faction.slice(1);
-        document.getElementById('locationFaction').className = `badge ${location.faction}`;
-        
-        // Update resource bar and value (max 200)
+
+        const factionBadge = document.getElementById('locationFaction');
+        factionBadge.textContent = location.faction.charAt(0).toUpperCase() + location.faction.slice(1);
+        factionBadge.className = `badge ${location.faction}`;
+
+        // Update resource bar
         const resourcePercentage = Math.min(location.resources / 200 * 100, 100);
         document.getElementById('resourcesBar').style.width = `${resourcePercentage}%`;
-        document.getElementById('resourcesBar').textContent = location.resources;
         document.getElementById('resourcesValue').textContent = location.resources;
-        
-        // Update army bar and value (max 10)
+
+        // Update army bar — faction colored
         const armyPercentage = Math.min(location.army / 10 * 100, 100);
-        document.getElementById('armyBar').style.width = `${armyPercentage}%`;
-        document.getElementById('armyBar').textContent = location.army;
+        const armyBar = document.getElementById('armyBar');
+        armyBar.style.width = `${armyPercentage}%`;
         document.getElementById('armyValue').textContent = location.army;
-        
-        // Show/hide buttons based on location type
+
+        // Show/hide buttons
         const isCapital = location.type === 'capital';
         const isVillage = location.type === 'village';
         const isPlayerLocation = location.faction === gameState.playerFaction;
-        
-        // Collect Resources - only for capitals
-        document.getElementById('collectResourcesBtn').style.display = 
+
+        document.getElementById('collectResourcesBtn').style.display =
             (isCapital && isPlayerLocation) ? 'block' : 'none';
-        
-        // Create Army - only for capitals
-        document.getElementById('createArmyBtn').style.display = 
+        document.getElementById('createArmyBtn').style.display =
             (isCapital && isPlayerLocation) ? 'block' : 'none';
-        
-        // All Out Attack - only for capitals with armies
-        document.getElementById('allOutAttackBtn').style.display = 
+        document.getElementById('allOutAttackBtn').style.display =
             (isCapital && isPlayerLocation) ? 'block' : 'none';
-        
-        // Send Resources - only for villages owned by player
-        document.getElementById('sendResourcesBtn').style.display = 
+        document.getElementById('sendResourcesBtn').style.display =
             (isVillage && isPlayerLocation) ? 'block' : 'none';
-        
-        // Update resource cooldown if present and it's a capital
+
+        // Cooldown
         const cooldownSpan = document.getElementById('resourceCooldown');
         if (isCapital && location.resource_cooldown) {
             cooldownSpan.classList.remove('d-none');
             cooldownSpan.querySelector('span').textContent = location.resource_cooldown;
-            
-            // Start countdown timer
-            if (location.resource_cooldown > 0) {
-                startCooldownTimer(location.resource_cooldown);
-            }
+            if (location.resource_cooldown > 0) startCooldownTimer(location.resource_cooldown);
         } else {
             cooldownSpan.classList.add('d-none');
         }
-        
-        // Update button states
+
+        // Button states
         if (isCapital) {
             document.getElementById('collectResourcesBtn').disabled = !isPlayerLocation || gameState.gameOver || location.resource_cooldown > 0;
             document.getElementById('createArmyBtn').disabled = !isPlayerLocation || location.resources < 30 || gameState.gameOver;
@@ -584,98 +516,70 @@
         }
         document.getElementById('moveArmyBtn').disabled = !isPlayerLocation || location.army <= 0 || gameState.gameOver;
         document.getElementById('sendResourcesBtn').disabled = !isPlayerLocation || location.resources <= 0 || gameState.gameOver;
-        
-        // Set the source location name for the move army modal
+
         document.getElementById('sourceLocationName').textContent = location.name;
-        
-        // Show location details and hide empty state
+
         document.getElementById('locationDetails').style.display = 'block';
         document.getElementById('emptyState').style.display = 'none';
-        
-        // Update move army modal destinations list
+
         updateMoveArmyDestinations(locationId);
     }
-    
-    // Update destinations list for move army modal
+
+    // --- Move Army Destinations ---
     function updateMoveArmyDestinations(sourceId) {
         const destinationsList = document.getElementById('destinationsList');
         destinationsList.innerHTML = '';
-        
+
         const sourceLocation = gameState.locations[sourceId];
         const sourceConnections = [];
-        
-        // Find all connections for the source location
+
         gameState.connections.forEach(conn => {
-            if (conn[0] === sourceId) {
-                sourceConnections.push(conn[1]);
-            } else if (conn[1] === sourceId) {
-                sourceConnections.push(conn[0]);
-            }
+            if (conn[0] === sourceId) sourceConnections.push(conn[1]);
+            else if (conn[1] === sourceId) sourceConnections.push(conn[0]);
         });
-        
-        // Create destination items
-        sourceConnections.forEach((destId, index) => {
+
+        sourceConnections.forEach(destId => {
             const destLocation = gameState.locations[destId];
-            
+
             const item = document.createElement('button');
             item.className = 'list-group-item list-group-item-action destination-item';
             item.setAttribute('role', 'option');
             item.setAttribute('aria-selected', 'false');
             item.setAttribute('id', `dest-${destId}`);
-            
-            // Create destination content
-            let factionClass = '';
-            if (destLocation.faction === 'lannister') {
-                factionClass = 'text-danger';
-            } else if (destLocation.faction === 'stark') {
-                factionClass = 'text-dark';
-            } else {
-                factionClass = 'text-secondary';
-            }
-            
+
             const isFriendly = destLocation.faction === sourceLocation.faction;
-            const attackWarning = !isFriendly ? 
-                `<span class="text-danger">(Attack! ${sourceLocation.army} vs ${destLocation.army})</span>` : 
-                `<span class="text-success">(Friendly reinforcement)</span>`;
-            
+            const attackWarning = !isFriendly ?
+                `<span style="color: #ef4444;">(Attack! ${sourceLocation.army} vs ${destLocation.army})</span>` :
+                `<span style="color: #22c55e;">(Friendly reinforcement)</span>`;
+
             item.innerHTML = `
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <h6 class="${factionClass}">
-                            ${destLocation.name}
-                            <small class="text-muted">${destLocation.faction}</small>
+                        <h6 class="mb-0">${destLocation.name}
+                            <small style="color: var(--text-muted);">${destLocation.faction}</small>
                         </h6>
                         <small>${attackWarning}</small>
                     </div>
-                    <div>
-                        <span class="badge bg-danger">Army: ${destLocation.army}</span>
-                    </div>
+                    <span class="badge bg-danger">Army: ${destLocation.army}</span>
                 </div>
             `;
-            
-            // Add click handler
+
             item.addEventListener('click', () => {
-                // Update selected state
                 document.querySelectorAll('#destinationsList [role="option"]')
                     .forEach(opt => opt.setAttribute('aria-selected', 'false'));
                 item.setAttribute('aria-selected', 'true');
-                
                 moveArmy(sourceId, destId);
             });
-            
-            // Add keyboard navigation
+
             item.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    item.click();
-                }
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); item.click(); }
             });
-            
+
             destinationsList.appendChild(item);
         });
     }
-    
-    // Collect resources from a location
+
+    // --- Actions ---
     async function collectResources(locationId) {
         try {
             const response = await fetch('/api/collect_resources', {
@@ -683,20 +587,17 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ location_id: locationId })
             });
-            
             const result = await response.json();
-            
+
             if (result.success) {
                 showActionStatus('success', result.message);
-                // Update local state
                 gameState.locations[locationId].resources = result.current_resources;
-                // Refresh location panel
                 selectLocation(locationId);
+                updateHUD();
+                addEvent(`Resources collected at ${gameState.locations[locationId].name}`, gameState.playerFaction, 'fa-coins');
             } else {
                 if (result.cooldown && result.cooldown_seconds) {
-                    // Start cooldown timer
                     startCooldownTimer(result.cooldown_seconds);
-                    // Show cooldown message
                     showActionStatus('warning', result.message);
                 } else {
                     showActionStatus('danger', result.message || 'Failed to collect resources');
@@ -706,8 +607,7 @@
             showActionStatus('danger', 'Network error. Please try again.');
         }
     }
-    
-    // Create an army at a location
+
     async function createArmy(locationId) {
         try {
             const response = await fetch('/api/create_army', {
@@ -715,17 +615,16 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ location_id: locationId })
             });
-            
             const result = await response.json();
-            
+
             if (result.success) {
                 showActionStatus('success', result.message);
-                // Update local state
                 gameState.locations[locationId].resources = result.current_resources;
                 gameState.locations[locationId].army = result.current_army;
-                // Refresh location panel and marker
                 refreshMap();
                 selectLocation(locationId);
+                updateHUD();
+                addEvent(`Army created at ${gameState.locations[locationId].name}`, gameState.playerFaction, 'fa-shield-alt');
             } else {
                 showActionStatus('danger', result.message || 'Failed to create army');
             }
@@ -733,62 +632,53 @@
             showActionStatus('danger', 'Network error. Please try again.');
         }
     }
-    
-    // Move army from one location to another
+
     async function moveArmy(sourceId, targetId) {
         showMoveArmyStatus('warning', 'Moving army...');
-        
+
         try {
             const response = await fetch('/api/move_army', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    source_id: sourceId,
-                    target_id: targetId
-                })
+                body: JSON.stringify({ source_id: sourceId, target_id: targetId })
             });
-            
             const result = await response.json();
-            
+
             if (result.success || result.message) {
                 showMoveArmyStatus('success', result.message);
-                
-                // Create transfer indicator for army movement
-                createTransferIndicator(
-                    sourceId,
-                    targetId,
-                    gameState.playerFaction,
-                    'attack'
-                );
-                
-                // Start periodic updates to show army movement
+
+                // Animated army march from source to target
+                const targetFaction = gameState.locations[targetId]?.faction;
+                const isAttack = targetFaction && targetFaction !== gameState.playerFaction;
+                animateArmyMove(sourceId, targetId, gameState.playerFaction, isAttack);
+
+                const srcName = gameState.locations[sourceId].name;
+                const tgtName = gameState.locations[targetId].name;
+                addEvent(`Army moved from ${srcName} to ${tgtName}`, gameState.playerFaction, 'fa-people-arrows');
+
+                // Delay periodic refresh until animation completes (~4s max)
                 let updateCount = 0;
-                const maxUpdates = 6; // Increase from 4 to 6 for longer monitoring
-                
-                const updateInterval = setInterval(() => {
-                    refreshMapData();
-                    updateCount++;
-                    
-                    if (updateCount >= maxUpdates) {
-                        clearInterval(updateInterval);
-                        // Final check for game over after movement completes
-                        setTimeout(checkGameStatus, 1000);
-                    }
-                }, 2500); // Update every 2.5 seconds
-                
-                // Check if this move resulted in game over
+                const maxUpdates = 6;
+                setTimeout(() => {
+                    const updateInterval = setInterval(() => {
+                        refreshMapData();
+                        updateCount++;
+                        if (updateCount >= maxUpdates) {
+                            clearInterval(updateInterval);
+                            setTimeout(checkGameStatus, 1000);
+                        }
+                    }, 2500);
+                }, 4500);
+
                 if (result.game_over) {
                     gameState.gameOver = true;
                     gameState.winner = result.winner;
                     gameState.victoryMessage = result.victory_message;
                     checkGameOver();
                 }
-                
-                // Close the move army modal
+
                 const moveArmyModal = bootstrap.Modal.getInstance(document.getElementById('moveArmyModal'));
-                if (moveArmyModal) {
-                    moveArmyModal.hide();
-                }
+                if (moveArmyModal) moveArmyModal.hide();
             } else {
                 showMoveArmyStatus('danger', result.error || 'Failed to move army');
             }
@@ -796,189 +686,152 @@
             showMoveArmyStatus('danger', 'Network error. Please try again.');
         }
     }
-    
-    // Show action status message
+
     function showActionStatus(type, message) {
         const statusElement = document.getElementById('actionStatus');
-        statusElement.className = `alert alert-${type} mt-3`;
+        statusElement.className = `alert alert-${type} mt-3 small`;
         statusElement.textContent = message;
         statusElement.style.display = 'block';
-        
-        // Auto-hide after 5 seconds
-        setTimeout(() => {
-            statusElement.style.display = 'none';
-        }, 5000);
+        setTimeout(() => { statusElement.style.display = 'none'; }, 5000);
     }
-    
-    // Show move army status message
+
     function showMoveArmyStatus(type, message) {
         const statusElement = document.getElementById('moveArmyStatus');
         statusElement.className = `alert alert-${type} mt-3`;
         statusElement.textContent = message;
         statusElement.style.display = 'block';
     }
-    
-    // Refresh the map with current data
+
     function refreshMap() {
         clearMap();
         drawConnections();
         createLocationMarkers();
-        
-        // Check if game is over
+        updateHUD();
         checkGameOver();
-        
-        // Reselect the current location if any
+
         if (gameState.selectedLocation) {
             selectLocation(gameState.selectedLocation);
         }
     }
-    
-    // Fetch updated map data from server
+
     async function refreshMapData() {
         try {
             const response = await fetch('/api/map_data');
             const data = await response.json();
-            
+
             gameState.locations = data.locations;
             gameState.gameOver = data.game_over;
             gameState.winner = data.winner;
             gameState.victoryMessage = data.victory_message;
-            
-            refreshMap();
-            
-            // Close the move army modal if it's open
-            const moveArmyModal = bootstrap.Modal.getInstance(document.getElementById('moveArmyModal'));
-            if (moveArmyModal) {
-                moveArmyModal.hide();
+
+            // Defer visual rebuild while animations are playing
+            if (activeAnimations > 0) {
+                pendingRefresh = true;
+                updateHUD(); // HUD is safe to update immediately
+                return;
             }
+
+            refreshMap();
+
+            const moveArmyModal = bootstrap.Modal.getInstance(document.getElementById('moveArmyModal'));
+            if (moveArmyModal) moveArmyModal.hide();
         } catch (error) {
             console.error('Error refreshing map data:', error);
-            
-            // Show error on map
             const mapAlert = document.getElementById('mapAlert');
             mapAlert.textContent = 'Failed to refresh map data. Please try again.';
             mapAlert.classList.remove('d-none');
-            
-            setTimeout(() => {
-                mapAlert.classList.add('d-none');
-            }, 5000);
+            setTimeout(() => { mapAlert.classList.add('d-none'); }, 5000);
         }
     }
-    
-    // Handle window resize
+
+    // Flush a deferred refresh once all animations finish
+    function flushPendingRefresh() {
+        if (pendingRefresh && activeAnimations === 0) {
+            pendingRefresh = false;
+            refreshMap();
+        }
+    }
+
     window.addEventListener('resize', () => {
-        // Redraw connections when window is resized
         drawConnections();
-        
-        // Remove any active transfer animations as they'll be in wrong positions
         document.querySelectorAll('.transfer-arrow').forEach(el => el.remove());
     });
-    
-    // Set up event listeners
+
+    // --- Init ---
     document.addEventListener('DOMContentLoaded', function() {
-        // Initialize the map
         initMap();
-        
-        // Set up action button handlers
+
         document.getElementById('collectResourcesBtn').addEventListener('click', () => {
-            if (gameState.selectedLocation) {
-                collectResources(gameState.selectedLocation);
-            }
+            if (gameState.selectedLocation) collectResources(gameState.selectedLocation);
         });
-        
+
         document.getElementById('createArmyBtn').addEventListener('click', () => {
-            if (gameState.selectedLocation) {
-                createArmy(gameState.selectedLocation);
-            }
+            if (gameState.selectedLocation) createArmy(gameState.selectedLocation);
         });
-        
+
         document.getElementById('refreshMapBtn').addEventListener('click', refreshMapData);
-        
-        // Set up auto-refresh every 30 seconds
-        setInterval(refreshMapData, 30000);
-        
-        // Set up more frequent game status checks
-        setInterval(checkGameStatus, 5000); // Check every 5 seconds for game over
 
-        // Add Send Resources button handler
+        setInterval(refreshMapData, 30000);
+        setInterval(checkGameStatus, 5000);
+
         document.getElementById('sendResourcesBtn').addEventListener('click', () => {
-            if (gameState.selectedLocation) {
-                sendResourcesToCapital(gameState.selectedLocation);
-            }
+            if (gameState.selectedLocation) sendResourcesToCapital(gameState.selectedLocation);
         });
 
-        // Add All Out Attack button handler
         document.getElementById('allOutAttackBtn').addEventListener('click', () => {
             if (!gameState.selectedLocation) return;
-            
             const location = gameState.locations[gameState.selectedLocation];
-            if (!confirm(`Launch an all-out attack with ${location.army} armies from ${location.name}? This cannot be undone!`)) {
-                return;
-            }
-            
+            if (!confirm(`Launch an all-out attack with ${location.army} armies from ${location.name}? This cannot be undone!`)) return;
             launchAllOutAttack(gameState.selectedLocation);
         });
 
-        // AI Toggle functionality
+        // AI Toggle
         const aiToggle = document.getElementById('aiToggle');
         const aiStatus = document.getElementById('aiStatus');
-        
-        // Check AI status on load
+
         checkAIStatus();
-        
-        // Handle AI toggle
+
         aiToggle.addEventListener('change', async function() {
             const enable = this.checked;
-            
             try {
                 const response = await fetch('/api/ai_toggle', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ enable: enable })
                 });
-                
                 const result = await response.json();
-                
+
                 if (result.success) {
                     if (enable) {
-                        aiStatus.textContent = 'AI is active - ' + result.message;
-                        aiStatus.classList.remove('text-muted');
-                        aiStatus.classList.add('text-success');
+                        aiStatus.innerHTML = '<span class="ai-status-dot active"></span>AI is active - ' + result.message;
+                        addEvent('AI opponent activated', 'neutral', 'fa-robot');
                     } else {
-                        aiStatus.textContent = 'AI is inactive';
-                        aiStatus.classList.remove('text-success');
-                        aiStatus.classList.add('text-muted');
+                        aiStatus.innerHTML = '<span class="ai-status-dot inactive"></span>AI is inactive';
+                        addEvent('AI opponent deactivated', 'neutral', 'fa-robot');
                     }
                 } else {
-                    // Revert toggle on failure
                     this.checked = !enable;
                     alert('Failed to toggle AI: ' + result.message);
                 }
             } catch (error) {
-                // Revert toggle on error
                 this.checked = !enable;
                 alert('Failed to connect to AI service');
             }
         });
-        
-        // Check AI status periodically
+
         setInterval(checkAIStatus, 10000);
-        
+
         async function checkAIStatus() {
             try {
                 const response = await fetch('/api/ai_status');
                 const status = await response.json();
-                
+
                 if (status.active) {
                     aiToggle.checked = true;
-                    aiStatus.textContent = `AI is active (${status.faction} faction)`;
-                    aiStatus.classList.remove('text-muted');
-                    aiStatus.classList.add('text-success');
+                    aiStatus.innerHTML = `<span class="ai-status-dot active"></span>AI is active (${status.faction} faction)`;
                 } else {
                     aiToggle.checked = false;
-                    aiStatus.textContent = 'AI is inactive';
-                    aiStatus.classList.remove('text-success');
-                    aiStatus.classList.add('text-muted');
+                    aiStatus.innerHTML = '<span class="ai-status-dot inactive"></span>AI is inactive';
                 }
             } catch (error) {
                 console.error('Failed to check AI status:', error);
@@ -986,50 +839,234 @@
         }
     });
 
-    // Update function to create and position a transfer indicator
-    function createTransferIndicator(fromLoc, toLoc, faction, type) {
-        // Remove any existing indicators on this location
-        document.querySelectorAll(`.transfer-indicator[data-from="${fromLoc}"]`).forEach(el => el.remove());
-        
-        const indicator = document.createElement('div');
-        indicator.className = `transfer-indicator ${faction} ${type}`;
-        indicator.dataset.from = fromLoc;
-        
-        // Add appropriate icon
+    // =============================================
+    // ANIMATED TRAVEL SYSTEM
+    // =============================================
+
+    // Animate a unit traveling from source to target location
+    // type: 'army' | 'cart' -- faction: 'southern' | 'northern'
+    // onArrive: callback when the unit reaches the destination
+    // opts: { armyCount: number } optional extra data
+    function animateTravelingUnit(fromLocId, toLocId, faction, type, onArrive, opts) {
+        const fromLoc = gameState.locations[fromLocId];
+        const toLoc = gameState.locations[toLocId];
+        if (!fromLoc || !toLoc) return;
+
+        activeAnimations++;
+
+        const fromX = mapContainer.clientWidth * (fromLoc.x / 100);
+        const fromY = mapContainer.clientHeight * (fromLoc.y / 100);
+        const toX = mapContainer.clientWidth * (toLoc.x / 100);
+        const toY = mapContainer.clientHeight * (toLoc.y / 100);
+
+        // Create the traveling unit element
+        const unit = document.createElement('div');
+        unit.className = `traveling-unit ${type} ${faction}`;
+
         const icon = document.createElement('i');
-        if (type === 'attack') {
-            icon.className = 'fas fa-sword';
+        if (type === 'army') {
+            icon.className = 'fas fa-chess-knight';
         } else {
-            icon.className = 'fas fa-cart-arrow-down';
+            icon.className = 'fas fa-coins';
         }
-        indicator.appendChild(icon);
-        
-        // Get positions of both locations
-        const fromLocData = gameState.locations[fromLoc];
-        const toLocData = gameState.locations[toLoc];
-        
-        // Calculate center points
-        const fromX = mapContainer.clientWidth * (fromLocData.x / 100);
-        const fromY = mapContainer.clientHeight * (fromLocData.y / 100);
-        const toX = mapContainer.clientWidth * (toLocData.x / 100);
-        const toY = mapContainer.clientHeight * (toLocData.y / 100);
-        
-        // Calculate angle between points
-        const angle = Math.atan2(toY - fromY, toX - fromX) * (180 / Math.PI);
-        
-        // Position indicator at the source location
-        indicator.style.left = `${fromX}px`;
-        indicator.style.top = `${fromY}px`;
-        indicator.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
-        
-        // Add to map container
-        mapContainer.appendChild(indicator);
-        
-        // Remove indicator after 5 seconds
-        setTimeout(() => indicator.remove(), 5000);
+        unit.appendChild(icon);
+
+        // Add army count badge if provided
+        if (opts && opts.armyCount && opts.armyCount > 0) {
+            const badge = document.createElement('span');
+            badge.className = 'army-count';
+            badge.textContent = opts.armyCount;
+            unit.appendChild(badge);
+        }
+
+        // Start position
+        unit.style.left = `${fromX}px`;
+        unit.style.top = `${fromY}px`;
+        unit.style.transform = 'translate(-50%, -50%)';
+        mapContainer.appendChild(unit);
+
+        // Calculate travel distance and duration -- longer for more drama
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const duration = Math.max(2000, Math.min(4000, distance * 6)); // 2s - 4s
+
+        // Add connection pulse dots along the path
+        const pulseCount = Math.max(3, Math.round(distance / 80));
+        const pulses = [];
+        for (let i = 1; i <= pulseCount; i++) {
+            const t = i / (pulseCount + 1);
+            const pulse = document.createElement('div');
+            pulse.className = `connection-pulse ${faction}`;
+            pulse.style.left = `${fromX + dx * t}px`;
+            pulse.style.top = `${fromY + dy * t}px`;
+            pulse.style.animationDelay = `${i * 0.15}s`;
+            mapContainer.appendChild(pulse);
+            pulses.push(pulse);
+        }
+
+        // Collect trail segments for cleanup
+        const trailElements = [];
+
+        // Animate with requestAnimationFrame for smooth movement
+        const startTime = performance.now();
+        let trailTimer = 0;
+        let prevX = fromX;
+        let prevY = fromY;
+
+        function step(now) {
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            // Ease-in-out curve
+            const ease = progress < 0.5
+                ? 2 * progress * progress
+                : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+            const cx = fromX + dx * ease;
+            const cy = fromY + dy * ease;
+            unit.style.left = `${cx}px`;
+            unit.style.top = `${cy}px`;
+
+            // Drop trail particles every ~60ms
+            trailTimer += (now - (step._lastFrame || now));
+            step._lastFrame = now;
+            if (trailTimer > 60) {
+                trailTimer = 0;
+
+                // Glowing particle
+                const particle = document.createElement('div');
+                particle.className = `trail-particle ${type === 'cart' ? 'resource' : faction}`;
+                particle.style.left = `${cx + (Math.random() - 0.5) * 8}px`;
+                particle.style.top = `${cy + (Math.random() - 0.5) * 8}px`;
+                mapContainer.appendChild(particle);
+                trailElements.push(particle);
+                setTimeout(() => particle.remove(), 1500);
+
+                // Glowing trail line segment from previous position
+                const segDx = cx - prevX;
+                const segDy = cy - prevY;
+                const segLen = Math.sqrt(segDx * segDx + segDy * segDy);
+                if (segLen > 2) {
+                    const seg = document.createElement('div');
+                    seg.className = `trail-line-segment ${type === 'cart' ? 'resource' : faction}`;
+                    seg.style.left = `${prevX}px`;
+                    seg.style.top = `${prevY}px`;
+                    seg.style.width = `${segLen}px`;
+                    seg.style.transform = `rotate(${Math.atan2(segDy, segDx)}rad)`;
+                    mapContainer.appendChild(seg);
+                    trailElements.push(seg);
+                    setTimeout(() => seg.remove(), 2500);
+                }
+
+                prevX = cx;
+                prevY = cy;
+            }
+
+            if (progress < 1) {
+                requestAnimationFrame(step);
+            } else {
+                // Arrived! Clean up unit and pulses
+                unit.remove();
+                pulses.forEach(p => p.remove());
+
+                activeAnimations--;
+                if (onArrive) onArrive();
+                flushPendingRefresh();
+            }
+        }
+
+        requestAnimationFrame(step);
     }
 
-    // Update sendResourcesToCapital function to use new indicators
+    // Show a burst effect at a location
+    function showClashEffect(locationId, type) {
+        const loc = gameState.locations[locationId];
+        if (!loc) return;
+
+        const x = mapContainer.clientWidth * (loc.x / 100);
+        const y = mapContainer.clientHeight * (loc.y / 100);
+
+        // Main burst
+        const burst = document.createElement('div');
+        burst.className = `clash-burst ${type}`;
+        burst.style.left = `${x}px`;
+        burst.style.top = `${y}px`;
+        mapContainer.appendChild(burst);
+        setTimeout(() => burst.remove(), 900);
+
+        // Sparkle particles for captures
+        if (type === 'capture') {
+            for (let i = 0; i < 8; i++) {
+                const sparkle = document.createElement('div');
+                sparkle.className = 'capture-sparkle';
+                const angle = (i / 8) * Math.PI * 2;
+                const radius = 20 + Math.random() * 15;
+                sparkle.style.left = `${x + Math.cos(angle) * radius}px`;
+                sparkle.style.top = `${y + Math.sin(angle) * radius}px`;
+                sparkle.style.background = Math.random() > 0.5 ? 'var(--southern-gold)' : '#22c55e';
+                sparkle.style.boxShadow = `0 0 4px ${sparkle.style.background}`;
+                sparkle.style.animationDelay = `${Math.random() * 0.3}s`;
+                mapContainer.appendChild(sparkle);
+                setTimeout(() => sparkle.remove(), 1500);
+            }
+        }
+
+        // Flash the marker
+        const marker = document.getElementById(`marker-${locationId}`);
+        if (marker) {
+            marker.classList.add('just-captured');
+            setTimeout(() => marker.classList.remove('just-captured'), 700);
+        }
+    }
+
+    // Animate army movement with travel + clash at arrival
+    function animateArmyMove(sourceId, targetId, faction, isAttack) {
+        animateTravelingUnit(sourceId, targetId, faction, 'army', () => {
+            if (isAttack) {
+                showClashEffect(targetId, 'attack');
+            } else {
+                showClashEffect(targetId, 'reinforce');
+            }
+        });
+    }
+
+    // Animate resource cart along a multi-hop path
+    function animateResourcePath(path, faction) {
+        if (path.length < 2) return;
+
+        let hopIndex = 0;
+        function nextHop() {
+            if (hopIndex < path.length - 1) {
+                animateTravelingUnit(path[hopIndex], path[hopIndex + 1], faction, 'cart', () => {
+                    // Small flash at intermediate stops
+                    if (hopIndex < path.length - 2) {
+                        showClashEffect(path[hopIndex + 1], 'reinforce');
+                    } else {
+                        // Final destination — gold sparkle
+                        showClashEffect(path[hopIndex + 1], 'capture');
+                    }
+                    hopIndex++;
+                    setTimeout(nextHop, 300);
+                });
+            }
+        }
+        nextHop();
+    }
+
+    // Legacy compatibility wrapper
+    function createTransferIndicator(fromLoc, toLoc, faction, type) {
+        if (type === 'resources') {
+            animateTravelingUnit(fromLoc, toLoc, faction, 'cart', () => {
+                showClashEffect(toLoc, 'reinforce');
+            });
+        } else {
+            const targetFaction = gameState.locations[toLoc]?.faction;
+            const isAttack = targetFaction && targetFaction !== faction && targetFaction !== 'neutral';
+            animateArmyMove(fromLoc, toLoc, faction, isAttack || targetFaction === 'neutral');
+        }
+    }
+
     async function sendResourcesToCapital(locationId) {
         try {
             const response = await fetch('/api/send_resources_to_capital', {
@@ -1037,29 +1074,14 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ location_id: locationId })
             });
-            
             const result = await response.json();
-            
+
             if (result.success) {
                 showActionStatus('success', result.message);
-                
-                // Start showing indicators along the path
-                let currentIndex = 0;
-                const showNextIndicator = () => {
-                    if (currentIndex < result.path.length - 1) {
-                        createTransferIndicator(
-                            result.path[currentIndex],
-                            result.path[currentIndex + 1],
-                            gameState.playerFaction,
-                            'resources'
-                        );
-                        currentIndex++;
-                        setTimeout(showNextIndicator, 5000); // Show next indicator after 5 seconds
-                    }
-                };
-                showNextIndicator();
-                
-                // Start periodic updates to show resource movement
+                addEvent(`Resources sent from ${gameState.locations[locationId].name} to capital`, gameState.playerFaction, 'fa-route');
+
+                // Animate resource cart along the full path
+                animateResourcePath(result.path, gameState.playerFaction);
                 startResourceTransferUpdates(result.path);
             } else {
                 showActionStatus('danger', result.message || 'Failed to send resources');
@@ -1069,104 +1091,94 @@
         }
     }
 
-    // Function to update resources during transfer
     function startResourceTransferUpdates(path) {
+        // Delay refresh until cart animation finishes (~4s per hop)
+        const animDelay = (path.length - 1) * 4500 + 1000;
         let updateCount = 0;
-        const maxUpdates = path.length * 2; // Update twice per location in path
-        
-        const updateInterval = setInterval(() => {
-            refreshMapData();
-            updateCount++;
-            
-            if (updateCount >= maxUpdates) {
-                clearInterval(updateInterval);
-            }
-        }, 2500); // Update every 2.5 seconds
+        const maxUpdates = path.length * 2;
+        setTimeout(() => {
+            const updateInterval = setInterval(() => {
+                refreshMapData();
+                updateCount++;
+                if (updateCount >= maxUpdates) clearInterval(updateInterval);
+            }, 2500);
+        }, animDelay);
     }
 
-    // Add new function to handle cooldown timer
     function startCooldownTimer(seconds) {
         const cooldownSpan = document.getElementById('resourceCooldown');
         const timeSpan = cooldownSpan.querySelector('span');
         const collectBtn = document.getElementById('collectResourcesBtn');
         let timeLeft = seconds;
 
-        // Show cooldown indicator
         cooldownSpan.classList.remove('d-none');
         collectBtn.disabled = true;
 
         const timer = setInterval(() => {
             timeLeft--;
             timeSpan.textContent = timeLeft;
-            
             if (timeLeft <= 0) {
                 clearInterval(timer);
                 cooldownSpan.classList.add('d-none');
                 if (gameState.selectedLocation) {
                     const location = gameState.locations[gameState.selectedLocation];
-                    if (location.faction === gameState.playerFaction) {
-                        collectBtn.disabled = false;
-                    }
+                    if (location.faction === gameState.playerFaction) collectBtn.disabled = false;
                 }
             }
         }, 1000);
     }
 
-    // Update launchAllOutAttack function to use new indicators
     async function launchAllOutAttack(locationId) {
         try {
             const response = await fetch('/api/all_out_attack', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({
-                    location_id: locationId
-                })
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ location_id: locationId })
             });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
+
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             const result = await response.json();
-            
+
             if (result.success) {
                 showActionStatus('success', result.message);
-                
-                // Show indicators along the attack path
-                let currentIndex = 0;
-                const showNextIndicator = () => {
-                    if (currentIndex < result.path.length - 1) {
-                        createTransferIndicator(
-                            result.path[currentIndex],
-                            result.path[currentIndex + 1],
-                            gameState.playerFaction,
-                            'attack'
-                        );
-                        currentIndex++;
-                        setTimeout(showNextIndicator, 5000); // Show next indicator after 5 seconds
+                addEvent(`All-out attack launched from ${gameState.locations[locationId].name}!`, gameState.playerFaction, 'fa-skull-crossbones');
+
+                // Animate army marching along the full attack path, hop by hop
+                const hops = (result.path && result.path.length >= 2) ? result.path.length - 1 : 0;
+                if (hops > 0) {
+                    let hopIdx = 0;
+                    function nextAttackHop() {
+                        if (hopIdx < result.path.length - 1) {
+                            const isLastHop = hopIdx === result.path.length - 2;
+                            animateTravelingUnit(result.path[hopIdx], result.path[hopIdx + 1], gameState.playerFaction, 'army', () => {
+                                if (isLastHop) {
+                                    showClashEffect(result.path[hopIdx + 1], 'attack');
+                                } else {
+                                    showClashEffect(result.path[hopIdx + 1], 'reinforce');
+                                }
+                                hopIdx++;
+                                setTimeout(nextAttackHop, 200);
+                            });
+                        }
                     }
-                };
-                showNextIndicator();
-                
-                // Start periodic updates to show army movement
+                    nextAttackHop();
+                }
+
+                // Delay refreshes until animations finish (~4s per hop + buffer)
+                const animDelay = hops * 4500 + 1000;
                 let updateCount = 0;
-                const maxUpdates = result.path.length * 3; // More updates for all-out attacks
-                
-                const updateInterval = setInterval(() => {
-                    refreshMapData();
-                    updateCount++;
-                    
-                    if (updateCount >= maxUpdates) {
-                        clearInterval(updateInterval);
-                        // Final check for game over after attack completes
-                        setTimeout(checkGameStatus, 1000);
-                    }
-                }, 2000); // Update every 2 seconds for all-out attacks
-                
-                // Also check if the result indicates game over
+                const maxUpdates = Math.max(3, hops * 2);
+                setTimeout(() => {
+                    const updateInterval = setInterval(() => {
+                        refreshMapData();
+                        updateCount++;
+                        if (updateCount >= maxUpdates) {
+                            clearInterval(updateInterval);
+                            setTimeout(checkGameStatus, 1000);
+                        }
+                    }, 2000);
+                }, animDelay);
+
                 if (result.game_over) {
                     gameState.gameOver = true;
                     gameState.winner = result.winner;
@@ -1181,27 +1193,31 @@
         }
     }
 
-    // Add new function to check game status
     async function checkGameStatus() {
         try {
             const response = await fetch('/api/game_status');
             const status = await response.json();
-            
+
             if (status.game_over && !gameState.gameOver) {
-                // Game just ended - update immediately
                 gameState.gameOver = true;
                 gameState.winner = status.winner;
                 gameState.victoryMessage = status.victory_message;
-                
-                // Refresh the full map data to ensure consistency
                 await refreshMapData();
-                
-                // Check game over to show the overlay
                 checkGameOver();
+                addEvent(`Game over! ${status.winner.charAt(0).toUpperCase() + status.winner.slice(1)} wins!`, status.winner, 'fa-crown');
             }
         } catch (error) {
             console.error('Error checking game status:', error);
         }
     }
+
+    // Expose animation functions for debugging/testing
+    window._gameAnimations = {
+        animateArmyMove,
+        animateTravelingUnit,
+        showClashEffect,
+        animateResourcePath,
+        addEvent
+    };
 </script>
-{% endblock %} 
+{% endblock %}

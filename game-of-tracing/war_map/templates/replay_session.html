@@ -3,20 +3,20 @@
 {% block title %}Session Replay{% endblock %}
 
 {% block content %}
-<div class="row">
+<div class="row g-3">
     <!-- Map Replay Area -->
     <div class="col-md-8">
-        <div class="card shadow">
-            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h4 class="mb-0"><i class="fas fa-play me-2"></i>Visual Game Replay</h4>
                 <div>
-                    <button id="play-pause-btn" class="btn btn-light btn-sm me-2">
+                    <button id="play-pause-btn" class="btn btn-primary btn-sm me-1">
                         <i class="fas fa-play"></i> Play
                     </button>
-                    <button id="step-btn" class="btn btn-outline-light btn-sm me-2">
+                    <button id="step-btn" class="btn btn-outline-light btn-sm me-1">
                         <i class="fas fa-step-forward"></i> Step
                     </button>
-                    <button id="reset-btn" class="btn btn-outline-light btn-sm me-2">
+                    <button id="reset-btn" class="btn btn-outline-light btn-sm me-1">
                         <i class="fas fa-undo"></i> Reset
                     </button>
                     <a href="/replay" class="btn btn-outline-light btn-sm">
@@ -26,38 +26,39 @@
             </div>
             <div class="card-body">
                 <div id="loading" class="text-center py-4">
-                    <div class="spinner-border text-success" role="status">
+                    <div class="spinner-border" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
-                    <p class="mt-2">Loading session data from Tempo...</p>
+                    <p class="mt-2" style="color: var(--text-secondary);">Loading session data from Tempo...</p>
                 </div>
-                
+
                 <div id="replay-content" style="display: none;">
                     <!-- Progress Bar -->
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <small><strong>Session:</strong> <code id="session-id">{{ session_id }}</code></small>
-                            <small>Action <span id="current-step">0</span> of <span id="total-steps">0</span></small>
+                            <small style="color: var(--text-secondary);"><strong>Session:</strong> <code id="session-id">{{ session_id }}</code></small>
+                            <small style="color: var(--text-secondary);">Action <span id="current-step">0</span> of <span id="total-steps">0</span></small>
                         </div>
                         <div class="progress">
                             <div id="replay-progress" class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
                         </div>
                     </div>
-                    
+
                     <!-- Game Map -->
-                    <div id="mapContainer" class="position-relative border rounded bg-light" style="height: 500px;">
+                    <div id="mapContainer" class="position-relative" style="height: 500px;">
                         <canvas id="mapCanvas" class="h-100 w-100"></canvas>
                         <div id="mapMarkers"></div>
-                        
+
                         <!-- Action Indicator -->
-                        <div id="actionIndicator" class="position-absolute top-0 start-0 m-3 p-2 bg-dark text-white rounded d-none">
-                            <strong id="actionType">Action</strong>
-                            <small id="actionDetails" class="d-block"></small>
+                        <div id="actionIndicator" class="position-absolute top-0 start-0 m-3 p-2 rounded d-none"
+                             style="background: var(--bg-card); border: 1px solid var(--border-subtle); backdrop-filter: blur(8px);">
+                            <strong id="actionType" style="color: var(--text-primary);">Action</strong>
+                            <small id="actionDetails" class="d-block" style="color: var(--text-secondary);"></small>
                         </div>
-                        
+
                         <!-- Replay Speed Control -->
                         <div class="position-absolute bottom-0 start-0 m-3">
-                            <label for="speed-control" class="form-label small text-muted">Speed:</label>
+                            <label for="speed-control" class="form-label small" style="color: var(--text-muted);">Speed:</label>
                             <select id="speed-control" class="form-select form-select-sm" style="width: 100px;">
                                 <option value="3000">Slow</option>
                                 <option value="2000" selected>Normal</option>
@@ -67,7 +68,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div id="error-message" class="alert alert-danger" style="display: none;">
                     <i class="fas fa-exclamation-triangle me-2"></i>
                     <span id="error-text"></span>
@@ -75,56 +76,56 @@
             </div>
         </div>
     </div>
-    
+
     <!-- Span Details Panel -->
     <div class="col-md-4">
         <!-- Current Action Details -->
-        <div class="card shadow mb-3">
-            <div class="card-header bg-warning text-dark">
-                <h6 class="mb-0"><i class="fas fa-crosshairs me-2"></i>Current Action</h6>
+        <div class="card mb-3">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-crosshairs me-2" style="color: var(--southern-gold);"></i>Current Action</h6>
             </div>
             <div class="card-body">
                 <div id="current-action-details">
-                    <p class="text-muted">Click play to start replay</p>
+                    <p style="color: var(--text-muted);">Click play to start replay</p>
                 </div>
             </div>
         </div>
-        
+
         <!-- Span Attributes -->
-        <div class="card shadow mb-3">
-            <div class="card-header bg-info text-white">
-                <h6 class="mb-0"><i class="fas fa-tags me-2"></i>Span Attributes</h6>
+        <div class="card mb-3">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-tags me-2" style="color: var(--northern-blue);"></i>Span Attributes</h6>
             </div>
             <div class="card-body">
                 <div id="span-attributes">
-                    <p class="text-muted small">No action selected</p>
+                    <p class="small" style="color: var(--text-muted);">No action selected</p>
                 </div>
             </div>
         </div>
-        
+
         <!-- Session Information -->
-        <div class="card shadow mb-3">
-            <div class="card-header bg-secondary text-white">
+        <div class="card mb-3">
+            <div class="card-header">
                 <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Session Info</h6>
             </div>
             <div class="card-body">
                 <div id="session-info">
-                    <p><strong>Player:</strong> <span id="player-name">Loading...</span></p>
-                    <p><strong>Faction:</strong> <span id="faction-badge" class="badge">Loading...</span></p>
-                    <p><strong>Total Actions:</strong> <span id="total-actions">0</span></p>
-                    <p><strong>Data Source:</strong> <span id="data-source" class="badge bg-info">Tempo</span></p>
+                    <p class="small mb-2"><strong>Player:</strong> <span id="player-name" style="color: var(--text-secondary);">Loading...</span></p>
+                    <p class="small mb-2"><strong>Faction:</strong> <span id="faction-badge" class="badge">Loading...</span></p>
+                    <p class="small mb-2"><strong>Total Actions:</strong> <span id="total-actions">0</span></p>
+                    <p class="small mb-0"><strong>Data Source:</strong> <span id="data-source" class="badge bg-info">Tempo</span></p>
                 </div>
             </div>
         </div>
-        
+
         <!-- Span Links -->
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white">
-                <h6 class="mb-0"><i class="fas fa-link me-2"></i>Span Links</h6>
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-link me-2" style="color: #8b5cf6;"></i>Span Links</h6>
             </div>
             <div class="card-body">
                 <div id="span-links-info">
-                    <p class="small text-muted">Loading span link analysis...</p>
+                    <p class="small" style="color: var(--text-muted);">Loading span link analysis...</p>
                 </div>
             </div>
         </div>
@@ -134,95 +135,6 @@
 
 {% block extra_css %}
 <style>
-    #mapContainer {
-        overflow: hidden;
-    }
-    
-    .location-marker {
-        position: absolute;
-        transform: translate(-50%, -50%);
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: bold;
-        border: 2px solid #fff;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
-        transition: all 0.3s ease;
-        z-index: 10;
-    }
-    
-    .location-marker.capital {
-        width: 50px;
-        height: 50px;
-    }
-    
-    .location-marker.southern {
-        background-color: #8B0000;
-    }
-    
-    .location-marker.northern {
-        background-color: #343a40;
-    }
-    
-    .location-marker.neutral {
-        background-color: #6c757d;
-    }
-    
-    .location-marker.active {
-        box-shadow: 0 0 20px #fff, 0 0 30px #fff;
-        animation: pulse 1.5s infinite;
-    }
-    
-    @keyframes pulse {
-        0% { transform: translate(-50%, -50%) scale(1); }
-        50% { transform: translate(-50%, -50%) scale(1.2); }
-        100% { transform: translate(-50%, -50%) scale(1); }
-    }
-    
-    .movement-arrow {
-        position: absolute;
-        z-index: 15;
-        pointer-events: none;
-        color: #fff;
-        font-size: 24px;
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
-        animation: moveAlongPath 2s ease-in-out;
-    }
-    
-    @keyframes moveAlongPath {
-        0% { opacity: 0; transform: scale(0.5); }
-        50% { opacity: 1; transform: scale(1); }
-        100% { opacity: 0; transform: scale(0.5); }
-    }
-    
-    .badge.southern {
-        background-color: #8B0000 !important;
-    }
-    
-    .badge.northern {
-        background-color: #343a40 !important;
-    }
-    
-    .badge.neutral {
-        background-color: #6c757d !important;
-    }
-    
-    #span-attributes {
-        max-height: 200px;
-        overflow-y: auto;
-    }
-    
-    .attribute-item {
-        border-left: 3px solid #007bff;
-        padding-left: 8px;
-        margin-bottom: 8px;
-    }
-    
-    /* Resource and army badges on markers */
     .location-marker .badge {
         font-size: 0.7em !important;
         min-width: 1.5em;
@@ -235,27 +147,22 @@
         align-items: center;
         justify-content: center;
     }
-    
+
     .location-marker .badge.bg-warning {
         color: #000 !important;
         background-color: #ffc107 !important;
     }
-    
+
     .location-marker .badge.bg-danger {
         color: #fff !important;
         background-color: #dc3545 !important;
     }
-    
-    /* Highlight effect for active locations */
-    .location-marker.action-highlight {
-        box-shadow: 0 0 25px #fff, 0 0 35px #ffff00;
-        animation: actionPulse 1.5s ease-in-out;
-    }
-    
-    @keyframes actionPulse {
-        0% { transform: translate(-50%, -50%) scale(1); }
-        50% { transform: translate(-50%, -50%) scale(1.3); }
-        100% { transform: translate(-50%, -50%) scale(1); }
+
+    #mapCanvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 5;
     }
 </style>
 {% endblock %}
@@ -268,9 +175,8 @@ let currentStep = 0;
 let isPlaying = false;
 let replayInterval = null;
 let gameLocations = {};
-let replaySpeed = 2000; // milliseconds
+let replaySpeed = 2000;
 
-// Location positions (from map.html)
 const LOCATION_POSITIONS = {
     "southern_capital": {"x": 20, "y": 70, "type": "capital", "name": "Southern Capital"},
     "northern_capital": {"x": 80, "y": 20, "type": "capital", "name": "Northern Capital"},
@@ -312,13 +218,13 @@ function setupEventListeners() {
 
 async function loadSessionData() {
     const sessionId = '{{ session_id }}';
-    
+
     try {
         const response = await fetch(`/api/replay/session/${sessionId}`);
         const data = await response.json();
-        
+
         document.getElementById('loading').style.display = 'none';
-        
+
         if (data.success) {
             sessionData = data;
             initializeReplay();
@@ -336,14 +242,9 @@ async function loadSessionData() {
 
 function initializeReplay() {
     document.getElementById('replay-content').style.display = 'block';
-    
-    // Initialize action sequence counter
     currentStep = 0;
-    
-    // Update display elements
     updateProgress();
-    
-    // Initialize game locations with proper starting state
+
     Object.keys(LOCATION_POSITIONS).forEach(locationId => {
         gameLocations[locationId] = {
             ...LOCATION_POSITIONS[locationId],
@@ -374,12 +275,10 @@ function getInitialResources(locationId) {
 function initializeMap() {
     const mapContainer = document.getElementById('mapContainer');
     const mapCanvas = document.getElementById('mapCanvas');
-    const markersContainer = document.getElementById('mapMarkers');
-    
-    // Set canvas size
+
     mapCanvas.width = mapContainer.clientWidth;
     mapCanvas.height = mapContainer.clientHeight;
-    
+
     drawConnections();
     createLocationMarkers();
 }
@@ -387,24 +286,50 @@ function initializeMap() {
 function drawConnections() {
     const canvas = document.getElementById('mapCanvas');
     const ctx = canvas.getContext('2d');
-    
-    ctx.strokeStyle = 'rgba(200, 200, 200, 0.7)';
+
+    // Subtle grid
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)';
+    ctx.lineWidth = 1;
+    const gridSize = 40;
+    for (let x = 0; x < canvas.width; x += gridSize) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    }
+    for (let y = 0; y < canvas.height; y += gridSize) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    }
+
+    // Connections with faction colors
     ctx.lineWidth = 2;
-    
+
     LOCATION_CONNECTIONS.forEach(connection => {
-        const loc1 = LOCATION_POSITIONS[connection[0]];
-        const loc2 = LOCATION_POSITIONS[connection[1]];
-        
+        const loc1 = gameLocations[connection[0]] || LOCATION_POSITIONS[connection[0]];
+        const loc2 = gameLocations[connection[1]] || LOCATION_POSITIONS[connection[1]];
+
         if (loc1 && loc2) {
             const x1 = canvas.width * (loc1.x / 100);
             const y1 = canvas.height * (loc1.y / 100);
             const x2 = canvas.width * (loc2.x / 100);
             const y2 = canvas.height * (loc2.y / 100);
-            
+
+            const f1 = (gameLocations[connection[0]] || {}).faction || 'neutral';
+            const f2 = (gameLocations[connection[1]] || {}).faction || 'neutral';
+
+            if (f1 !== 'neutral' && f1 === f2) {
+                ctx.strokeStyle = f1 === 'southern' ? 'rgba(255, 215, 0, 0.35)' : 'rgba(79, 195, 247, 0.35)';
+                ctx.setLineDash([]);
+            } else if (f1 !== 'neutral' && f2 !== 'neutral' && f1 !== f2) {
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
+                ctx.setLineDash([8, 6]);
+            } else {
+                ctx.strokeStyle = 'rgba(120, 144, 156, 0.2)';
+                ctx.setLineDash([]);
+            }
+
             ctx.beginPath();
             ctx.moveTo(x1, y1);
             ctx.lineTo(x2, y2);
             ctx.stroke();
+            ctx.setLineDash([]);
         }
     });
 }
@@ -412,56 +337,54 @@ function drawConnections() {
 function createLocationMarkers() {
     const markersContainer = document.getElementById('mapMarkers');
     markersContainer.innerHTML = '';
-    
+
     Object.keys(gameLocations).forEach(locationId => {
         const location = gameLocations[locationId];
         const marker = document.createElement('div');
-        
+
         marker.id = `marker-${locationId}`;
         marker.className = `location-marker ${location.faction} ${location.type}`;
         marker.style.left = `${location.x}%`;
         marker.style.top = `${location.y}%`;
-        
-        // Add tooltip with location details
+
         marker.title = `${location.name}\nFaction: ${location.faction}\nArmy: ${location.army}\nResources: ${location.resources}`;
-        
-        // Add icon
+
         let icon = document.createElement('i');
         if (location.type === 'capital') {
-            if (location.faction === 'southern') {
-                icon.className = 'fas fa-sun';
-            } else if (location.faction === 'northern') {
-                icon.className = 'fas fa-snowflake';
-            } else {
-                icon.className = 'fas fa-chess-rook';
-            }
+            icon.className = location.faction === 'southern' ? 'fas fa-sun' :
+                             location.faction === 'northern' ? 'fas fa-snowflake' :
+                             'fas fa-chess-rook';
         } else {
             icon.className = 'fas fa-map-marker-alt';
         }
         marker.appendChild(icon);
-        
-        // Add army badge if there are troops
+
         if (location.army > 0) {
             const armyBadge = document.createElement('span');
             armyBadge.className = 'position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger';
-            armyBadge.textContent = Math.floor(location.army); // Ensure integer display
+            armyBadge.textContent = Math.floor(location.army);
             armyBadge.style.fontSize = '0.7em';
             armyBadge.style.minWidth = '1.5em';
             armyBadge.title = `Army: ${location.army}`;
             marker.appendChild(armyBadge);
         }
-        
-        // Add resources badge for significant amounts
+
         if (location.resources > 0) {
             const resourcesBadge = document.createElement('span');
             resourcesBadge.className = 'position-absolute bottom-0 start-100 translate-middle badge rounded-pill bg-warning text-dark';
-            resourcesBadge.textContent = Math.floor(location.resources); // Ensure integer display
+            resourcesBadge.textContent = Math.floor(location.resources);
             resourcesBadge.style.fontSize = '0.7em';
             resourcesBadge.style.minWidth = '1.5em';
             resourcesBadge.title = `Resources: ${location.resources}`;
             marker.appendChild(resourcesBadge);
         }
-        
+
+        // Label
+        const label = document.createElement('span');
+        label.className = 'location-label';
+        label.textContent = location.name;
+        marker.appendChild(label);
+
         markersContainer.appendChild(marker);
     });
 }
@@ -470,61 +393,58 @@ function displaySessionInfo(data) {
     if (data.actions && data.actions.length > 0) {
         const firstAction = data.actions[0];
         document.getElementById('player-name').textContent = firstAction.player_name || 'Unknown';
-        
+
         const factionBadge = document.getElementById('faction-badge');
         const faction = firstAction.faction || 'unknown';
         factionBadge.textContent = faction.charAt(0).toUpperCase() + faction.slice(1);
-        factionBadge.className = `badge ${faction === 'southern' ? 'bg-danger' : 'bg-primary'}`;
+        factionBadge.className = `badge ${faction}`;
     }
-    
+
     document.getElementById('total-actions').textContent = data.total_actions || 0;
     document.getElementById('data-source').textContent = data.data_source || 'Tempo';
 }
 
 function displaySpanLinkChain(spanLinkChain) {
     const linksInfo = document.getElementById('span-links-info');
-    
+
     if (spanLinkChain.length === 0) {
-        linksInfo.innerHTML = '<p class="small text-muted">No span link data available</p>';
+        linksInfo.innerHTML = '<p class="small" style="color: var(--text-muted);">No span link data available</p>';
         return;
     }
-    
+
     const validChain = spanLinkChain.every(link => link.valid_chain);
-    
+
     let html = `<div class="mb-2">
         <span class="badge ${validChain ? 'bg-success' : 'bg-warning'}">
             ${validChain ? 'Valid Chain' : 'Issues Found'}
         </span>
     </div>`;
-    
-    spanLinkChain.slice(0, 5).forEach((link, index) => {
-        html += `<div class="small mb-2 p-2 border-start border-3 ${link.valid_chain ? 'border-success' : 'border-warning'}">
-            <strong>Step ${link.sequence}:</strong> ${link.action_type}<br>
-            <span class="text-muted">${link.note}</span>
+
+    spanLinkChain.slice(0, 5).forEach((link) => {
+        html += `<div class="small mb-2 p-2" style="border-left: 3px solid ${link.valid_chain ? '#22c55e' : '#f59e0b'}; padding-left: 8px;">
+            <strong style="color: var(--text-primary);">Step ${link.sequence}:</strong> ${link.action_type}<br>
+            <span style="color: var(--text-muted);">${link.note}</span>
         </div>`;
     });
-    
+
     if (spanLinkChain.length > 5) {
-        html += `<small class="text-muted">... and ${spanLinkChain.length - 5} more</small>`;
+        html += `<small style="color: var(--text-muted);">... and ${spanLinkChain.length - 5} more</small>`;
     }
-    
+
     linksInfo.innerHTML = html;
 }
 
 function togglePlayPause() {
-    if (isPlaying) {
-        pauseReplay();
-    } else {
-        startReplay();
-    }
+    if (isPlaying) pauseReplay();
+    else startReplay();
 }
 
 function startReplay() {
     if (!sessionData || !sessionData.actions) return;
-    
+
     isPlaying = true;
     document.getElementById('play-pause-btn').innerHTML = '<i class="fas fa-pause"></i> Pause';
-    
+
     replayInterval = setInterval(() => {
         if (currentStep < sessionData.actions.length) {
             executeAction(sessionData.actions[currentStep]);
@@ -556,8 +476,7 @@ function stepForward() {
 function resetReplay() {
     pauseReplay();
     currentStep = 0;
-    
-    // Reset game locations to initial state
+
     Object.keys(LOCATION_POSITIONS).forEach(locationId => {
         gameLocations[locationId] = {
             ...LOCATION_POSITIONS[locationId],
@@ -566,7 +485,12 @@ function resetReplay() {
             resources: getInitialResources(locationId)
         };
     });
-    
+
+    // Redraw
+    const canvas = document.getElementById('mapCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawConnections();
     createLocationMarkers();
     updateProgress();
     clearActionIndicator();
@@ -575,15 +499,14 @@ function resetReplay() {
 }
 
 function clearSpanAttributes() {
-    document.getElementById('span-attributes').innerHTML = '<p class="small text-muted">No action selected</p>';
+    document.getElementById('span-attributes').innerHTML = '<p class="small" style="color: var(--text-muted);">No action selected</p>';
 }
 
 function executeAction(action) {
     showActionIndicator(action);
     updateCurrentActionDetails(action);
     updateSpanAttributes(action);
-    
-    // Simulate the action effect on the game state and map
+
     switch(action.action_type) {
         case 'collect_resources':
             simulateCollectResources(action);
@@ -608,15 +531,19 @@ function executeAction(action) {
             highlightLocation(action.location_id || action.source_location);
             break;
     }
-    
-    // Update the visual representation
+
+    // Redraw connections for updated factions then recreate markers
+    const canvas = document.getElementById('mapCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawConnections();
     createLocationMarkers();
 }
 
 function simulateCollectResources(action) {
     const locationId = action.location_id || action.source_location;
     if (gameLocations[locationId]) {
-        gameLocations[locationId].resources = Math.floor(gameLocations[locationId].resources + 10); // Typical resource collection amount
+        gameLocations[locationId].resources = Math.floor(gameLocations[locationId].resources + 10);
     }
 }
 
@@ -631,28 +558,23 @@ function simulateCreateArmy(action) {
 function simulateMoveArmy(action) {
     const sourceId = action.source_location;
     const targetId = action.target_location;
-    
+
     if (gameLocations[sourceId] && gameLocations[targetId]) {
         const sourceLocation = gameLocations[sourceId];
         const targetLocation = gameLocations[targetId];
-        
+
         if (sourceLocation.army > 0) {
             const movingArmies = Math.floor(sourceLocation.army);
             sourceLocation.army = 0;
-            
-            // If it's an attack (different factions)
+
             if (sourceLocation.faction !== targetLocation.faction) {
-                // Simple combat simulation
                 if (movingArmies > targetLocation.army) {
-                    // Attacker wins - take over location
                     targetLocation.faction = sourceLocation.faction;
                     targetLocation.army = Math.floor(movingArmies - targetLocation.army);
                 } else {
-                    // Defender wins
                     targetLocation.army = Math.max(1, Math.floor(targetLocation.army - movingArmies));
                 }
             } else {
-                // Friendly reinforcement
                 targetLocation.army = Math.floor(targetLocation.army + movingArmies);
             }
         }
@@ -662,29 +584,21 @@ function simulateMoveArmy(action) {
 function simulateAllOutAttack(action) {
     const locationId = action.location_id || action.source_location;
     if (gameLocations[locationId]) {
-        // For all-out attack, we simulate sending all armies
         const location = gameLocations[locationId];
         const faction = location.faction;
-        
-        // Find enemy capital
-        let enemyCapital = null;
-        if (faction === 'southern') {
-            enemyCapital = 'northern_capital';
-        } else if (faction === 'northern') {
-            enemyCapital = 'southern_capital';
-        }
-        
+
+        let enemyCapital = faction === 'southern' ? 'northern_capital' :
+                           faction === 'northern' ? 'southern_capital' : null;
+
         if (enemyCapital && gameLocations[enemyCapital]) {
             const attackingArmies = Math.floor(location.army);
             location.army = 0;
-            
+
             const enemyLocation = gameLocations[enemyCapital];
             if (attackingArmies > enemyLocation.army) {
-                // Attacker wins - game over scenario
                 enemyLocation.faction = faction;
                 enemyLocation.army = Math.floor(attackingArmies - enemyLocation.army);
             } else {
-                // Defender survives
                 enemyLocation.army = Math.max(1, Math.floor(enemyLocation.army - attackingArmies));
             }
         }
@@ -697,98 +611,72 @@ function simulateSendResources(action) {
         const location = gameLocations[locationId];
         const resources = Math.floor(location.resources);
         location.resources = 0;
-        
-        // Find appropriate capital based on faction
-        let capitalId = null;
-        if (location.faction === 'southern') {
-            capitalId = 'southern_capital';
-        } else if (location.faction === 'northern') {
-            capitalId = 'northern_capital';
-        }
-        
+
+        let capitalId = location.faction === 'southern' ? 'southern_capital' :
+                        location.faction === 'northern' ? 'northern_capital' : null;
+
         if (capitalId && gameLocations[capitalId]) {
             gameLocations[capitalId].resources = Math.floor(gameLocations[capitalId].resources + resources);
         }
     }
 }
 
-function highlightLocation(locationId, type = 'action') {
-    // Remove previous highlights
+function highlightLocation(locationId) {
     document.querySelectorAll('.location-marker').forEach(marker => {
         marker.classList.remove('active', 'action-highlight');
     });
-    
-    // Highlight the current location
+
     const marker = document.getElementById(`marker-${locationId}`);
     if (marker) {
         marker.classList.add('action-highlight');
-        
-        // Remove highlight after animation
-        setTimeout(() => {
-            marker.classList.remove('action-highlight');
-        }, 2000);
+        setTimeout(() => { marker.classList.remove('action-highlight'); }, 2000);
     }
 }
 
 function highlightMovement(sourceId, targetId) {
     const sourcePos = LOCATION_POSITIONS[sourceId];
     const targetPos = LOCATION_POSITIONS[targetId];
-    
     if (!sourcePos || !targetPos) return;
-    
-    // Highlight source location first
+
     highlightLocation(sourceId);
-    
-    // Create movement arrow
+
     const mapContainer = document.getElementById('mapContainer');
     const arrow = document.createElement('div');
     arrow.className = 'movement-arrow';
     arrow.innerHTML = '<i class="fas fa-arrow-right"></i>';
-    
-    // Calculate angle for arrow direction
+
     const dx = targetPos.x - sourcePos.x;
     const dy = targetPos.y - sourcePos.y;
     const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-    
-    // Position arrow between locations
+
     const avgX = (sourcePos.x + targetPos.x) / 2;
     const avgY = (sourcePos.y + targetPos.y) / 2;
     arrow.style.left = `${avgX}%`;
     arrow.style.top = `${avgY}%`;
     arrow.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
-    
+
     mapContainer.appendChild(arrow);
-    
-    // Highlight target location after a delay
-    setTimeout(() => {
-        highlightLocation(targetId);
-    }, 1000);
-    
-    // Remove arrow after animation
-    setTimeout(() => {
-        arrow.remove();
-    }, 2500);
+
+    setTimeout(() => { highlightLocation(targetId); }, 1000);
+    setTimeout(() => { arrow.remove(); }, 2500);
 }
 
 function showActionIndicator(action) {
     const indicator = document.getElementById('actionIndicator');
     const actionType = document.getElementById('actionType');
     const actionDetails = document.getElementById('actionDetails');
-    
+
     actionType.textContent = action.action_type || 'Unknown Action';
-    
+
     let details = `Sequence: ${action.sequence || 'N/A'}`;
     if (action.player_name) details += ` | Player: ${action.player_name}`;
     if (action.source_location) details += ` | From: ${action.source_location}`;
     if (action.target_location) details += ` | To: ${action.target_location}`;
-    
+
     actionDetails.textContent = details;
     indicator.classList.remove('d-none');
-    
-    // Auto-hide after 3 seconds
-    setTimeout(() => {
-        indicator.classList.add('d-none');
-    }, 3000);
+
+    setTimeout(() => { indicator.classList.add('d-none'); }, 3000);
 }
 
 function clearActionIndicator() {
@@ -797,15 +685,12 @@ function clearActionIndicator() {
 
 function updateCurrentActionDetails(action) {
     const detailsDiv = document.getElementById('current-action-details');
-    
     const timestamp = new Date(action.start_time / 1000000);
     const duration = action.duration ? (action.duration / 1000000).toFixed(2) + 'ms' : 'N/A';
-    
-    // Display sequence number as 1-based for user friendliness
     const displaySequence = action.sequence || currentStep;
-    
+
     detailsDiv.innerHTML = `
-        <h6>${action.action_type || action.operation}</h6>
+        <h6 style="color: var(--text-primary);">${action.action_type || action.operation}</h6>
         <p class="small mb-2"><strong>Step:</strong> ${displaySequence}</p>
         <p class="small mb-2"><strong>Player:</strong> ${action.player_name || 'Unknown'}</p>
         <p class="small mb-2"><strong>Faction:</strong> ${action.faction || 'Unknown'}</p>
@@ -816,40 +701,37 @@ function updateCurrentActionDetails(action) {
 }
 
 function clearCurrentActionDetails() {
-    document.getElementById('current-action-details').innerHTML = '<p class="text-muted">Click play to start replay</p>';
+    document.getElementById('current-action-details').innerHTML = '<p style="color: var(--text-muted);">Click play to start replay</p>';
 }
 
 function updateSpanAttributes(action) {
     const attributesDiv = document.getElementById('span-attributes');
-    
+
     if (!action.attributes || Object.keys(action.attributes).length === 0) {
-        attributesDiv.innerHTML = '<p class="small text-muted">No attributes available</p>';
+        attributesDiv.innerHTML = '<p class="small" style="color: var(--text-muted);">No attributes available</p>';
         return;
     }
-    
+
     let html = '';
     Object.entries(action.attributes).forEach(([key, value]) => {
         html += `<div class="attribute-item">
-            <strong class="small">${key}</strong><br>
+            <strong class="small" style="color: var(--text-secondary);">${key}</strong><br>
             <code class="small">${value}</code>
         </div>`;
     });
-    
+
     attributesDiv.innerHTML = html;
 }
 
 function updateProgress() {
     const totalSteps = sessionData.actions.length;
     const progress = totalSteps > 0 ? (currentStep / totalSteps) * 100 : 0;
-    
+
     document.getElementById('replay-progress').style.width = `${progress}%`;
     document.getElementById('current-step').textContent = Math.max(0, currentStep);
-    
-    // Ensure total steps is also displayed correctly
+
     const totalStepsElement = document.getElementById('total-steps');
-    if (totalStepsElement) {
-        totalStepsElement.textContent = totalSteps;
-    }
+    if (totalStepsElement) totalStepsElement.textContent = totalSteps;
 }
 
 function showError(message) {
@@ -857,4 +739,4 @@ function showError(message) {
     document.getElementById('error-text').textContent = message;
 }
 </script>
-{% endblock %} 
+{% endblock %}

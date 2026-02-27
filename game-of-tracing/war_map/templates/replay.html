@@ -3,22 +3,22 @@
 {% block title %}Game Replay{% endblock %}
 
 {% block content %}
-<div class="row">
+<div class="row g-3">
     <div class="col-md-8">
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white">
+        <div class="card">
+            <div class="card-header">
                 <h4 class="mb-0"><i class="fas fa-history me-2"></i>Game Session Replay</h4>
             </div>
             <div class="card-body">
-                <p class="mb-4">Replay previous game sessions using span links and distributed tracing. Each session shows the complete chain of actions linked together through OpenTelemetry spans.</p>
-                
+                <p class="mb-4" style="color: var(--text-secondary);">Replay previous game sessions using span links and distributed tracing. Each session shows the complete chain of actions linked together through OpenTelemetry spans.</p>
+
                 <div id="loading" class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
+                    <div class="spinner-border" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
-                    <p class="mt-2">Loading game sessions from Tempo...</p>
+                    <p class="mt-2" style="color: var(--text-secondary);">Loading game sessions from Tempo...</p>
                 </div>
-                
+
                 <div id="sessions-list" style="display: none;">
                     <h5>Available Sessions</h5>
                     <div class="table-responsive">
@@ -30,17 +30,16 @@
                                 </tr>
                             </thead>
                             <tbody id="sessions-tbody">
-                                <!-- Sessions will be loaded here -->
                             </tbody>
                         </table>
                     </div>
                 </div>
-                
+
                 <div id="no-sessions" class="alert alert-info" style="display: none;">
                     <i class="fas fa-info-circle me-2"></i>
                     No game sessions found. Play a game first to create replay data!
                 </div>
-                
+
                 <div id="error-message" class="alert alert-danger" style="display: none;">
                     <i class="fas fa-exclamation-triangle me-2"></i>
                     <span id="error-text"></span>
@@ -48,32 +47,32 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-md-4">
-        <div class="card shadow">
-            <div class="card-header bg-info text-white">
+        <div class="card mb-3">
+            <div class="card-header">
                 <h5 class="mb-0"><i class="fas fa-question-circle me-2"></i>How It Works</h5>
             </div>
             <div class="card-body">
-                <h6>Span Links & Replay</h6>
-                <p class="small">Each game action creates a span link to the previous action, forming a chain across different traces.</p>
-                
-                <h6>What You'll See</h6>
-                <ul class="small">
+                <h6 style="color: var(--northern-blue);">Span Links & Replay</h6>
+                <p class="small" style="color: var(--text-secondary);">Each game action creates a span link to the previous action, forming a chain across different traces.</p>
+
+                <h6 style="color: var(--northern-blue);">What You'll See</h6>
+                <ul class="small" style="color: var(--text-secondary);">
                     <li><strong>Action Sequence</strong> - Chronological order of game moves</li>
                     <li><strong>Span Links</strong> - How actions connect to each other</li>
                     <li><strong>Trace Context</strong> - Full distributed tracing information</li>
                     <li><strong>Game Narrative</strong> - Complete story of how the game unfolded</li>
                 </ul>
-                
-                <h6>Educational Value</h6>
-                <ul class="small">
+
+                <h6 style="color: var(--northern-blue);">Educational Value</h6>
+                <ul class="small" style="color: var(--text-secondary);">
                     <li>Cross-trace relationships</li>
                     <li>Tempo API integration</li>
                     <li>TraceQL queries</li>
                     <li>Game state reconstruction</li>
                 </ul>
-                
+
                 <div class="mt-3">
                     <a href="https://grafana.com/docs/tempo/latest/traceql/" target="_blank" class="btn btn-sm btn-outline-info">
                         <i class="fas fa-external-link-alt me-1"></i>Learn TraceQL
@@ -81,24 +80,24 @@
                 </div>
             </div>
         </div>
-        
-        <div class="card shadow mt-3">
-            <div class="card-header bg-secondary text-white">
+
+        <div class="card">
+            <div class="card-header">
                 <h6 class="mb-0"><i class="fas fa-search me-2"></i>Try TraceQL Queries</h6>
             </div>
             <div class="card-body">
-                <p class="small">Use these queries in Grafana Tempo:</p>
+                <p class="small" style="color: var(--text-secondary);">Use these queries in Grafana Tempo:</p>
                 <div class="mb-2">
-                    <code class="small">{game.session.id!=""}</code>
-                    <small class="text-muted d-block">Find all game sessions</small>
+                    <code>{game.session.id!=""}</code>
+                    <small class="d-block" style="color: var(--text-muted);">Find all game sessions</small>
                 </div>
                 <div class="mb-2">
-                    <code class="small">{link.type="game_sequence"}</code>
-                    <small class="text-muted d-block">Find spans with links</small>
+                    <code>{link.type="game_sequence"}</code>
+                    <small class="d-block" style="color: var(--text-muted);">Find spans with links</small>
                 </div>
                 <div class="mb-2">
-                    <code class="small">{game.action.type="move_army"}</code>
-                    <small class="text-muted d-block">Find specific actions</small>
+                    <code>{game.action.type="move_army"}</code>
+                    <small class="d-block" style="color: var(--text-muted);">Find specific actions</small>
                 </div>
             </div>
         </div>
@@ -116,9 +115,9 @@ async function loadGameSessions() {
     try {
         const response = await fetch('/api/replay/sessions');
         const data = await response.json();
-        
+
         document.getElementById('loading').style.display = 'none';
-        
+
         if (data.success && data.sessions && data.sessions.length > 0) {
             displaySessions(data.sessions);
         } else {
@@ -134,25 +133,21 @@ async function loadGameSessions() {
 function displaySessions(sessions) {
     const tbody = document.getElementById('sessions-tbody');
     tbody.innerHTML = '';
-    
+
     sessions.forEach(session => {
         const row = document.createElement('tr');
-        
         row.innerHTML = `
-            <td>
-                <code class="small">${session.session_id}</code>
-            </td>
+            <td><code>${session.session_id}</code></td>
             <td>
                 <a href="/replay/${session.session_id}" class="btn btn-sm btn-primary">
                     <i class="fas fa-play me-1"></i>Replay
                 </a>
             </td>
         `;
-        
         tbody.appendChild(row);
     });
-    
+
     document.getElementById('sessions-list').style.display = 'block';
 }
 </script>
-{% endblock %} 
+{% endblock %}

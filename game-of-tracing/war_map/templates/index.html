@@ -3,118 +3,97 @@
 {% block title %}Choose Your Faction{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-8">
-        <div class="card shadow">
-            <div class="card-header bg-dark text-white">
-                <h3 class="mb-0">Welcome to a Game of Traces</h3>
+<div class="faction-hero">
+    <div class="col-lg-8 col-xl-7">
+        <div class="text-center mb-5">
+            <h1 class="faction-hero-title">A Game of Traces</h1>
+            <p class="faction-hero-subtitle">Choose your kingdom. Command your armies. Master distributed tracing.</p>
+        </div>
+
+        <!-- Show reset status if coming from restart -->
+        {% if request.args.get('reset') %}
+        <div class="alert {% if request.args.get('reset') == 'success' %}alert-success{% else %}alert-danger{% endif %} mb-4">
+            <i class="fas {% if request.args.get('reset') == 'success' %}fa-check-circle{% else %}fa-exclamation-triangle{% endif %} me-2"></i>
+            {{ request.args.get('message', 'Game reset status unknown') }}
+        </div>
+        {% endif %}
+
+        {% if error %}
+        <div class="alert alert-danger mb-4">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('select_faction') }}" id="factionForm">
+            <div class="mb-4">
+                <label for="player_name" class="form-label">Commander Name</label>
+                <input type="text" class="form-control form-control-lg" id="player_name" name="player_name"
+                       placeholder="Enter your name..." required
+                       style="max-width: 400px; margin: 0 auto; text-align: center;">
             </div>
-            <div class="card-body">
-                <!-- Show reset status if coming from restart -->
-                {% if request.args.get('reset') %}
-                <div class="alert {% if request.args.get('reset') == 'success' %}alert-success{% else %}alert-danger{% endif %} mb-4">
-                    <i class="fas {% if request.args.get('reset') == 'success' %}fa-check-circle{% else %}fa-exclamation-triangle{% endif %} me-2"></i>
-                    {{ request.args.get('message', 'Game reset status unknown') }}
+            <input type="hidden" name="faction" id="factionInput" value="" required>
+
+            <div class="row g-4 faction-selection justify-content-center mb-4">
+                <div class="col-md-5">
+                    <div class="card faction-card faction-southern {% if not southern_available %}faction-unavailable{% endif %}"
+                         data-faction="southern" {% if not southern_available %}aria-disabled="true"{% endif %}>
+                        <div class="card-body">
+                            <span class="faction-icon southern-icon">
+                                <i class="fas fa-sun"></i>
+                            </span>
+                            <h4>Southern Kingdom</h4>
+                            <p class="faction-motto">"Glory and Honor!"</p>
+                            <p class="faction-start">
+                                <i class="fas fa-map-marker-alt me-1"></i>Start at Southern Capital
+                            </p>
+                            {% if not southern_available %}
+                            <div class="mt-2">
+                                <span class="badge bg-danger"><i class="fas fa-ban me-1"></i>Already taken</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
                 </div>
-                {% endif %}
-                
-                <h4 class="mb-4">Choose Your Faction</h4>
-                
-                {% if error %}
-                <div class="alert alert-danger">{{ error }}</div>
-                {% endif %}
-                
-                <form method="POST" action="{{ url_for('select_faction') }}">
-                    <div class="mb-3">
-                        <label for="player_name" class="form-label">Your Name</label>
-                        <input type="text" class="form-control" id="player_name" name="player_name" required>
-                    </div>
-                    
-                    <div class="row faction-selection">
-                        <div class="col-md-6 mb-4">
-                            <div class="card faction-card {% if not southern_available %}faction-unavailable{% endif %}">
-                                <div class="card-body">
-                                    <h5 class="card-title text-center mb-3">
-                                        <span class="faction-icon southern-icon">
-                                            <i class="fas fa-sun"></i>
-                                        </span>
-                                    </h5>
-                                    <h4 class="text-center">Southern Kingdom</h4>
-                                    <p class="card-text text-center">
-                                        "Glory and Honor!"<br>
-                                        Start at Southern Capital
-                                    </p>
-                                    {% if southern_available %}
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="faction" value="southern" id="southern" required>
-                                        <label class="form-check-label" for="southern">
-                                            Choose Southern Kingdom
-                                        </label>
-                                    </div>
-                                    {% else %}
-                                    <div class="text-center text-danger">
-                                        <i class="fas fa-ban me-1"></i> Already taken
-                                    </div>
-                                    {% endif %}
-                                </div>
+
+                <div class="col-md-5">
+                    <div class="card faction-card faction-northern {% if not northern_available %}faction-unavailable{% endif %}"
+                         data-faction="northern" {% if not northern_available %}aria-disabled="true"{% endif %}>
+                        <div class="card-body">
+                            <span class="faction-icon northern-icon">
+                                <i class="fas fa-snowflake"></i>
+                            </span>
+                            <h4>Northern Kingdom</h4>
+                            <p class="faction-motto">"Strength and Unity"</p>
+                            <p class="faction-start">
+                                <i class="fas fa-map-marker-alt me-1"></i>Start at Northern Capital
+                            </p>
+                            {% if not northern_available %}
+                            <div class="mt-2">
+                                <span class="badge bg-danger"><i class="fas fa-ban me-1"></i>Already taken</span>
                             </div>
-                        </div>
-                        
-                        <div class="col-md-6 mb-4">
-                            <div class="card faction-card {% if not northern_available %}faction-unavailable{% endif %}">
-                                <div class="card-body">
-                                    <h5 class="card-title text-center mb-3">
-                                        <span class="faction-icon northern-icon">
-                                            <i class="fas fa-snowflake"></i>
-                                        </span>
-                                    </h5>
-                                    <h4 class="text-center">Northern Kingdom</h4>
-                                    <p class="card-text text-center">
-                                        "Strength and Unity"<br>
-                                        Start at Northern Capital
-                                    </p>
-                                    {% if northern_available %}
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="faction" value="northern" id="northern" required>
-                                        <label class="form-check-label" for="northern">
-                                            Choose Northern Kingdom
-                                        </label>
-                                    </div>
-                                    {% else %}
-                                    <div class="text-center text-danger">
-                                        <i class="fas fa-ban me-1"></i> Already taken
-                                    </div>
-                                    {% endif %}
-                                </div>
-                            </div>
+                            {% endif %}
                         </div>
                     </div>
-                    
-                    <div class="text-center">
-                        <button type="submit" class="btn btn-primary btn-lg" {% if not southern_available and not northern_available %}disabled{% endif %}>
-                            Enter The Game
-                        </button>
-                    </div>
-                </form>
+                </div>
             </div>
-        </div>
-        <!-- Reset Game Button and Status Message -->
-        <div class="text-center mt-4">
-            <button id="reset-game-btn" class="btn btn-danger">Reset Game</button>
-            <div id="reset-status" class="mt-2"></div>
-        </div>
-        
-        <!-- Replay Page Access -->
-        <div class="card mt-4">
-            <div class="card-body text-center">
-                <h5 class="card-title">
-                    <i class="fas fa-history me-2"></i>Game Replays
-                </h5>
-                <p class="card-text">
-                    Watch previous games unfold through distributed traces
-                </p>
-                <a href="/replay" class="btn btn-info">
-                    <i class="fas fa-play me-2"></i>View Game Replays
+
+            <div class="text-center">
+                <button type="submit" id="enterGameBtn" class="btn btn-primary btn-lg px-5 py-2" disabled
+                        {% if not southern_available and not northern_available %}disabled{% endif %}>
+                    <i class="fas fa-dungeon me-2"></i>Enter The Game
+                </button>
+            </div>
+        </form>
+
+        <!-- Reset & Replay links -->
+        <div class="row g-3 mt-4 justify-content-center">
+            <div class="col-auto">
+                <button id="reset-game-btn" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-redo-alt me-1"></i>Reset Game
+                </button>
+                <div id="reset-status" class="mt-2 text-center small"></div>
+            </div>
+            <div class="col-auto">
+                <a href="/replay" class="btn btn-outline-info btn-sm">
+                    <i class="fas fa-play me-1"></i>View Game Replays
                 </a>
             </div>
         </div>
@@ -122,86 +101,58 @@
 </div>
 {% endblock %}
 
-{% block extra_css %}
-<style>
-    .faction-card {
-        transition: transform 0.3s;
-        height: 100%;
-        border: 2px solid #ccc;
-    }
-    
-    .faction-card:not(.faction-unavailable):hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
-        cursor: pointer;
-    }
-    
-    .faction-unavailable {
-        opacity: 0.6;
-    }
-    
-    .faction-icon {
-        display: inline-block;
-        font-size: 3rem;
-        width: 80px;
-        height: 80px;
-        line-height: 80px;
-        border-radius: 50%;
-        text-align: center;
-    }
-    
-    .southern-icon {
-        background-color: #ffd700;
-        color: #8B0000;
-    }
-    
-    .northern-icon {
-        background-color: #f8f9fa;
-        color: #343a40;
-    }
-    
-    .faction-selection label {
-        cursor: pointer;
-    }
-</style>
-{% endblock %}
-
 {% block scripts %}
 <script>
     $(document).ready(function() {
+        const factionInput = $('#factionInput');
+        const enterBtn = $('#enterGameBtn');
+
         // Make the entire card clickable for faction selection
         $('.faction-card:not(.faction-unavailable)').click(function() {
-            const radioBtn = $(this).find('input[type="radio"]');
-            radioBtn.prop('checked', true);
-            
+            const faction = $(this).data('faction');
+            factionInput.val(faction);
+
             // Update visual selection
-            $('.faction-card').removeClass('border-primary');
-            $(this).addClass('border-primary');
+            $('.faction-card').removeClass('faction-selected');
+            $(this).addClass('faction-selected');
+
+            // Enable submit button
+            enterBtn.prop('disabled', false);
         });
-        
+
+        // Prevent submit if no faction
+        $('#factionForm').on('submit', function(e) {
+            if (!factionInput.val()) {
+                e.preventDefault();
+                // Flash the cards briefly
+                $('.faction-card:not(.faction-unavailable)').addClass('border-warning');
+                setTimeout(() => $('.faction-card').removeClass('border-warning'), 1000);
+            }
+        });
+
         // Reset Game button handler
         $('#reset-game-btn').click(function() {
             if (!confirm('Are you sure you want to reset the game? This will clear all progress.')) return;
-            
+
             $('#reset-game-btn').prop('disabled', true);
-            $('#reset-status').html('<span class="text-info">Resetting game...</span>');
-            
+            $('#reset-status').html('<span style="color: var(--northern-blue);">Resetting game...</span>');
+
             fetch('/api/reset_game', {method: 'POST'})
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        $('#reset-status').html('<span class="text-success">' + data.message + '</span>');
+                        $('#reset-status').html('<span style="color: #22c55e;">' + data.message + '</span>');
                         setTimeout(() => { window.location.reload(); }, 1000);
                     } else {
-                        $('#reset-status').html('<span class="text-danger">Failed to reset game.</span>');
+                        $('#reset-status').html('<span style="color: #ef4444;">Failed to reset game.</span>');
                         $('#reset-game-btn').prop('disabled', false);
                     }
                 })
                 .catch(() => {
-                    $('#reset-status').html('<span class="text-danger">Network error. Try again.</span>');
+                    $('#reset-status').html('<span style="color: #ef4444;">Network error. Try again.</span>');
                     $('#reset-game-btn').prop('disabled', false);
                 });
         });
     });
 </script>
-{% endblock %} 
+{% endblock %}

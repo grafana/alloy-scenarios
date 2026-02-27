@@ -4,39 +4,111 @@
 
 # Grafana Alloy Scenarios
 
-This repository contains scenarios that demonstrate how to use Alloy to monitor various data sources. Each scenario is a self-contained example that includes a Loki, Grafana, Mimir, and Tempo (LGMT) stack and an Alloy configuration file.
+A collection of self-contained, runnable scenarios demonstrating how to use [Grafana Alloy](https://grafana.com/docs/alloy/) for telemetry collection and processing. Each scenario includes a full LGMT stack (Loki, Grafana, Mimir, Tempo) with pre-configured dashboards so you can explore immediately.
 
-## Run scenarios
+## Getting Started
 
-You can run any scenario in two ways:
+### Prerequisites
 
-1. **Traditional way**: Navigate to the scenario directory and run `docker compose up -d`
-2. **Using centralized image management**: Run `./run-example.sh <scenario-directory>` from the root directory
+- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
 
-The centralized approach allows you to manage all Docker image versions in a single `image-versions.env` file, making it easier to update images across all examples.
+### Run a scenario
 
-## Current Scenarios
+```bash
+# Option 1: Navigate to the scenario directory
+cd <scenario-dir> && docker compose up -d
+
+# Option 2: Use centralized image management (from repo root)
+./run-example.sh <scenario-directory>
+```
+
+The centralized approach manages all Docker image versions in a single `image-versions.env` file, making it easy to update images across all scenarios.
+
+### Access the stack
+
+Once a scenario is running:
+
+- **Grafana**: [http://localhost:3000](http://localhost:3000) (no login required)
+- **Alloy UI**: [http://localhost:12345](http://localhost:12345) (pipeline debugging)
+
+### Stop a scenario
+
+```bash
+cd <scenario-dir> && docker compose down
+```
+
+## Scenarios
+
+### Logs
 
 | Scenario | Description |
-| -------- | ------------ |
-| [Distributed tracing](trace-delivery/) | Learn distributed tracing through a sofa delivery workflow from order to doorstep. |
-| [Docker monitoring](docker-monitoring/) | Monitor Docker containers using Alloy. |
-| [Game of tracing](game-of-tracing/) | An interactive strategy game teaching distributed tracing, sampling, and service graphs. |
-| [Kafka logs](kafka/) | Learn how to use Alloy to monitor logs from Kafka. |
-| [Kubernetes](k8s/) | A series of scenarios that demonstrate how to set up Alloy using the Kubernetes monitoring Helm chart. Refer to the respective directories for examples specific to each telemetry source. |
+| -------- | ----------- |
+| [GELF log ingestion](gelf-log-ingestion/) | Ingest structured logs from applications using the GELF (Graylog Extended Log Format) protocol over UDP. |
+| [Kafka logs](kafka/) | Consume and process logs from Apache Kafka topics. |
+| [Log API gateway](log-api-gateway/) | Use Alloy as a centralized log gateway that accepts logs via a Loki-compatible push API endpoint. |
 | [Log routing](routing/) | Route logs from multiple sources to different Loki tenants based on log content and origin. |
-| [Logs from file](logs-file/) | Monitor logs from a file using Alloy. |
-| [Logs over TCP](logs-tcp/) | Send TCP logs to Alloy within a JSON format. |
-| [Monitor Linux](linux/) | Learn how to use Alloy to monitor a Linux server. |
-| [Monitor Windows](windows/) | Learn how to use Alloy to monitor system metrics and Event Logs. |
+| [Log secret filtering](log-secret-filtering/) | Automatically redact sensitive credentials and secrets from logs using pattern matching before storage. |
+| [Logs from file](logs-file/) | Monitor and tail log files using Alloy. |
+| [Logs over TCP](logs-tcp/) | Receive and process TCP logs in JSON format. |
+| [Popular logging frameworks](app-instrumentation/logging/popular-logging-frameworks/) | Parse logs from popular logging frameworks across 7 programming languages. |
+| [Structured log parsing](mail-house/) | Parse structured logs into labels and structured metadata. |
+| [Syslog monitoring](syslog/) | Monitor non-RFC5424 compliant syslog messages using `rsyslog` and Alloy. |
+
+### Tracing
+
+| Scenario | Description |
+| -------- | ----------- |
+| [Distributed tracing](trace-delivery/) | Learn distributed tracing through a sofa delivery workflow from order to doorstep. |
+| [Game of tracing](game-of-tracing/) | An interactive strategy game teaching distributed tracing, sampling, and service graphs. |
 | [OpenTelemetry basic tracing](otel-basic-tracing/) | Collect and visualize OpenTelemetry traces using Alloy and Tempo. |
-| [OpenTelemetry service graph generation](otel-tracing-service-graphs/) | Generate service graphs using the Alloy `servicegraph` connector. |
-| [OpenTelemetry tail sampling](otel-tail-sampling/) | Learn how to use OpenTelemetry tail sampling with Alloy and Tempo. |
-| [Popular logging frameworks](app-instrumentation/logging/popular-logging-frameworks/) | Learn how to use Alloy to parse logs from popular logging frameworks. |
-| [Self-monitoring](self-monitoring/) | Learn how to configure Alloy to monitor itself, collecting its own metrics and logs. |
-| [SNMP monitoring](snmp/) | Monitor Simple Network Management Protocol (SNMP) devices using the Alloy SNMP exporter. |
-| [Structured log parsing](mail-house/) | Learn how to parse structured logs into labels and structured metadata. |
-| [Syslog monitoring](syslog/) | Monitor non RFC5424 compliant syslog messages using `rsyslog` and Alloy. |
+| [OpenTelemetry service graphs](otel-tracing-service-graphs/) | Generate service graphs using the Alloy `servicegraph` connector. |
+| [OpenTelemetry span metrics](otel-span-metrics/) | Generate RED metrics (Request rate, Error rate, Duration) from OpenTelemetry traces using the span metrics connector. |
+| [OpenTelemetry tail sampling](otel-tail-sampling/) | Apply tail sampling policies to OpenTelemetry traces with Alloy and Tempo. |
+
+### Metrics
+
+| Scenario | Description |
+| -------- | ----------- |
+| [Blackbox probing](blackbox-probing/) | Monitor endpoint availability and response times using synthetic HTTP probes. |
+| [OTel metrics pipeline](otel-metrics-pipeline/) | Forward OpenTelemetry metrics from applications through Alloy with batching and transformation into Prometheus. |
+
+### Profiling
+
+| Scenario | Description |
+| -------- | ----------- |
+| [Continuous profiling](continuous-profiling/) | Collect and visualize CPU, memory, and goroutine profiles from Go applications using Grafana Pyroscope. |
+
+### Frontend
+
+| Scenario | Description |
+| -------- | ----------- |
+| [Faro frontend observability](faro-frontend-observability/) | Collect frontend web telemetry (logs, errors, web vitals) from browser applications using the Faro Web SDK. |
+
+### Infrastructure Monitoring
+
+| Scenario | Description |
+| -------- | ----------- |
+| [Docker monitoring](docker-monitoring/) | Monitor Docker container metrics and logs. |
+| [Monitor Linux](linux/) | Monitor a Linux server's system metrics using Alloy. |
+| [Monitor Windows](windows/) | Monitor Windows system metrics and Event Logs. |
+| [Self-monitoring](self-monitoring/) | Configure Alloy to monitor itself, collecting its own metrics and logs. |
+| [SNMP monitoring](snmp/) | Monitor SNMP devices using the Alloy SNMP exporter. |
+
+### Database and Cache Monitoring
+
+| Scenario | Description |
+| -------- | ----------- |
+| [Elasticsearch monitoring](elasticsearch-monitoring/) | Monitor Elasticsearch cluster health, node status, and performance metrics. |
+| [Memcached monitoring](memcached-monitoring/) | Monitor Memcached instance metrics including connections, memory usage, and command performance. |
+| [MySQL monitoring](mysql-monitoring/) | Monitor MySQL database server metrics and performance indicators. |
+| [PostgreSQL monitoring](postgres-monitoring/) | Monitor PostgreSQL transaction statistics, connections, and server configuration. |
+| [Redis monitoring](redis-monitoring/) | Monitor Redis instance metrics including connections, memory usage, and command throughput. |
+
+### Kubernetes
+
+| Scenario | Description |
+| -------- | ----------- |
+| [Kubernetes](k8s/) | A series of scenarios demonstrating Alloy setup using the Kubernetes monitoring Helm chart. See subdirectories for telemetry-specific examples. |
 
 ## Contributing
 
