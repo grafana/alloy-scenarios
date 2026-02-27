@@ -12,6 +12,8 @@ services:
       - TARGET_HOST=alloy
       - TARGET_PORT=9999
     command: ["python3", "/simulator.py"]
+    depends_on:
+      - alloy
   
 
   alloy:
