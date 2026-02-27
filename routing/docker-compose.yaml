@@ -1,0 +1,63 @@
+services:
+  minio:
+    image: "minio/minio:RELEASE.2024-10-29T16-01-48Z"
+    restart: "unless-stopped"
+    entrypoint:
+      - "sh"
+      - "-euc"
+      - "mkdir -p /data/loki && /usr/bin/docker-entrypoint.sh minio server --quiet --address 0.0.0.0:9000 --console-address ':9001' /data"
+    volumes:
+      - "./.customData/minio:/data"
+    environment:
+      - "MINIO_ROOT_USER=myuser"
+      - "MINIO_ROOT_PASSWORD=mypass"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  loki:
+    image: "grafana/loki:latest"
+    restart: "unless-stopped"
+    command: "-config.file=/etc/loki/server.yml"
+    volumes:
+      - "./support/loki/server.yml:/etc/loki/server.yml"
+    ports:
+      - "3100:3100"
+      - "7946"
+    depends_on:
+      - "minio"
+
+  grafana:
+    image: "grafana/grafana:latest"
+    restart: "unless-stopped"
+    user: '0'
+    volumes:
+      - "./support/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml"
+      - "./.customData/grafana:/var/lib/grafana"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - "loki"
+      
+  alloy:
+    image: "grafana/alloy:latest"
+    restart: "unless-stopped"
+    command: "run --server.http.listen-addr=0.0.0.0:3000 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy"
+    volumes:
+      - "./config.alloy:/etc/alloy/config.alloy"
+    ports:
+      - "3005:3000"
+      - "3015:3005"
+    depends_on:
+      - "loki"
+
+###Local app that generates logs
+  promtail:
+    image: "grafana/promtail:latest"
+    volumes:
+      - "./support/promtail/promtail-config.yml:/etc/promtail/config.yml"
+      - "./support/promtail/myCustomLog.txt:/var/log/myCustomLog.txt"
+    ports:
+      - "9080:9080"
+    depends_on: 
+      - "alloy"

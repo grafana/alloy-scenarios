@@ -1,0 +1,110 @@
+//listen to api requests for incomming logs from OCP
+loki.source.api "listener" {
+    http {
+        //listen_address = "" //defaults to all/localhost
+        listen_port    = 3005
+    }
+
+	forward_to = [loki.process.default_values.receiver]
+}
+
+//set a default label, so that all logs that passed thru alloy are marked as such
+loki.process "default_values" {
+   stage.static_labels {
+        values = {
+            source = "grafana-alloy",
+        }
+    }
+
+	forward_to = [loki.process.redirect_env.receiver]
+}
+
+//we check the hostname field to see if the source is the test or prod cluster
+loki.process "redirect_env" {	
+	stage.json {
+	  expressions = {extractedHostname = "hostname"}
+	}
+	
+	stage.labels {
+	  values = {hostnameLabel = "extractedHostname"}
+	}
+	
+	stage.match {
+		pipeline_name = "Send to test tenants if tos source"
+		selector = "{hostnameLabel =~ \"tos.*\"}"
+		
+		//default for test
+		stage.tenant {
+			value = "test_loki_app"
+		}		
+		
+		//take main payload
+		stage.json {
+		  expressions = {payload = "message"}
+		}
+		
+		//extract logger property from it
+		stage.json {
+		  source = "payload"
+		  expressions = {logger = "logger"}
+		}
+		
+		//set it as a label, match selector works only with it
+		stage.labels {
+		  values = {loggerLabel = "logger"}
+		}
+		
+		//route only 'audit' logger types to audit tenant [rest goes to default - app tenant]
+		stage.match {
+		  pipeline_name = "Audit log routing"
+		  selector = "{loggerLabel = \"audit\"}"
+		
+		  stage.tenant {
+			value = "test_loki_audit"
+		  }		
+	}
+	
+	stage.match {
+		pipeline_name = "Otherwise it is production - re check the logic above"
+		selector = "{hostnameLabel !~ \"tos.*\"}"
+		
+		//default value - app
+		stage.tenant {
+			value = "loki_app"
+		}		
+				
+		//take main payload
+		stage.json {
+		  expressions = {payload = "message"}
+		}
+		
+		//extract logger property from it
+		stage.json {
+		  source = "payload"
+		  expressions = {logger = "logger"}
+		}
+		
+		
+		stage.labels {
+		  values = {loggerLabel = "logger"}
+		}
+		
+		//route only 'audit' logger types to audit tenant [rest goes to default - app tenant]
+		stage.match {
+		  pipeline_name = "Audit log routing"
+		  selector = "{loggerLabel = \"audit\"}"
+		
+		  stage.tenant {
+			value = "loki_audit"
+		  }
+	   }
+	}
+	
+	forward_to = [loki.write.loki_default.receiver]
+}
+
+loki.write "loki_default" {
+  endpoint {
+    url = "http://<loki_endpoint>:<loki_port>/loki/api/v1/push"
+  }
+}
