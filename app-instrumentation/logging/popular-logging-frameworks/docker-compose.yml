@@ -66,7 +66,7 @@ services:
 
 
   loki:
-    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.5.2}
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.7}
     container_name: loki
     ports:
       - "3100:3100"
@@ -74,7 +74,7 @@ services:
      - ./loki-config.yaml:/etc/loki/local-config.yaml
     command: -config.file=/etc/loki/local-config.yaml
   grafana:
-   image: grafana/grafana:${GRAFANA_VERSION:-12.0.2}
+   image: grafana/grafana:${GRAFANA_VERSION:-12.4.0}
    container_name: grafana
    environment:
      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
@@ -103,7 +103,7 @@ services:
         /run.sh
 
   alloy:
-   image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.10.0}
+   image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.13.2}
    container_name: alloy
    ports:
      - 12345:12345

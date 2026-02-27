@@ -45,8 +45,16 @@ loki.process "endpoint" {
           eventRecordID = "",
           channel = "",
           component_id = "",
-          execution_processId = "",
-          execution_processName = "",
+          execution = "",
+      }
+  }
+
+  // Extract nested fields from the "execution" object (e.g. processId, processName).
+  stage.json {
+      source = "execution"
+      expressions = {
+          processId = "",
+          processName = "",
       }
   }
 
@@ -55,8 +63,8 @@ loki.process "endpoint" {
           "eventRecordID" = "",
           "channel" = "",
           "component_id" = "",
-          "execution_processId" = "",
-          "execution_processName" = "",
+          "execution_processId" = "processId",
+          "execution_processName" = "processName",
       }
   }
 

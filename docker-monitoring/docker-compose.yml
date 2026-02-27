@@ -1,21 +1,21 @@
 version: '3'
 services:
   loki:
-    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.5.2}
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.7}
     ports:
       - "3100:3100"
     volumes:
      - ./loki-config.yaml:/etc/loki/local-config.yaml
     command: -config.file=/etc/loki/local-config.yaml
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.5.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.10.0}
     command:
       - --web.enable-remote-write-receiver
       - --config.file=/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
   grafana:
-   image: grafana/grafana:${GRAFANA_VERSION:-12.0.2}
+   image: grafana/grafana:${GRAFANA_VERSION:-12.4.0}
    environment:
      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
      - GF_AUTH_ANONYMOUS_ENABLED=true
@@ -51,7 +51,7 @@ services:
         /run.sh
 
   alloy:
-   image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.10.0}
+   image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.13.2}
    privileged: true
    ports:
      - 12345:12345
@@ -62,7 +62,7 @@ services:
    volumes:
       - ./config.alloy:/etc/alloy/config.alloy
       - /proc:/rootproc:ro
-      - /var/run/docker.sock.raw:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock
       - /sys:/sys:ro
       - /:/rootfs:ro
       - /dev/disk/:/dev/disk:ro

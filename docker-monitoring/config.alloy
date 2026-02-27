@@ -69,7 +69,19 @@ loki.source.docker "default" {
   host       = "unix:///var/run/docker.sock"
   targets    = discovery.docker.linux.targets
   relabel_rules = discovery.relabel.logs_integrations_docker.rules
+  forward_to = [loki.process.docker_logs.receiver]
+}
+
+// Process and filter Docker logs before sending to Loki.
+// Example: Drop logs from infrastructure containers.
+// Modify the regex pattern to match container names you want to exclude.
+loki.process "docker_logs" {
   forward_to = [loki.write.local.receiver]
+
+  stage.drop {
+    source     = "container_name"
+    expression = "(alloy|grafana|loki)"
+  }
 }
 
 loki.write "local" {

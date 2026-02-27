@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   loki:
-    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.5.2}
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.7}
     ports:
       - "3100:3100"
     volumes:
@@ -11,7 +11,7 @@ services:
 
   # Prometheus for metrics collection
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.5.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.10.0}
     command:
       - --web.enable-remote-write-receiver
       - --web.enable-otlp-receiver
@@ -25,7 +25,7 @@ services:
 
   # Tempo for tracing
   tempo:
-    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.8.1}
+    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.1}
     command: ["-config.file=/etc/tempo.yaml"]
     ports:
       - 3200:3200/tcp    # tempo
@@ -36,7 +36,7 @@ services:
 
   # Grafana for visualization
   grafana:
-    image: grafana/grafana:${GRAFANA_VERSION:-12.1.0}
+    image: grafana/grafana:${GRAFANA_VERSION:-12.4.0}
     environment:
       - GF_SECURITY_ALLOW_EMBEDDING=true
       - GF_SECURITY_DISABLE_SANITIZE_HTML=true
@@ -53,7 +53,7 @@ services:
 
   # Alloy for telemetry pipeline and tail sampling
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.10.0}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.13.2}
     ports:
       - 12345:12345      # Alloy HTTP server
       - 4317:4317/tcp    # OTLP gRPC

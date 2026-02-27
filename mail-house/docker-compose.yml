@@ -35,7 +35,7 @@ services:
     restart: unless-stopped
 
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.10.0}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.13.2}
     ports:
       - 12345:12345
       - 4318:4318
@@ -46,7 +46,7 @@ services:
       - loki
 
   loki:
-    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.5.2}
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.7}
     ports:
       - "3100:3100"
     volumes:
@@ -54,7 +54,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
 
   grafana:
-    image: grafana/grafana:${GRAFANA_VERSION:-12.0.2}
+    image: grafana/grafana:${GRAFANA_VERSION:-12.4.0}
     environment:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_ANONYMOUS_ENABLED=true

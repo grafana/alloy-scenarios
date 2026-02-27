@@ -18,7 +18,7 @@ git clone https://github.com/grafana/alloy-scenarios.git
 Change to the directory:
 
 ```bash
-cd alloy-scenarios/k8s-logs
+cd alloy-scenarios/k8s/logs
 ```
 
 Next you will need a Kubernetes cluster (In this example, we will configure a local Kubernetes cluster using [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/))
@@ -84,7 +84,7 @@ export POD_NAME=$(kubectl get pods --namespace meta -l "app.kubernetes.io/name=g
 Next, port-forward the Grafana pod to your local machine:
 
 ```bash
-ls $POD_NAME 3000
+kubectl --namespace meta port-forward $POD_NAME 3000
 ```
 
 Open your browser and go to [http://localhost:3000](http://localhost:3000). You can log in with the default username `admin` and password `adminadminadmin`.

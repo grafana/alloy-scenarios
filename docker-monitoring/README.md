@@ -19,6 +19,8 @@ cd alloy-scenarios/docker-monitoring
 docker-compose up -d
 ```
 
+> **Note (macOS Docker Desktop):** If Alloy cannot connect to the Docker socket, you may need to change the volume mount in `docker-compose.yml` from `/var/run/docker.sock` to `/var/run/docker.sock.raw`. This is a workaround specific to some versions of Docker Desktop on macOS.
+
 ### Step 3: Access Grafana Alloy UI
 Open your browser and go to `http://localhost:12345`. 
 

@@ -1,6 +1,6 @@
 services:
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.5.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.10.0}
     command:
       - --web.enable-remote-write-receiver
       - --enable-feature=native-histograms
@@ -9,7 +9,7 @@ services:
       - 9090:9090/tcp
 
   loki:
-    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.5.7}
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.7}
     ports:
       - '3100:3100'
     volumes:
@@ -17,7 +17,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
 
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.10.0}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.13.2}
     ports:
       - 12345:12345 # Alloy HTTP server
     volumes:
