@@ -102,6 +102,18 @@ discovery.relabel "logs_integrations_integrations_node_exporter_journal_scrape" 
   }
 
   rule {
+    // Extract the hostname of the machine into a label
+    source_labels = ["__journal__hostname"]
+    target_label  = "instance"
+  }
+
+  rule {
+    // Extract the machine id into a label    
+    source_labels = ["__journal__machine_id"]
+    target_label  = "machine_id"
+  }
+
+  rule {
     // Extract transport information into a label
     source_labels = ["__journal__transport"]
     target_label  = "transport"
