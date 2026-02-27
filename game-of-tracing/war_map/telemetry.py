@@ -71,8 +71,18 @@ class GameTelemetry:
     def get_tracer(self):
         """Get the configured tracer"""
         return self.tracer
-    
+
     def get_logger(self):
         """Get the configured logger"""
         return self.logger
-    
+
+    def shutdown(self):
+        """Flush and shutdown all telemetry providers."""
+        try:
+            trace.get_tracer_provider().shutdown()
+        except Exception:
+            pass
+        try:
+            self.logger_provider.shutdown()
+        except Exception:
+            pass

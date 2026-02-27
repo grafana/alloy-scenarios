@@ -1,0 +1,28 @@
+livedebugging {
+	enabled = true
+}
+
+local.file_match "app_logs" {
+	path_targets = [{"__path__" = "/tmp/logs/*.log", "job" = "secret-app"}]
+	sync_period  = "5s"
+}
+
+loki.source.file "log_scrape" {
+	targets       = local.file_match.app_logs.targets
+	forward_to    = [loki.secretfilter.default.receiver]
+	tail_from_end = true
+}
+
+// Redact secrets from log lines before sending to Loki.
+// Uses built-in Gitleaks patterns to detect API keys, passwords, tokens, etc.
+loki.secretfilter "default" {
+	forward_to = [loki.write.local.receiver]
+
+	redact_with = "<REDACTED:$SECRET_NAME>"
+}
+
+loki.write "local" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}

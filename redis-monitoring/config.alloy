@@ -1,0 +1,22 @@
+// Redis Monitoring with Grafana Alloy
+// This configuration scrapes Redis metrics using the built-in prometheus.exporter.redis component
+// and remote writes them to Prometheus.
+
+livedebugging {
+	enabled = true
+}
+
+prometheus.exporter.redis "default" {
+	redis_addr = "redis:6379"
+}
+
+prometheus.scrape "redis" {
+	targets    = prometheus.exporter.redis.default.targets
+	forward_to = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.remote_write "default" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}

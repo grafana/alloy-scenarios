@@ -1,0 +1,69 @@
+
+services:
+  # Python app that generates OTLP metrics
+  app:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    volumes:
+      - ./app:/app
+    working_dir: /app
+    command: sh -c "pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-grpc && python3 main.py"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
+    depends_on:
+      - alloy
+
+  # Alloy for telemetry pipeline
+  alloy:
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.13.2}
+    ports:
+      - 12345:12345      # Alloy HTTP server
+      - 4317:4317        # OTLP gRPC
+      - 4318:4318        # OTLP HTTP
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    depends_on:
+      - prometheus
+
+  # Prometheus for metrics storage
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.10.0}
+    command:
+      - --web.enable-remote-write-receiver
+      - --web.enable-otlp-receiver
+      - --enable-feature=native-histograms
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - 9090:9090/tcp
+    volumes:
+      - ./prom-config.yaml:/etc/prometheus/prometheus.yml
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-12.4.0}
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+    ports:
+      - 3000:3000/tcp
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /etc/grafana/provisioning/datasources
+        cat <<EOF > /etc/grafana/provisioning/datasources/ds.yaml
+        apiVersion: 1
+        datasources:
+        - name: Prometheus
+          type: prometheus
+          orgId: 1
+          url: http://prometheus:9090
+          basicAuth: false
+          isDefault: true
+          version: 1
+          editable: false
+        EOF
+        /run.sh
+    depends_on:
+      - prometheus

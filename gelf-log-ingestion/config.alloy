@@ -1,0 +1,34 @@
+livedebugging {
+	enabled = true
+}
+
+// Receive GELF logs over UDP
+loki.source.gelf "default" {
+	forward_to = [loki.relabel.gelf.receiver]
+}
+
+// Relabel GELF metadata into useful labels
+loki.relabel "gelf" {
+	forward_to = [loki.write.local.receiver]
+
+	rule {
+		source_labels = ["__gelf_message_host"]
+		target_label  = "host"
+	}
+
+	rule {
+		source_labels = ["__gelf_message_level"]
+		target_label  = "level"
+	}
+
+	rule {
+		source_labels = ["__gelf_message_facility"]
+		target_label  = "facility"
+	}
+}
+
+loki.write "local" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}

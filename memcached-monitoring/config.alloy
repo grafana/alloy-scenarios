@@ -1,0 +1,22 @@
+// Memcached Monitoring with Grafana Alloy
+// This configuration scrapes Memcached metrics using the built-in prometheus.exporter.memcached component
+// and remote writes them to Prometheus.
+
+livedebugging {
+	enabled = true
+}
+
+prometheus.exporter.memcached "default" {
+	address = "memcached:11211"
+}
+
+prometheus.scrape "memcached" {
+	targets    = prometheus.exporter.memcached.default.targets
+	forward_to = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.remote_write "default" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}

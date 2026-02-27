@@ -1,0 +1,28 @@
+// ###############################
+// #### Metrics Configuration ####
+// ###############################
+
+// Enable live debugging for the Alloy UI.
+livedebugging {
+	enabled = true
+}
+
+// Expose MySQL metrics using the prometheus.exporter.mysql component.
+prometheus.exporter.mysql "default" {
+	data_source_name = "root:alloy@(mysql:3306)/"
+}
+
+// Configure a prometheus.scrape component to collect MySQL metrics.
+prometheus.scrape "mysql" {
+	targets    = prometheus.exporter.mysql.default.targets
+	forward_to = [prometheus.remote_write.default.receiver]
+
+	scrape_interval = "15s"
+}
+
+// Configure a prometheus.remote_write component to send metrics to Prometheus.
+prometheus.remote_write "default" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}

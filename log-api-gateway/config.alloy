@@ -1,0 +1,30 @@
+livedebugging {
+	enabled = true
+}
+
+// Accept logs via Loki push API - acts as a centralized log gateway
+loki.source.api "default" {
+	http {
+		listen_address = "0.0.0.0"
+		listen_port    = 3500
+	}
+
+	forward_to = [loki.process.enrich.receiver]
+}
+
+// Enrich logs with gateway metadata
+loki.process "enrich" {
+	forward_to = [loki.write.local.receiver]
+
+	stage.static_labels {
+		values = {
+			"gateway" = "alloy",
+		}
+	}
+}
+
+loki.write "local" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}

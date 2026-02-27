@@ -63,17 +63,6 @@ services:
     command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
 
   # Game of Kingdoms War Game Services
-  
-  # Database initialization service
-  game-db-init:
-    build:
-      context: ./app
-      dockerfile: Dockerfile
-    volumes:
-      - game-data:/data
-    environment:
-      - DATABASE_FILE=/data/game_state.db
-    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('southern_capital'); print('Database initialized')"]
 
   # Southern Capital
   southern-capital:
@@ -90,9 +79,14 @@ services:
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('southern_capital'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       - alloy
-      - game-db-init
 
   # Northern Capital
   northern-capital:
@@ -109,9 +103,14 @@ services:
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('northern_capital'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5002/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       - alloy
-      - game-db-init
 
   # Village 1
   village-1:
@@ -128,9 +127,14 @@ services:
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_1'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5003/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       - alloy
-      - game-db-init
 
   # Village 2
   village-2:
@@ -147,9 +151,14 @@ services:
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_2'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5004/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       - alloy
-      - game-db-init
 
   # Village 3
   village-3:
@@ -166,9 +175,14 @@ services:
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_3'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5005/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       - alloy
-      - game-db-init
 
   # Village 4
   village-4:
@@ -185,9 +199,14 @@ services:
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_4'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5006/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       - alloy
-      - game-db-init
 
   # Village 5
   village-5:
@@ -204,9 +223,14 @@ services:
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_5'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5007/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       - alloy
-      - game-db-init
 
   # Village 6
   village-6:
@@ -223,10 +247,15 @@ services:
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_6'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5008/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       - alloy
-      - game-db-init
-      
+
   # Web-based war map application
   war-map:
     build:
@@ -243,17 +272,32 @@ services:
       - TEMPO_URL=http://tempo:3200
     volumes:
       - game-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
-      - southern-capital
-      - northern-capital
-      - village-1
-      - village-2
-      - village-3
-      - village-4
-      - village-5
-      - village-6
-      - tempo
-      
+      southern-capital:
+        condition: service_healthy
+      northern-capital:
+        condition: service_healthy
+      village-1:
+        condition: service_healthy
+      village-2:
+        condition: service_healthy
+      village-3:
+        condition: service_healthy
+      village-4:
+        condition: service_healthy
+      village-5:
+        condition: service_healthy
+      village-6:
+        condition: service_healthy
+      tempo:
+        condition: service_started
+
   # AI Opponent Service
   ai-opponent:
     build:
@@ -264,16 +308,31 @@ services:
     environment:
       - IN_DOCKER=1
       - LOCATION_NAME=ai-opponent
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
-      - southern-capital
-      - northern-capital
-      - village-1
-      - village-2
-      - village-3
-      - village-4
-      - village-5
-      - village-6
-      - alloy
+      southern-capital:
+        condition: service_healthy
+      northern-capital:
+        condition: service_healthy
+      village-1:
+        condition: service_healthy
+      village-2:
+        condition: service_healthy
+      village-3:
+        condition: service_healthy
+      village-4:
+        condition: service_healthy
+      village-5:
+        condition: service_healthy
+      village-6:
+        condition: service_healthy
+      alloy:
+        condition: service_started
 
 volumes:
-  game-data: 
+  game-data:

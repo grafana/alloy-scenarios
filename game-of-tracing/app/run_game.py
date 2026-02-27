@@ -22,7 +22,7 @@ def reset_game():
         # Reinitialize locations
         for loc_id, loc_info in LOCATIONS.items():
             cursor.execute(
-                "INSERT INTO locations VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO locations VALUES (?, ?, ?, ?)",
                 (
                     loc_id,
                     loc_info["initial_resources"],

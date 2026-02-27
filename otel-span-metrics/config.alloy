@@ -1,0 +1,67 @@
+livedebugging {
+	enabled = true
+}
+
+// Receive OTel traces from the demo app
+otelcol.receiver.otlp "default" {
+	http { }
+
+	grpc { }
+
+	output {
+		traces = [otelcol.processor.batch.default.input]
+	}
+}
+
+// Batch traces for efficiency
+otelcol.processor.batch "default" {
+	output {
+		traces = [
+			otelcol.connector.spanmetrics.default.input,
+			otelcol.exporter.otlp.tempo.input,
+		]
+	}
+}
+
+// Generate RED metrics from spans
+otelcol.connector.spanmetrics "default" {
+	histogram {
+		explicit { }
+	}
+
+	dimension {
+		name = "http.method"
+	}
+
+	dimension {
+		name = "http.status_code"
+	}
+
+	metrics_flush_interval = "5s"
+
+	output {
+		metrics = [otelcol.exporter.otlphttp.prometheus.input]
+	}
+}
+
+// Send RED metrics to Prometheus
+otelcol.exporter.otlphttp "prometheus" {
+	client {
+		endpoint = "http://prometheus:9090/api/v1/otlp"
+
+		tls {
+			insecure = true
+		}
+	}
+}
+
+// Send traces to Tempo
+otelcol.exporter.otlp "tempo" {
+	client {
+		endpoint = "tempo:4317"
+
+		tls {
+			insecure = true
+		}
+	}
+}

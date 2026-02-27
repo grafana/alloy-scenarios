@@ -1,4 +1,3 @@
-import math
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -20,9 +19,6 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.metrics import TraceBasedExemplarFilter
 from opentelemetry.metrics import CallbackOptions, Observation
 from typing import Iterable
-
-# Default metrics export interval
-METRICS_EXPORT_INTERVAL = math.inf  # seconds
 
 class GameTelemetry:
     def __init__(self, service_name, logging_endpoint="http://alloy:4318", tracing_endpoint="http://alloy:4317", metrics_endpoint="http://alloy:4318"):
@@ -279,4 +275,18 @@ class GameTelemetry:
             self.logger.debug("Metrics collected and flushed")
         except Exception as e:
             self.logger.error(f"Error collecting metrics: {e}")
-    
+
+    def shutdown(self):
+        """Flush and shutdown all telemetry providers."""
+        try:
+            trace.get_tracer_provider().shutdown()
+        except Exception:
+            pass
+        try:
+            self.meter_provider.shutdown()
+        except Exception:
+            pass
+        try:
+            self.logger_provider.shutdown()
+        except Exception:
+            pass

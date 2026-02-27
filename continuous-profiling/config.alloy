@@ -1,0 +1,42 @@
+livedebugging {
+	enabled = true
+}
+
+// Scrape pprof profiles from the demo Go application
+pyroscope.scrape "default" {
+	targets = [
+		{"__address__" = "demo-app:6060", "service_name" = "demo-app"},
+	]
+
+	scrape_interval = "15s"
+
+	profiling_config {
+		profile.process_cpu {
+			enabled = true
+		}
+
+		profile.memory {
+			enabled = true
+		}
+
+		profile.goroutine {
+			enabled = true
+		}
+
+		profile.mutex {
+			enabled = true
+		}
+
+		profile.block {
+			enabled = true
+		}
+	}
+
+	forward_to = [pyroscope.write.default.receiver]
+}
+
+pyroscope.write "default" {
+	endpoint {
+		url = "http://pyroscope:4040"
+	}
+}

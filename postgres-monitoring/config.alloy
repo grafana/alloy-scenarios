@@ -1,0 +1,27 @@
+// ##############################################
+// #### PostgreSQL Metrics Configuration     ####
+// ##############################################
+
+livedebugging {
+	enabled = true
+}
+
+// Expose PostgreSQL metrics using the built-in postgres exporter.
+prometheus.exporter.postgres "example" {
+	data_source_names = ["postgresql://alloy:alloy@postgres:5432/alloy?sslmode=disable"]
+}
+
+// Scrape the postgres exporter targets.
+prometheus.scrape "postgres" {
+	targets    = prometheus.exporter.postgres.example.targets
+	forward_to = [prometheus.remote_write.default.receiver]
+
+	scrape_interval = "15s"
+}
+
+// Send metrics to the local Prometheus instance via remote write.
+prometheus.remote_write "default" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}

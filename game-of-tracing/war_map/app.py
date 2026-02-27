@@ -4,6 +4,7 @@ import sqlite3
 import requests
 import uuid
 import time
+import atexit
 from flask import Flask, render_template, jsonify, request, redirect, url_for, session
 from telemetry import GameTelemetry
 from opentelemetry import trace
@@ -20,6 +21,7 @@ AI_SERVICE_URL = os.environ.get('AI_URL', 'http://localhost:8081')
 telemetry = GameTelemetry(service_name="war_map")
 logger = telemetry.get_logger()
 tracer = telemetry.get_tracer()
+atexit.register(telemetry.shutdown)
 
 # Game session tracking database
 GAME_SESSIONS_DB = os.environ.get('GAME_SESSIONS_DB', 'game_sessions.db')  # Use local file for development
@@ -465,6 +467,10 @@ def reset_game_data():
     except Exception as e:
         logger.error(f"Error resetting game data: {e}")
         return False
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({"status": "ok"})
 
 @app.route('/')
 def index():

@@ -1,5 +1,5 @@
 """Location server implementation."""
-import os, sqlite3, requests, random, time, threading
+import os, sqlite3, requests, random, time, threading, atexit
 from threading import Thread, Lock
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request
@@ -8,6 +8,7 @@ from telemetry import GameTelemetry
 from opentelemetry.propagate import extract, inject
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind
+from opentelemetry.context import get_current, attach, detach
 from enum import Enum
 from typing import Optional, List, Tuple, Dict
 
@@ -41,8 +42,12 @@ class LocationServer:
         if self.location_info["type"] == "village":
             self._start_passive_generation()
 
+        atexit.register(self.telemetry.shutdown)
+
     def _get_db_connection(self):
         conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -201,19 +206,18 @@ class LocationServer:
             self.telemetry.record_battle(attacking_faction, defending_faction, "stalemate")
             return "stalemate", 0, defending_faction
 
-    def _continue_army_movement(self, army_size: int, faction: str, current_loc: str, 
+    def _continue_army_movement(self, army_size: int, faction: str, current_loc: str,
                               next_loc: str, remaining_path: List[str], is_attack_move: bool = False) -> Dict:
         """Continue army movement to next location."""
-        # Get the current span before starting the thread
-        current_span = trace.get_current_span()
+        # Capture the full context before spawning the thread
+        ctx = get_current()
 
         def move():
+            token = attach(ctx)
             try:
                 time.sleep(5)  # Wait 5 seconds before moving
-                
-                # Use the parent span's context in the new thread
-                with trace.use_span(current_span):
-                    with self.tracer.start_as_current_span(
+
+                with self.tracer.start_as_current_span(
                         "army_movement",
                         kind=SpanKind.SERVER,
                         attributes={
@@ -235,7 +239,8 @@ class LocationServer:
                                 "source_location": current_loc,
                                 "remaining_path": remaining_path,
                                 "is_attack_move": is_attack_move
-                            }
+                            },
+                            span_name="http_request.move_army"
                         )
                         
                         if not result.get("success", False):
@@ -249,7 +254,9 @@ class LocationServer:
             except Exception as e:
                 self.logger.error(f"Failed to move army to {next_loc}: {str(e)}")
                 raise
-        
+            finally:
+                detach(token)
+
         # Start movement in background thread
         Thread(target=move).start()
         
@@ -268,60 +275,63 @@ class LocationServer:
         if not path or len(path) < 2:
             return False
             
-        # Get the current span before starting the thread
-        current_span = trace.get_current_span()
-            
+        # Capture the full context before spawning the thread
+        ctx = get_current()
+
         def transfer():
             current_loc = path[0]
             next_loc = path[1]
-            
-            time.sleep(5)  # Wait before starting transfer
-            
+
+            token = attach(ctx)
             try:
-                # Use the parent span's context in the new thread
-                with trace.use_span(current_span):
-                    with self.tracer.start_as_current_span(
-                        "resource_movement",
-                        kind=SpanKind.SERVER,
-                        attributes={
+                time.sleep(5)  # Wait before starting transfer
+
+                with self.tracer.start_as_current_span(
+                    "resource_movement",
+                    kind=SpanKind.SERVER,
+                    attributes={
+                        "source_location": current_loc,
+                        "target_location": next_loc,
+                        "resources_amount": resources
+                    }
+                ) as movement_span:
+                    target_url = f"{self.get_location_url(next_loc)}/receive_resources"
+                    result = self._make_request_with_trace(
+                        'post',
+                        target_url,
+                        {
+                            "resources": resources,
                             "source_location": current_loc,
-                            "target_location": next_loc,
-                            "resources_amount": resources
-                        }
-                    ) as movement_span:
-                        target_url = f"{self.get_location_url(next_loc)}/receive_resources"
-                        result = self._make_request_with_trace(
-                            'post',
-                            target_url,
-                            {
-                                "resources": resources,
-                                "source_location": current_loc,
-                                "remaining_path": path[1:],
-                                "faction": self._get_location_state(self.location_id)["faction"]
-                            }
-                        )
-                        
-                        if result.get("success", False):
-                            current_loc_resources = self._get_location_state(current_loc)['resources']
-                            self._update_location_state(current_loc, resources=current_loc_resources - resources)
-                            # Force metric collection after successful resource transfer
-                            self.telemetry.collect_metrics()
-                        else:
-                            movement_span.set_status(trace.StatusCode.ERROR, "Resource transfer failed")
-                
+                            "remaining_path": path[1:],
+                            "faction": self._get_location_state(self.location_id)["faction"]
+                        },
+                        span_name="http_request.transfer_resources"
+                    )
+
+                    if result.get("success", False):
+                        current_loc_resources = self._get_location_state(current_loc)['resources']
+                        self._update_location_state(current_loc, resources=current_loc_resources - resources)
+                        # Force metric collection after successful resource transfer
+                        self.telemetry.collect_metrics()
+                    else:
+                        movement_span.set_status(trace.StatusCode.ERROR, "Resource transfer failed")
+
             except Exception as e:
                 self.logger.error(f"Failed to send resources to {next_loc} from {current_loc}: {str(e)}")
-        
+            finally:
+                detach(token)
+
         Thread(target=transfer).start()
         return True
 
-    def _make_request_with_trace(self, method: str, url: str, json_data: Optional[Dict] = None) -> Dict:
+    def _make_request_with_trace(self, method: str, url: str, json_data: Optional[Dict] = None, span_name: str = "http_request") -> Dict:
         """Make HTTP request with trace context propagated in headers."""
         headers = {"Content-Type": "application/json"}
-        
+
         with self.tracer.start_as_current_span(
-            "http_request",
-            kind=SpanKind.CLIENT
+            span_name,
+            kind=SpanKind.CLIENT,
+            attributes={"http.url": url}
         ) as request_span:
             inject(headers)  # This will now inject the current request_span's context
             
@@ -384,13 +394,20 @@ class LocationServer:
         def generate_resources():
             while True:
                 time.sleep(15)
-                location_state = self._get_location_state(self.location_id)
-                current_resources = location_state["resources"]
-                new_resources = current_resources + RESOURCE_GENERATION["village"]
-                self._update_location_state(self.location_id, resources=new_resources)
-                # Force metric collection after passive resource generation
-                self.telemetry.collect_metrics()
-        
+                with self.tracer.start_as_current_span(
+                    "passive_resource_generation",
+                    attributes={
+                        "location.id": self.location_id,
+                        "resources_gained": RESOURCE_GENERATION["village"]
+                    }
+                ):
+                    location_state = self._get_location_state(self.location_id)
+                    current_resources = location_state["resources"]
+                    new_resources = current_resources + RESOURCE_GENERATION["village"]
+                    self._update_location_state(self.location_id, resources=new_resources)
+                    # Force metric collection after passive resource generation
+                    self.telemetry.collect_metrics()
+
         Thread(target=generate_resources, daemon=True).start()
 
     def reset_database(self):
@@ -418,28 +435,43 @@ class LocationServer:
     def setup_routes(self):
         @self.app.route('/', methods=['GET'])
         def info():
-            location_state = self._get_location_state(self.location_id)
-            
-            cooldown_info = None
-            with self.lock:
-                now = datetime.now()
-                last_time = self.last_resource_collection.get(self.location_id, datetime.min)
-                wait_time = timedelta(seconds=15 if self.location_info["type"] == "village" else 5)
-                
-                if now - last_time < wait_time:
-                    remaining = wait_time - (now - last_time)
-                    cooldown_info = remaining.seconds
-            
-            return jsonify({
-                "location_id": self.location_id,
-                "name": self.location_info["name"],
-                "faction": location_state["faction"],
-                "connections": self.location_info["connections"],
-                "resources": location_state["resources"],
-                "army": location_state["army"],
-                "resource_cooldown": cooldown_info
-            })
-        
+            context = extract(request.headers)
+            with self.tracer.start_as_current_span(
+                "get_location_info",
+                context=context,
+                kind=SpanKind.SERVER,
+                attributes={
+                    "location.id": self.location_id,
+                    "location.name": self.location_info["name"],
+                    "location.type": self.location_info["type"]
+                }
+            ):
+                location_state = self._get_location_state(self.location_id)
+
+                cooldown_info = None
+                with self.lock:
+                    now = datetime.now()
+                    last_time = self.last_resource_collection.get(self.location_id, datetime.min)
+                    wait_time = timedelta(seconds=15 if self.location_info["type"] == "village" else 5)
+
+                    if now - last_time < wait_time:
+                        remaining = wait_time - (now - last_time)
+                        cooldown_info = remaining.seconds
+
+                return jsonify({
+                    "location_id": self.location_id,
+                    "name": self.location_info["name"],
+                    "faction": location_state["faction"],
+                    "connections": self.location_info["connections"],
+                    "resources": location_state["resources"],
+                    "army": location_state["army"],
+                    "resource_cooldown": cooldown_info
+                })
+
+        @self.app.route('/health', methods=['GET'])
+        def health():
+            return jsonify({"status": "ok"})
+
         @self.app.route('/collect_resources', methods=['POST'])
         def collect_resources():
             """Collect resources from a location"""
@@ -846,7 +878,12 @@ class LocationServer:
                     
                     if battle_result != "attacker_victory":
                         self.logger.warning(f"Battle result: {battle_result}")
-                        battle_span.set_status(trace.StatusCode.ERROR, f"Attack {battle_result}")
+                        battle_span.add_event("battle_result", attributes={
+                            "outcome": battle_result,
+                            "attacker_faction": attacking_faction,
+                            "defender_faction": defending_faction,
+                            "remaining_army": remaining_army,
+                        })
                     
                     # Force metric collection after battle resolution
                     self.telemetry.collect_metrics()
@@ -1012,7 +1049,7 @@ class LocationServer:
                                     "source_location": self.location_id,
                                     "remaining_path": remaining_path[1:],
                                     "faction": faction
-                                })
+                                }, span_name="http_request.forward_resources")
                                 
                                 if not result.get("success", False):
                                     movement_span.set_status(trace.Status(trace.StatusCode.ERROR, "Resource transfer failed"))

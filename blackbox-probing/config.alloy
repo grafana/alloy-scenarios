@@ -1,0 +1,35 @@
+// --- Remote Write to Prometheus ---
+prometheus.remote_write "remote" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}
+
+// --- Blackbox Exporter Configuration ---
+prometheus.exporter.blackbox "default" {
+	config = "{ modules: { http_2xx: { prober: http, timeout: 5s } } }"
+
+	target {
+		name    = "nginx"
+		address = "http://nginx:80"
+		module  = "http_2xx"
+	}
+
+	target {
+		name    = "prometheus"
+		address = "http://prometheus:9090"
+		module  = "http_2xx"
+	}
+}
+
+// --- Blackbox Scrape Configuration ---
+prometheus.scrape "blackbox_targets" {
+	scrape_interval = "15s"
+	targets         = prometheus.exporter.blackbox.default.targets
+	forward_to      = [prometheus.remote_write.remote.receiver]
+}
+
+// --- Enable Live Debugging ---
+livedebugging {
+	enabled = true
+}

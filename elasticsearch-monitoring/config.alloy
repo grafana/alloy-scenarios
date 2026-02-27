@@ -1,0 +1,22 @@
+// Elasticsearch Monitoring with Grafana Alloy
+// This configuration scrapes Elasticsearch metrics using the built-in prometheus.exporter.elasticsearch component
+// and remote writes them to Prometheus.
+
+livedebugging {
+	enabled = true
+}
+
+prometheus.exporter.elasticsearch "default" {
+	address = "http://elasticsearch:9200"
+}
+
+prometheus.scrape "elasticsearch" {
+	targets    = prometheus.exporter.elasticsearch.default.targets
+	forward_to = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.remote_write "default" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}

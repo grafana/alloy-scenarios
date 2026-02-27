@@ -127,7 +127,7 @@ The application consists of:
 
 ## Setting Up the Dashboard
 
-1. Log into Grafana at http://localhost:3000 (default credentials: admin/admin)
+1. Open Grafana at http://localhost:3000 (anonymous admin auth is enabled, no login required)
 
 2. Import the dashboard:
    - Click the "+" icon in the left sidebar
@@ -163,13 +163,7 @@ Watch how actions propagate through the system:
 - Army movements create trace chains
 - Battle events generate nested spans
 
-### 2. Sampling Strategies
-The game demonstrates different sampling approaches:
-- Error-based sampling (captures failed battles)
-- Latency-based sampling (slow resource transfers)
-- Attribute-based sampling (specific game events)
-
-### 3. Service Graph Analysis
+### 2. Service Graph Analysis
 Learn how services interact:
 - Village-to-capital resource flows
 - Army movement paths

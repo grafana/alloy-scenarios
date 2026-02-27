@@ -3,6 +3,7 @@ import time
 import random
 import requests
 import threading
+import atexit
 from flask import Flask, jsonify, request
 from telemetry import AITelemetry
 from opentelemetry import trace, baggage
@@ -17,6 +18,7 @@ app = Flask(__name__)
 telemetry = AITelemetry()
 logger = telemetry.get_logger()
 tracer = telemetry.get_tracer()
+atexit.register(telemetry.shutdown)
 
 # AI Configuration
 class GamePhase(Enum):

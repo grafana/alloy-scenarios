@@ -1,0 +1,48 @@
+livedebugging {
+	enabled = true
+}
+
+// Receive OTLP metrics from the demo app
+otelcol.receiver.otlp "default" {
+	http { }
+
+	grpc { }
+
+	output {
+		metrics = [otelcol.processor.batch.default.input]
+	}
+}
+
+// Batch metrics for efficient export
+otelcol.processor.batch "default" {
+	output {
+		metrics = [otelcol.processor.transform.default.input]
+	}
+}
+
+// Transform metric attributes (example: add a deployment label)
+otelcol.processor.transform "default" {
+	error_mode = "ignore"
+
+	metric_statements {
+		context    = "resource"
+		statements = [
+			"set(attributes[\"deployment.environment\"], \"demo\")",
+		]
+	}
+
+	output {
+		metrics = [otelcol.exporter.otlphttp.prometheus.input]
+	}
+}
+
+// Export metrics to Prometheus via OTLP
+otelcol.exporter.otlphttp "prometheus" {
+	client {
+		endpoint = "http://prometheus:9090/api/v1/otlp"
+
+		tls {
+			insecure = true
+		}
+	}
+}

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faro Frontend Observability Demo</title>
+    <script src="https://unpkg.com/@grafana/faro-web-sdk@latest/dist/bundle/faro-web-sdk.iife.js"></script>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; font-size: 14px; }
+        .error { background: #ff4444; color: white; border: none; border-radius: 4px; }
+        .log { background: #4488ff; color: white; border: none; border-radius: 4px; }
+        .event { background: #44bb44; color: white; border: none; border-radius: 4px; }
+        #output { margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 4px; min-height: 100px; font-family: monospace; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>Faro Frontend Observability Demo</h1>
+    <p>Click the buttons below to generate frontend telemetry. Check Grafana Loki for the collected data.</p>
+
+    <button class="log" onclick="sendLog()">Send Log</button>
+    <button class="error" onclick="throwError()">Throw Error</button>
+    <button class="event" onclick="sendEvent()">Send Event</button>
+    <button class="error" onclick="unhandledError()">Unhandled Error</button>
+
+    <div id="output">Telemetry output will appear here...</div>
+
+    <script>
+        var faro = window.GrafanaFaroWebSdk.initializeFaro({
+            url: 'http://localhost:12347/collect',
+            app: {
+                name: 'faro-demo',
+                version: '1.0.0',
+                environment: 'development',
+            },
+        });
+
+        var output = document.getElementById('output');
+        function log(msg) {
+            output.innerHTML = new Date().toISOString() + ' - ' + msg + '<br>' + output.innerHTML;
+        }
+
+        function sendLog() {
+            faro.api.pushLog(['User clicked the log button'], { level: 'info' });
+            log('Sent log to Faro');
+        }
+
+        function throwError() {
+            try {
+                throw new Error('Demo error from button click');
+            } catch (e) {
+                faro.api.pushError(e);
+                log('Sent error to Faro: ' + e.message);
+            }
+        }
+
+        function sendEvent() {
+            faro.api.pushEvent('button_click', { button: 'event', timestamp: Date.now().toString() });
+            log('Sent event to Faro');
+        }
+
+        function unhandledError() {
+            log('Throwing unhandled error...');
+            setTimeout(function() { undefinedFunction(); }, 100);
+        }
+    </script>
+</body>
+</html>
