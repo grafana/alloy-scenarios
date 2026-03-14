@@ -1,6 +1,6 @@
 services:
   minio:
-    image: "minio/minio:RELEASE.2024-10-29T16-01-48Z"
+    image: "minio/minio:RELEASE.2024-10-29T16-01-48Z@sha256:ebd2af76d40ff25ccc630533615f7ccd55fbe83d629a4b7c7a1b6311c1af3d6c"
     restart: "unless-stopped"
     entrypoint:
       - "sh"
@@ -16,7 +16,7 @@ services:
       - "9001:9001"
 
   loki:
-    image: "grafana/loki:latest"
+    image: "grafana/loki:latest@sha256:3c8fd3570dd9219951a60d3f919c7f31923d10baee578b77bc26c4a0b32d092d"
     restart: "unless-stopped"
     command: "-config.file=/etc/loki/server.yml"
     volumes:
@@ -28,7 +28,7 @@ services:
       - "minio"
 
   grafana:
-    image: "grafana/grafana:latest"
+    image: "grafana/grafana:latest@sha256:e932bd6ed0e026595b08483cd0141e5103e1ab7ff8604839ff899b8dc54cabcb"
     restart: "unless-stopped"
     user: '0'
     volumes:
@@ -40,7 +40,7 @@ services:
       - "loki"
       
   alloy:
-    image: "grafana/alloy:latest"
+    image: "grafana/alloy:latest@sha256:f50931848bd8178774521767bb46b905e1a081301950ff28d7623c9db7c01076"
     restart: "unless-stopped"
     command: "run --server.http.listen-addr=0.0.0.0:3000 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy"
     volumes:
@@ -53,7 +53,7 @@ services:
 
 ###Local app that generates logs
   promtail:
-    image: "grafana/promtail:latest"
+    image: "grafana/promtail:latest@sha256:51346af8682f7a664affaca4f34a62f5a4f0f83ace9931df94590375a94ff8f1"
     volumes:
       - "./support/promtail/promtail-config.yml:/etc/promtail/config.yml"
       - "./support/promtail/myCustomLog.txt:/var/log/myCustomLog.txt"
