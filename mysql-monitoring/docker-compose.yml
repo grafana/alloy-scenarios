@@ -1,6 +1,6 @@
 services:
   mysql:
-    image: mysql:8.0
+    image: mysql:8.0@sha256:0f34c70018dcbde655ba3eaba3d33c02198d392b9364974462eee13a903af385
     environment:
       - MYSQL_ROOT_PASSWORD=alloy
       - MYSQL_DATABASE=alloy
