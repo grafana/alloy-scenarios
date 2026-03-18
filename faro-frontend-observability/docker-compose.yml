@@ -1,7 +1,7 @@
 services:
   # Nginx web server serving the demo frontend page
   web:
-    image: nginx:latest
+    image: nginx:latest@sha256:dec7a90bd0973b076832dc56933fe876bc014929e14b4ec49923951405370112
     ports:
       - 8080:80
     volumes:
