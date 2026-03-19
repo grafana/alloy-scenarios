@@ -33,8 +33,8 @@ services:
       - prometheus
 
   stress:
-    image: progrium/stress
-    command: ["--cpu", "1", "--vm", "1", "--vm-bytes", "64M"]
+    image: polinux/stress
+    command: ["stress", "--cpu", "1", "--vm", "1", "--vm-bytes", "64M"]
 
   grafana:
     image: grafana/grafana:${GRAFANA_VERSION:-12.4.0}
