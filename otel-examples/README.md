@@ -40,7 +40,7 @@ cd otel-examples/<scenario-dir> && docker compose --env-file ../../image-version
 ### Access the stack
 
 - **Grafana**: [http://localhost:3000](http://localhost:3000) (no login required)
-- **Alloy OTel Engine**: [http://localhost:8888](http://localhost:8888) (OTel engine HTTP server -- note: this is NOT the same as the River UI on port 12345)
+- **Alloy UI**: [http://localhost:12345](http://localhost:12345) (pipeline debugging UI, enabled via the `alloyengine` extension)
 
 ### Stop
 
@@ -62,6 +62,12 @@ docker compose down
 | [host-metrics](host-metrics/) | Collect CPU, memory, disk, network metrics -- an OTel-native replacement for node_exporter | `hostmetrics` receiver |
 | [multi-pipeline-fanout](multi-pipeline-fanout/) | Send traces to two backends with different processing per destination (full vs. sampled) | `forward` connector, `probabilistic_sampler` processor |
 | [kafka-buffer](kafka-buffer/) | Buffer traces through Kafka for durability and backpressure handling | `kafka` receiver/exporter |
+
+## Alloy UI and the `alloyengine` Extension
+
+Each scenario includes an `alloyengine` extension in `config-otel.yaml` that starts the Alloy River UI alongside the OTel pipeline. This gives you the visual pipeline debugging UI at [http://localhost:12345](http://localhost:12345).
+
+If you prefer a pure OTel Collector config without the Alloy UI, you can remove the `alloyengine` extension block and the `extensions: [alloyengine]` line from the `service:` section in `config-otel.yaml`, and drop the `config.alloy` volume mount from `docker-compose.yml`. The OTel pipeline will work identically -- you just won't have the UI.
 
 ## OTel Engine vs. River Configs
 

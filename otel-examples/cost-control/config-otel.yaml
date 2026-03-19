@@ -6,6 +6,13 @@
 # head-based sampling to reduce observability costs.
 #
 
+extensions:
+  alloyengine:
+    config:
+      file: /etc/alloy/config.alloy
+    flags:
+      server.http.listen-addr: 0.0.0.0:12345
+
 receivers:
   otlp:
     protocols:
@@ -61,6 +68,7 @@ exporters:
     verbosity: basic
 
 service:
+  extensions: [alloyengine]
   pipelines:
     traces:
       receivers: [otlp]

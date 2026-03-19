@@ -1,0 +1,2 @@
+// Minimal Alloy config to enable the Alloy UI alongside the OTel Engine.
+// The OTel pipeline is defined in config-otel.yaml.

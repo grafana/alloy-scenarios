@@ -19,6 +19,12 @@ Automatically enrich all telemetry signals with host, OS, and container metadata
 docker compose up -d
 ```
 
+## Alloy UI
+
+The Alloy pipeline debugging UI is available at [http://localhost:12345](http://localhost:12345). This is enabled by the `alloyengine` extension in `config-otel.yaml`, which runs the River UI alongside the OTel pipeline.
+
+If you prefer a pure OTel config without the Alloy UI, remove the `extensions` block and the `extensions: [alloyengine]` line from `config-otel.yaml`.
+
 ## Explore
 
 Open Grafana at [http://localhost:3000](http://localhost:3000).

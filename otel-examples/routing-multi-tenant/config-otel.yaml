@@ -9,6 +9,13 @@
 # servicegraph, spanmetrics, forward.
 #
 
+extensions:
+  alloyengine:
+    config:
+      file: /etc/alloy/config.alloy
+    flags:
+      server.http.listen-addr: 0.0.0.0:12345
+
 receivers:
   otlp:
     protocols:
@@ -65,6 +72,7 @@ exporters:
       X-Scope-OrgID: team-b
 
 service:
+  extensions: [alloyengine]
   pipelines:
     # Intake: receive and fan out to both tenant pipelines
     logs/intake:

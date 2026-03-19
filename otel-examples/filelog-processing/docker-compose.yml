@@ -13,8 +13,10 @@ services:
     image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.14.0}
     ports:
       - 8888:8888
+      - 12345:12345     # Alloy UI
     volumes:
       - ./config-otel.yaml:/etc/alloy/config-otel.yaml
+      - ./config.alloy:/etc/alloy/config.alloy
       - app-logs:/var/log/app
     command: otel --config=/etc/alloy/config-otel.yaml
     depends_on:

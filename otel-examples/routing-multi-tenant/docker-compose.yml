@@ -15,8 +15,10 @@ services:
       - 8888:8888
       - 4317:4317/tcp
       - 4318:4318/tcp
+      - 12345:12345     # Alloy UI
     volumes:
       - ./config-otel.yaml:/etc/alloy/config-otel.yaml
+      - ./config.alloy:/etc/alloy/config.alloy
     command: otel --config=/etc/alloy/config-otel.yaml
     depends_on:
       - loki
