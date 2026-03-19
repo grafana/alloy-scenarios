@@ -1,0 +1,70 @@
+#
+# OTel Collector YAML: Count Connector (Derive Metrics from Signals)
+#
+# Demonstrates using the count connector to derive count metrics
+# from traces and logs: error rates, request counts per service,
+# log volume by severity -- "metrics from signals" pattern.
+#
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+connectors:
+  count:
+    spans:
+      span.count:
+        description: Total number of spans received
+      span.error.count:
+        description: Number of error spans
+        conditions:
+          - status.code == 2
+    logs:
+      log.count:
+        description: Total number of log records
+      log.error.count:
+        description: Number of error log records
+        conditions:
+          - severity_number >= 17
+
+processors:
+  batch: {}
+
+  # Convert delta temporality (from count connector) to cumulative for Prometheus
+  deltatocumulative: {}
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
+  otlphttp/prometheus:
+    endpoint: http://prometheus:9090/api/v1/otlp
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    # Ingest traces and forward to count connector + Tempo
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [count, otlp/tempo]
+    # Ingest logs and forward to count connector + Loki
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [count, otlphttp/loki]
+    # Export derived count metrics to Prometheus
+    metrics:
+      receivers: [count]
+      processors: [deltatocumulative, batch]
+      exporters: [otlphttp/prometheus]

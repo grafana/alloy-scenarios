@@ -1,0 +1,74 @@
+#
+# OTel Collector YAML: Resource Enrichment
+#
+# Demonstrates using the resourcedetection processor to automatically
+# discover and attach environment metadata (host, OS, Docker container)
+# to all telemetry signals without any app-level changes.
+#
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Auto-detect environment metadata
+  resourcedetection:
+    detectors: [env, system, docker]
+    system:
+      hostname_sources: ["os"]
+      resource_attributes:
+        host.name:
+          enabled: true
+        os.type:
+          enabled: true
+        host.arch:
+          enabled: true
+    docker:
+      resource_attributes:
+        host.name:
+          enabled: true
+        os.type:
+          enabled: true
+    timeout: 5s
+    override: false
+
+  # Add custom resource attributes
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: demo
+        action: upsert
+      - key: service.namespace
+        value: otel-examples
+        action: upsert
+
+  batch: {}
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  otlphttp/prometheus:
+    endpoint: http://prometheus:9090/api/v1/otlp
+    tls:
+      insecure: true
+
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [resourcedetection, resource, batch]
+      exporters: [otlp/tempo, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [resourcedetection, resource, batch]
+      exporters: [otlphttp/prometheus]

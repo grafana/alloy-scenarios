@@ -110,6 +110,23 @@ cd <scenario-dir> && docker compose down
 | -------- | ----------- |
 | [Kubernetes](k8s/) | A series of scenarios demonstrating Alloy setup using the Kubernetes monitoring Helm chart. See subdirectories for telemetry-specific examples. |
 
+### OTel Engine Examples (Experimental)
+
+Alloy v1.14+ includes an experimental **OTel Engine** that runs standard OpenTelemetry Collector YAML configs directly. These scenarios use `alloy otel` instead of River/HCL syntax. See the [OTel examples README](otel-examples/) for details.
+
+| Scenario | Description |
+| -------- | ----------- |
+| [File log processing](otel-examples/filelog-processing/) | Collect and parse mixed-format log files using the OTel `filelog` receiver with operator chains. |
+| [PII redaction](otel-examples/pii-redaction/) | Scrub credit cards, emails, and IPs from traces and logs using OTTL `replace_pattern`. |
+| [Multi-tenant routing](otel-examples/routing-multi-tenant/) | Route logs to different Loki tenants based on resource attributes using fan-out and filter. |
+| [Cost control](otel-examples/cost-control/) | Drop health checks, filter debug logs, and apply probabilistic sampling to cut telemetry volume. |
+| [Resource enrichment](otel-examples/resource-enrichment/) | Auto-attach host, OS, and Docker metadata to all signals via `resourcedetection`. |
+| [Count connector](otel-examples/count-connector/) | Derive request rate and error rate metrics from traces and logs using the `count` connector. |
+| [OTTL transform cookbook](otel-examples/ottl-transform/) | A cookbook of OTTL patterns: JSON parsing, severity mapping, attribute promotion, truncation. |
+| [Host metrics](otel-examples/host-metrics/) | Collect CPU, memory, disk, and network metrics using the `hostmetrics` receiver. |
+| [Multi-pipeline fan-out](otel-examples/multi-pipeline-fanout/) | Send traces to two backends with different processing per destination. |
+| [Kafka buffer](otel-examples/kafka-buffer/) | Buffer traces through Kafka for durability and backpressure handling. |
+
 ## Contributing
 
 Contributions of scenarios or improvements to scenarios are welcome. You can contribute in several ways:

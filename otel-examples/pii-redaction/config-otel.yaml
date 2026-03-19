@@ -1,0 +1,65 @@
+#
+# OTel Collector YAML: PII Redaction Pipeline
+#
+# Demonstrates using the transform processor with OTTL to scrub
+# sensitive data (credit cards, emails, IPs) from trace attributes
+# and log bodies before export.
+#
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Scrub PII from trace span attributes
+  transform/traces:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          # Mask credit card numbers (16 digits with optional separators)
+          - replace_pattern(attributes["user.credit_card"], "\\d{4}[- ]?\\d{4}[- ]?\\d{4}[- ]?\\d{4}", "****-****-****-****")
+          # Mask email addresses
+          - replace_pattern(attributes["user.email"], "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", "***@***.***")
+          # Mask IP addresses
+          - replace_pattern(attributes["client.ip"], "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}", "***.***.***.***")
+
+  # Scrub PII from log bodies
+  transform/logs:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Mask credit card numbers in log body
+          - replace_pattern(body, "\\d{4}[- ]?\\d{4}[- ]?\\d{4}[- ]?\\d{4}", "****-****-****-****")
+          # Mask email addresses in log body
+          - replace_pattern(body, "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", "***@***.***")
+
+  batch: {}
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [transform/traces, batch]
+      exporters: [otlp/tempo]
+    logs:
+      receivers: [otlp]
+      processors: [transform/logs, batch]
+      exporters: [otlphttp/loki, debug]

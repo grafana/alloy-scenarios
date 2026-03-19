@@ -1,0 +1,55 @@
+#
+# OTel Collector YAML: Host Metrics Collection
+#
+# Demonstrates using the hostmetrics receiver to collect CPU, memory,
+# disk, filesystem, and network metrics -- an OTel-native replacement
+# for Prometheus node_exporter.
+#
+
+receivers:
+  hostmetrics:
+    collection_interval: 15s
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.utilization:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+      disk: {}
+      filesystem: {}
+      network: {}
+      load: {}
+      process:
+        include:
+          match_type: regexp
+          names: [".*"]
+        mute_process_exe_error: true
+        mute_process_io_error: true
+        mute_process_user_error: true
+
+processors:
+  # Detect host metadata automatically
+  resourcedetection:
+    detectors: [env, system]
+    system:
+      hostname_sources: ["os"]
+
+  batch:
+    timeout: 10s
+    send_batch_size: 512
+
+exporters:
+  otlphttp/prometheus:
+    endpoint: http://prometheus:9090/api/v1/otlp
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    metrics:
+      receivers: [hostmetrics]
+      processors: [resourcedetection, batch]
+      exporters: [otlphttp/prometheus]

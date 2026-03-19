@@ -1,0 +1,48 @@
+#
+# OTel Collector YAML Configuration for Service Graph Generation
+#
+# This is the OTel-native equivalent of config.alloy for use with the Alloy OTel Engine.
+# Run with: docker compose -f docker-compose.yml -f docker-compose-otel.yml up -d
+#
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+connectors:
+  servicegraph:
+    metrics_flush_interval: 10s
+    dimensions:
+      - service.name
+      - http.method
+    store:
+      max_items: 5000
+      ttl: 30s
+
+exporters:
+  otlphttp/prometheus:
+    endpoint: http://prometheus:9090/api/v1/otlp
+    tls:
+      insecure: true
+
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [servicegraph, otlp/tempo]
+    metrics:
+      receivers: [servicegraph]
+      exporters: [otlphttp/prometheus]

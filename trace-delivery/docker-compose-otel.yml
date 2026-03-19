@@ -1,0 +1,16 @@
+# OTel Engine Override
+#
+# Uses Alloy's experimental OTel Engine to run a standard OTel Collector YAML config
+# instead of the River/HCL config.alloy file.
+#
+# Usage: docker compose -f docker-compose.yml -f docker-compose-otel.yml up -d
+# Stop:  docker compose -f docker-compose.yml -f docker-compose-otel.yml down
+#
+
+services:
+  alloy:
+    command: otel --config=/etc/alloy/config-otel.yaml
+    volumes:
+      - ./config-otel.yaml:/etc/alloy/config-otel.yaml
+    ports:
+      - 8888:8888      # OTel Engine HTTP server
