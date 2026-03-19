@@ -1,0 +1,4 @@
+services:
+  stress:
+    image: polinux/stress
+    command: ["stress", "--cpu", "1", "--vm", "1", "--vm-bytes", "64M"]

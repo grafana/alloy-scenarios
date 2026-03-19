@@ -1,0 +1,11 @@
+services:
+  app:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./app:/app
+    working_dir: /app
+    command: sh -c "pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-grpc && python3 main.py"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317

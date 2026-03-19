@@ -31,6 +31,27 @@ Once a scenario is running:
 - **Grafana**: [http://localhost:3000](http://localhost:3000) (no login required)
 - **Alloy UI**: [http://localhost:12345](http://localhost:12345) (pipeline debugging)
 
+### Run with the Coda app overlay
+
+Each scenario includes a `docker-compose.coda.yml` file that defines the demo application services separately from the infrastructure stack. This lets you run just the observability backend on its own, or layer in the app when you're ready:
+
+```bash
+# Infrastructure only
+cd <scenario-dir> && docker compose up -d
+
+# Infrastructure + demo app
+cd <scenario-dir> && docker compose -f docker-compose.yml -f docker-compose.coda.yml up -d
+```
+
+If you have the `coda` CLI installed, it manages the app overlay automatically:
+
+```bash
+coda start <scenario-dir>   # Start app containers
+coda stop <scenario-dir>    # Stop app containers
+coda status <scenario-dir>  # Show container status
+coda list                   # List all available scenarios
+```
+
 ### Stop a scenario
 
 ```bash
@@ -162,6 +183,7 @@ To improve a scenario:
 When creating a scenario, include the following files:
 
 - `docker-compose.yml` - Docker Compose file with the LGMT stack
+- `docker-compose.coda.yml` - Docker Compose override with the demo app services (for use with the `coda` CLI or `-f` flag)
 - `config.alloy` - Alloy configuration file for the scenario
 - `README.md` - Documentation explaining the scenario
 - Any additional files needed for your scenario, such as scripts or data files

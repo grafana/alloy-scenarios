@@ -1,0 +1,10 @@
+services:
+  demo-app:
+    build:
+      context: ./app
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.11-slim}
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317

@@ -1,0 +1,27 @@
+services:
+  mail-house-01:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    volumes:
+      - ./main.py:/main.py
+    command: ["python3", "/main.py"]
+    environment:
+      - MAIL_HOUSE_ID=DEPOT-01
+    restart: unless-stopped
+
+  mail-house-02:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    volumes:
+      - ./main.py:/main.py
+    command: ["python3", "/main.py"]
+    environment:
+      - MAIL_HOUSE_ID=DEPOT-02
+    restart: unless-stopped
+
+  mail-house-03:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    volumes:
+      - ./main.py:/main.py
+    command: ["python3", "/main.py"]
+    environment:
+      - MAIL_HOUSE_ID=DEPOT-03
+    restart: unless-stopped

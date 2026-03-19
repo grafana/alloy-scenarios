@@ -1,0 +1,7 @@
+services:
+  secret-logger:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    volumes:
+      - ./app/main.py:/app/main.py
+      - ./logs:/logs
+    command: python3 /app/main.py

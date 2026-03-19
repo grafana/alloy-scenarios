@@ -1,0 +1,7 @@
+services:
+  log-producer:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    container_name: log-producer
+    volumes:
+      - ./app/producer.py:/app/producer.py
+    command: sh -c "pip install requests && python3 /app/producer.py"

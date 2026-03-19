@@ -1,0 +1,12 @@
+[Unit]
+Description=Coda Bootstrap - read scenario from EC2 metadata
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/alloy-scenarios/.coda/bootstrap.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

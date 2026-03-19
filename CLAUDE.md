@@ -29,7 +29,8 @@ Every Docker-based scenario follows this layout:
 
 ```
 scenario-name/
-├── docker-compose.yml      # LGMT stack + Alloy + any demo apps
+├── docker-compose.yml      # LGMT stack + Alloy (infrastructure only)
+├── docker-compose.coda.yml # Demo app services (run via coda CLI or -f flag)
 ├── config.alloy             # Alloy pipeline configuration (River/HCL syntax)
 ├── loki-config.yaml         # Loki backend config
 ├── prom-config.yaml         # Prometheus backend config

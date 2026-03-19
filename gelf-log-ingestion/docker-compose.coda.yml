@@ -1,0 +1,7 @@
+services:
+  gelf-logger:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    container_name: gelf-logger
+    volumes:
+      - ./app/main.py:/app/main.py
+    command: ["sh", "-c", "pip install pygelf && python3 /app/main.py"]

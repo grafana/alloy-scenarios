@@ -1,0 +1,9 @@
+services:
+  log-generator:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./app/generate_logs.py:/app/generate_logs.py
+      - /var/log/alloy-demo:/var/log/app
+    command: ["python3", "/app/generate_logs.py"]

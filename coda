@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENV_FILE="${REPO_DIR}/image-versions.env"
+SCENARIO_FILE="/etc/coda/scenario"
+
+usage() {
+  cat <<EOF
+Usage: coda <command> [scenario]
+
+Commands:
+  start  [scenario]   Start app containers for a scenario
+  stop   [scenario]   Stop app containers for a scenario
+  status [scenario]   Show container status for a scenario
+  list                List all available scenarios
+
+If no scenario is given, reads from ${SCENARIO_FILE}.
+EOF
+  exit 1
+}
+
+resolve_scenario() {
+  local scenario="${1:-}"
+  if [[ -z "$scenario" ]]; then
+    if [[ -f "$SCENARIO_FILE" ]]; then
+      scenario="$(cat "$SCENARIO_FILE")"
+    else
+      echo "Error: no scenario specified and ${SCENARIO_FILE} not found" >&2
+      exit 1
+    fi
+  fi
+  echo "$scenario"
+}
+
+compose_args() {
+  local scenario="$1"
+  local dir="${REPO_DIR}/${scenario}"
+  local compose_file="${dir}/docker-compose.coda.yml"
+
+  if [[ ! -f "$compose_file" ]]; then
+    echo "Error: ${compose_file} not found" >&2
+    exit 1
+  fi
+
+  # Sanitize project name: replace / with -
+  local project_name="coda-${scenario//\//-}"
+
+  echo "-f ${compose_file} --env-file ${ENV_FILE} -p ${project_name}"
+}
+
+cmd_start() {
+  local scenario
+  scenario="$(resolve_scenario "${1:-}")"
+  local args
+  args="$(compose_args "$scenario")"
+  echo "Starting scenario: ${scenario}"
+  eval docker compose $args up -d --build
+}
+
+cmd_stop() {
+  local scenario
+  scenario="$(resolve_scenario "${1:-}")"
+  local args
+  args="$(compose_args "$scenario")"
+  echo "Stopping scenario: ${scenario}"
+  eval docker compose $args down
+}
+
+cmd_status() {
+  local scenario
+  scenario="$(resolve_scenario "${1:-}")"
+  local args
+  args="$(compose_args "$scenario")"
+  eval docker compose $args ps
+}
+
+cmd_list() {
+  echo "Available scenarios:"
+  find "$REPO_DIR" -name docker-compose.coda.yml 2>/dev/null \
+    | sed "s|^${REPO_DIR}/||; s|/docker-compose.coda.yml||" \
+    | sort \
+    | while read -r s; do echo "  $s"; done
+}
+
+[[ $# -lt 1 ]] && usage
+
+command="$1"
+shift
+
+case "$command" in
+  start)  cmd_start "$@" ;;
+  stop)   cmd_stop "$@" ;;
+  status) cmd_status "$@" ;;
+  list)   cmd_list ;;
+  *)      usage ;;
+esac
