@@ -1,0 +1,72 @@
+#
+# OTel Collector YAML: Telemetry Cost Control
+#
+# Demonstrates using filter and probabilistic_sampler processors
+# to drop noisy telemetry (health checks, debug logs) and apply
+# head-based sampling to reduce observability costs.
+#
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Drop health check and readiness probe spans
+  filter/traces:
+    error_mode: ignore
+    traces:
+      span:
+        - attributes["http.target"] == "/health"
+        - attributes["http.target"] == "/ready"
+        - attributes["http.target"] == "/metrics"
+        - attributes["http.route"] == "/health"
+        - attributes["http.route"] == "/ready"
+
+  # Drop DEBUG-level logs
+  filter/logs:
+    error_mode: ignore
+    logs:
+      log_record:
+        - severity_number < 9
+
+  # Head-based probabilistic sampling: keep 25% of remaining traces
+  probabilistic_sampler:
+    sampling_percentage: 25
+
+  # Strip high-cardinality attributes to reduce storage
+  transform/strip:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - delete_key(attributes, "http.user_agent")
+          - delete_key(attributes, "http.request.header.cookie")
+
+  batch: {}
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [filter/traces, probabilistic_sampler, transform/strip, batch]
+      exporters: [otlp/tempo]
+    logs:
+      receivers: [otlp]
+      processors: [filter/logs, batch]
+      exporters: [otlphttp/loki, debug]

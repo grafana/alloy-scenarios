@@ -24,7 +24,7 @@ services:
       - "9090:9090"
 
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.13.2}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.14.0}
     ports:
       - 12345:12345
     volumes:

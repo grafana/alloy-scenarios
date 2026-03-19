@@ -1,0 +1,80 @@
+#
+# OTel Collector YAML: OTTL Transform Cookbook
+#
+# A "cookbook" of the most useful OTTL transformation patterns:
+# JSON parsing, attribute promotion, severity mapping, conditional
+# transforms, pattern replacement, and key deletion.
+#
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Transform 1: Parse JSON log bodies and promote fields
+  transform/parse-logs:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          # Parse JSON string body into a map
+          - merge_maps(attributes, ParseJSON(body), "upsert") where IsString(body) and IsMatch(body, "^[{]")
+          # Map string severity to proper severity number
+          - set(severity_text, attributes["level"]) where attributes["level"] != nil
+          - set(severity_number, 9) where attributes["level"] == "INFO"
+          - set(severity_number, 13) where attributes["level"] == "WARN"
+          - set(severity_number, 17) where attributes["level"] == "ERROR"
+          # Clean up promoted attributes
+          - delete_key(attributes, "level")
+          - delete_key(attributes, "timestamp")
+
+  # Transform 2: Enrich and clean trace attributes
+  transform/traces:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          # Add deployment environment from resource
+          - set(attributes["app.tier"], "frontend") where attributes["http.target"] != nil
+          - set(attributes["app.tier"], "backend") where attributes["db.system"] != nil
+          # Truncate overly long attribute values
+          - truncate_all(attributes, 256)
+          # Normalize HTTP method to uppercase
+          - replace_pattern(attributes["http.method"], "^(.*)$", "$$1")
+
+  # Transform 3: Add computed resource attributes
+  transform/resources:
+    error_mode: ignore
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["deployment.environment"], "demo")
+
+  batch: {}
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [transform/traces, transform/resources, batch]
+      exporters: [otlp/tempo]
+    logs:
+      receivers: [otlp]
+      processors: [transform/parse-logs, batch]
+      exporters: [otlphttp/loki, debug]

@@ -1,0 +1,30 @@
+#
+# OTel Collector YAML Configuration for OpenTelemetry Trace Collection
+#
+# This is the OTel-native equivalent of config.alloy for use with the Alloy OTel Engine.
+# Run with: docker compose -f docker-compose.yml -f docker-compose-otel.yml up -d
+#
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/tempo]

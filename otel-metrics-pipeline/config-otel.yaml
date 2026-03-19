@@ -1,0 +1,37 @@
+#
+# OTel Collector YAML Configuration for OpenTelemetry Metrics Pipeline
+#
+# This is the OTel-native equivalent of config.alloy for use with the Alloy OTel Engine.
+# Run with: docker compose -f docker-compose.yml -f docker-compose-otel.yml up -d
+#
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+  transform:
+    error_mode: ignore
+    metric_statements:
+      - context: resource
+        statements:
+          - set(attributes["deployment.environment"], "demo")
+
+exporters:
+  otlphttp/prometheus:
+    endpoint: http://prometheus:9090/api/v1/otlp
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch, transform]
+      exporters: [otlphttp/prometheus]

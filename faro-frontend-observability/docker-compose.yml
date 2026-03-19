@@ -9,7 +9,7 @@ services:
 
   # Alloy telemetry pipeline — receives Faro Web SDK telemetry and forwards logs to Loki
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.13.2}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.14.0}
     ports:
       - 12345:12345
       - 12347:12347

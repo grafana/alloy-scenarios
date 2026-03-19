@@ -1,0 +1,57 @@
+#
+# OTel Collector YAML: Kafka-Buffered Pipeline (Gateway)
+#
+# Demonstrates a two-tier collector architecture:
+#   Agent:   otlp receiver -> kafka exporter (writes to Kafka)
+#   Gateway: kafka receiver -> batch -> otlp exporter (reads from Kafka, writes to backends)
+#
+# This config runs BOTH tiers in a single collector for demo purposes,
+# using Kafka as a durable buffer between ingest and export.
+#
+
+receivers:
+  # Tier 1: Accept OTLP from applications
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Tier 2: Read back from Kafka
+  kafka:
+    brokers:
+      - kafka:9092
+    protocol_version: "3.0.0"
+    traces:
+      topic: otlp-traces
+
+processors:
+  batch: {}
+
+exporters:
+  # Tier 1: Write to Kafka buffer
+  kafka:
+    brokers:
+      - kafka:9092
+    topic: otlp-traces
+    protocol_version: "3.0.0"
+    encoding: otlp_proto
+
+  # Tier 2: Write to Tempo
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    # Agent tier: ingest OTLP and buffer to Kafka
+    traces/ingest:
+      receivers: [otlp]
+      exporters: [kafka]
+    # Gateway tier: read from Kafka and export to backend
+    traces/export:
+      receivers: [kafka]
+      processors: [batch]
+      exporters: [otlp/tempo]

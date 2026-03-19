@@ -1,0 +1,63 @@
+#
+# OTel Collector YAML: Multi-Pipeline Fan-Out
+#
+# Demonstrates sending the same traces to multiple backends with
+# different processing per destination: full-fidelity traces to Tempo,
+# and sampled traces with reduced attributes to a second store.
+# Common for migrations and tiered storage strategies.
+#
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+connectors:
+  forward/sampled: {}
+
+processors:
+  batch: {}
+
+  # For the sampled pipeline: only keep 10% of traces
+  probabilistic_sampler:
+    sampling_percentage: 10
+
+  # Strip detailed attributes for the sampled/cheap store
+  transform/strip:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - delete_key(attributes, "http.request.header.user_agent")
+          - delete_key(attributes, "http.request.header.cookie")
+          - delete_key(attributes, "http.request.body")
+          - truncate_all(attributes, 128)
+
+exporters:
+  # Primary: full-fidelity traces to Tempo
+  otlp/tempo-primary:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  # Secondary: sampled + stripped traces to second Tempo instance
+  otlp/tempo-secondary:
+    endpoint: tempo-secondary:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    # Intake pipeline: receive and fan out to both destinations
+    traces/intake:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/tempo-primary, forward/sampled]
+    # Sampled pipeline: reduced data to secondary store
+    traces/sampled:
+      receivers: [forward/sampled]
+      processors: [probabilistic_sampler, transform/strip, batch]
+      exporters: [otlp/tempo-secondary]

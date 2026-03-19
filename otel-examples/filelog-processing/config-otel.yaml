@@ -1,0 +1,54 @@
+#
+# OTel Collector YAML: File Log Processing
+#
+# Demonstrates the filelog receiver with operator chains for parsing
+# mixed-format log files (JSON, plaintext, multiline stack traces).
+#
+
+receivers:
+  filelog:
+    include:
+      - /var/log/app/*.log
+    operators:
+      # Try to parse as JSON first
+      - type: json_parser
+        if: body matches "^\\{"
+        parse_from: body
+        parse_to: attributes
+        timestamp:
+          parse_from: attributes.timestamp
+          layout: "%Y-%m-%dT%H:%M:%S.%fZ"
+
+      # For non-JSON lines, extract with regex
+      - type: regex_parser
+        if: body matches "^\\d{4}-\\d{2}-\\d{2}"
+        regex: "^(?P<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3}) (?P<level>\\w+) (?P<message>.*)"
+        timestamp:
+          parse_from: attributes.timestamp
+          layout: "%Y-%m-%d %H:%M:%S,%f"
+
+      # Map severity from parsed level
+      - type: severity_parser
+        parse_from: attributes.level
+        if: attributes.level != nil
+
+      # Add a static resource attribute
+      - type: add
+        field: resource["service.name"]
+        value: log-demo
+
+processors:
+  batch:
+    timeout: 2s
+    send_batch_size: 256
+
+exporters:
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
+service:
+  pipelines:
+    logs:
+      receivers: [filelog]
+      processors: [batch]
+      exporters: [otlphttp/loki]

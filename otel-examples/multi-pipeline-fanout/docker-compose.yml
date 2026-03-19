@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  tempo:
+    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.1}
+    command: ["-config.file=/etc/tempo.yaml"]
+    ports:
+      - 3200:3200
+    volumes:
+      - ./tempo-config.yaml:/etc/tempo.yaml
+
+  tempo-secondary:
+    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.1}
+    command: ["-config.file=/etc/tempo.yaml"]
+    ports:
+      - 3201:3200
+    volumes:
+      - ./tempo-config.yaml:/etc/tempo.yaml
+
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.10.0}
+    command:
+      - --web.enable-remote-write-receiver
+      - --enable-feature=native-histograms
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prom-config.yaml:/etc/prometheus/prometheus.yml
+
+  alloy:
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.14.0}
+    ports:
+      - 8888:8888
+      - 4317:4317
+      - 4318:4318
+    volumes:
+      - ./config-otel.yaml:/etc/alloy/config-otel.yaml
+    command: otel --config=/etc/alloy/config-otel.yaml
+    depends_on:
+      - tempo
+      - tempo-secondary
+
+  demo-app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+      args:
+        - PYTHON_VERSION=${PYTHON_VERSION:-3.11-slim}
+    ports:
+      - 8080:8080
+    depends_on:
+      - alloy
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-12.4.0}
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+    ports:
+      - 3000:3000/tcp
+    depends_on:
+      - tempo
+      - tempo-secondary
+      - prometheus
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /etc/grafana/provisioning/datasources
+        cat <<EOF > /etc/grafana/provisioning/datasources/ds.yaml
+        apiVersion: 1
+        datasources:
+        - name: Prometheus
+          type: prometheus
+          orgId: 1
+          url: http://prometheus:9090
+          basicAuth: false
+          isDefault: false
+          version: 1
+          editable: false
+        - name: Tempo Primary
+          type: tempo
+          access: proxy
+          orgId: 1
+          url: http://tempo:3200
+          basicAuth: false
+          isDefault: true
+          version: 1
+          editable: false
+          jsonData:
+            serviceMap:
+              datasourceUid: 'Prometheus'
+            nodeGraph:
+              enabled: true
+        - name: Tempo Secondary
+          type: tempo
+          access: proxy
+          orgId: 1
+          url: http://tempo-secondary:3200
+          basicAuth: false
+          isDefault: false
+          version: 1
+          editable: false
+        EOF
+        /run.sh

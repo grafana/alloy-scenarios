@@ -1,0 +1,82 @@
+#
+# OTel Collector YAML: Multi-Tenant Routing
+#
+# Demonstrates using the forward connector to fan out logs into
+# multiple pipelines, then filter processors to route by tenant
+# attribute. Each tenant gets its own processing and Loki org ID.
+#
+# Available connectors in Alloy OTel Engine: count, grafanacloud,
+# servicegraph, spanmetrics, forward.
+#
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+connectors:
+  # Fork logs into per-tenant pipelines
+  forward/team-a: {}
+  forward/team-b: {}
+
+processors:
+  batch: {}
+
+  # Keep only team-a logs
+  filter/team-a:
+    error_mode: ignore
+    logs:
+      log_record:
+        - resource.attributes["tenant"] != "team-a"
+
+  # Keep only team-b logs
+  filter/team-b:
+    error_mode: ignore
+    logs:
+      log_record:
+        - resource.attributes["tenant"] != "team-b"
+
+  # Add team resource attribute for team-a
+  resource/team-a:
+    attributes:
+      - key: team
+        value: team-a
+        action: upsert
+
+  # Add team resource attribute for team-b
+  resource/team-b:
+    attributes:
+      - key: team
+        value: team-b
+        action: upsert
+
+exporters:
+  otlphttp/loki-team-a:
+    endpoint: http://loki:3100/otlp
+    headers:
+      X-Scope-OrgID: team-a
+
+  otlphttp/loki-team-b:
+    endpoint: http://loki:3100/otlp
+    headers:
+      X-Scope-OrgID: team-b
+
+service:
+  pipelines:
+    # Intake: receive and fan out to both tenant pipelines
+    logs/intake:
+      receivers: [otlp]
+      exporters: [forward/team-a, forward/team-b]
+    # Team A pipeline: filter + enrich + export
+    logs/team-a:
+      receivers: [forward/team-a]
+      processors: [filter/team-a, resource/team-a, batch]
+      exporters: [otlphttp/loki-team-a]
+    # Team B pipeline: filter + enrich + export
+    logs/team-b:
+      receivers: [forward/team-b]
+      processors: [filter/team-b, resource/team-b, batch]
+      exporters: [otlphttp/loki-team-b]
