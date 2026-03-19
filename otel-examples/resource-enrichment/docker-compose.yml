@@ -76,8 +76,10 @@ services:
       - 8888:8888       # OTel engine HTTP server
       - 4317:4317       # OTLP gRPC
       - 4318:4318       # OTLP HTTP
+      - 12345:12345     # Alloy UI
     volumes:
       - ./config-otel.yaml:/etc/alloy/config-otel.yaml
+      - ./config.alloy:/etc/alloy/config.alloy
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - prometheus

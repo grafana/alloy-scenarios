@@ -6,6 +6,13 @@
 # for Prometheus node_exporter.
 #
 
+extensions:
+  alloyengine:
+    config:
+      file: /etc/alloy/config.alloy
+    flags:
+      server.http.listen-addr: 0.0.0.0:12345
+
 receivers:
   hostmetrics:
     collection_interval: 15s
@@ -48,6 +55,7 @@ exporters:
       insecure: true
 
 service:
+  extensions: [alloyengine]
   pipelines:
     metrics:
       receivers: [hostmetrics]

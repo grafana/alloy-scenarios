@@ -9,6 +9,13 @@
 # using Kafka as a durable buffer between ingest and export.
 #
 
+extensions:
+  alloyengine:
+    config:
+      file: /etc/alloy/config.alloy
+    flags:
+      server.http.listen-addr: 0.0.0.0:12345
+
 receivers:
   # Tier 1: Accept OTLP from applications
   otlp:
@@ -45,6 +52,7 @@ exporters:
       insecure: true
 
 service:
+  extensions: [alloyengine]
   pipelines:
     # Agent tier: ingest OTLP and buffer to Kafka
     traces/ingest:

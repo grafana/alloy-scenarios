@@ -40,7 +40,7 @@ cd otel-examples/<scenario-dir> && docker compose --env-file ../../image-version
 ### Access the stack
 
 - **Grafana**: [http://localhost:3000](http://localhost:3000) (no login required)
-- **Alloy OTel Engine**: [http://localhost:8888](http://localhost:8888) (OTel engine HTTP server -- note: this is NOT the same as the River UI on port 12345)
+- **Alloy UI**: [http://localhost:12345](http://localhost:12345) (pipeline debugging UI, enabled via the `alloyengine` extension)
 
 ### Stop
 

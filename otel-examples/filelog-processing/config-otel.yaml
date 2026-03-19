@@ -5,6 +5,13 @@
 # mixed-format log files (JSON, plaintext, multiline stack traces).
 #
 
+extensions:
+  alloyengine:
+    config:
+      file: /etc/alloy/config.alloy
+    flags:
+      server.http.listen-addr: 0.0.0.0:12345
+
 receivers:
   filelog:
     include:
@@ -47,6 +54,7 @@ exporters:
     endpoint: http://loki:3100/otlp
 
 service:
+  extensions: [alloyengine]
   pipelines:
     logs:
       receivers: [filelog]

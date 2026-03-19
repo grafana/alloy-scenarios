@@ -6,6 +6,13 @@
 # transforms, pattern replacement, and key deletion.
 #
 
+extensions:
+  alloyengine:
+    config:
+      file: /etc/alloy/config.alloy
+    flags:
+      server.http.listen-addr: 0.0.0.0:12345
+
 receivers:
   otlp:
     protocols:
@@ -69,6 +76,7 @@ exporters:
     verbosity: detailed
 
 service:
+  extensions: [alloyengine]
   pipelines:
     traces:
       receivers: [otlp]
