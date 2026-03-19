@@ -63,6 +63,12 @@ docker compose down
 | [multi-pipeline-fanout](multi-pipeline-fanout/) | Send traces to two backends with different processing per destination (full vs. sampled) | `forward` connector, `probabilistic_sampler` processor |
 | [kafka-buffer](kafka-buffer/) | Buffer traces through Kafka for durability and backpressure handling | `kafka` receiver/exporter |
 
+## Alloy UI and the `alloyengine` Extension
+
+Each scenario includes an `alloyengine` extension in `config-otel.yaml` that starts the Alloy River UI alongside the OTel pipeline. This gives you the visual pipeline debugging UI at [http://localhost:12345](http://localhost:12345).
+
+If you prefer a pure OTel Collector config without the Alloy UI, you can remove the `alloyengine` extension block and the `extensions: [alloyengine]` line from the `service:` section in `config-otel.yaml`, and drop the `config.alloy` volume mount from `docker-compose.yml`. The OTel pipeline will work identically -- you just won't have the UI.
+
 ## OTel Engine vs. River Configs
 
 For comparison, the parent repo's existing scenarios (e.g., `otel-basic-tracing/`, `otel-span-metrics/`) also have OTel YAML alternatives alongside their River configs. Run those with:

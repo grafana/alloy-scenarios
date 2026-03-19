@@ -22,6 +22,12 @@ docker compose up -d
 
 The demo app automatically generates traffic every 3 seconds -- no manual interaction needed.
 
+## Alloy UI
+
+The Alloy pipeline debugging UI is available at [http://localhost:12345](http://localhost:12345). This is enabled by the `alloyengine` extension in `config-otel.yaml`, which runs the River UI alongside the OTel pipeline.
+
+If you prefer a pure OTel config without the Alloy UI, remove the `extensions` block and the `extensions: [alloyengine]` line from `config-otel.yaml`.
+
 ## Explore
 
 1. Open Grafana at [http://localhost:3000](http://localhost:3000) (no login required).
