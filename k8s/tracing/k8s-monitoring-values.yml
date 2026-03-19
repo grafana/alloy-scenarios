@@ -1,0 +1,56 @@
+---
+cluster:
+  name: meta-monitoring-tutorial
+
+destinations:
+  - name: tempo
+    type: otlp
+    url: http://tempo.meta.svc.cluster.local:4317
+    metrics:
+      enabled: false
+    logs:
+      enabled: false
+    traces:
+      enabled: true
+
+applicationObservability:
+  enabled: true
+  collector: alloy-receiver
+
+clusterMetrics:
+  enabled: false
+
+clusterEvents:
+  enabled: false
+
+nodeLogs:
+  enabled: false
+
+podLogs:
+  enabled: false
+
+# Collectors
+alloy-singleton:
+  enabled: false
+
+alloy-metrics:
+  enabled: false
+
+alloy-logs:
+  enabled: false
+
+alloy-profiles:
+  enabled: false
+
+alloy-receiver:
+  enabled: true
+  alloy:
+    extraPorts:
+      - name: otlp-grpc
+        port: 4317
+        targetPort: 4317
+        protocol: TCP
+      - name: otlp-http
+        port: 4318
+        targetPort: 4318
+        protocol: TCP

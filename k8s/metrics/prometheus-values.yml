@@ -1,0 +1,19 @@
+server:
+  persistentVolume:
+    enabled: false
+  extraFlags:
+    - web.enable-remote-write-receiver
+    - enable-feature=native-histograms
+    - enable-feature=exemplar-storage
+
+alertmanager:
+  enabled: false
+
+kube-state-metrics:
+  enabled: false
+
+prometheus-node-exporter:
+  enabled: false
+
+prometheus-pushgateway:
+  enabled: false
