@@ -1,0 +1,25 @@
+---
+persistence:
+  type: pvc
+  enabled: true
+
+adminUser: admin
+adminPassword: adminadminadmin
+
+service:
+  enabled: true
+  type: ClusterIP
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+    - name: Tempo
+      type: tempo
+      access: proxy
+      orgId: 1
+      url: http://tempo.meta.svc.cluster.local:3200
+      basicAuth: false
+      isDefault: true
+      version: 1
+      editable: false

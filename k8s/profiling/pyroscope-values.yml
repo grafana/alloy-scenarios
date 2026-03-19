@@ -1,0 +1,10 @@
+pyroscope:
+  extraArgs:
+    store.max-block-duration: 5m
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
