@@ -1,0 +1,25 @@
+---
+persistence:
+  type: pvc
+  enabled: true
+
+adminUser: admin
+adminPassword: adminadminadmin
+
+service:
+  enabled: true
+  type: ClusterIP
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      access: proxy
+      orgId: 1
+      url: http://prometheus-server.meta.svc.cluster.local:80
+      basicAuth: false
+      isDefault: true
+      version: 1
+      editable: false

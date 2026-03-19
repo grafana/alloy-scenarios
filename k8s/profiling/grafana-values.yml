@@ -1,0 +1,28 @@
+---
+persistence:
+  type: pvc
+  enabled: true
+
+adminUser: admin
+adminPassword: adminadminadmin
+
+service:
+  enabled: true
+  type: ClusterIP
+
+plugins:
+  - grafana-pyroscope-app
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+    - name: Pyroscope
+      type: grafana-pyroscope-datasource
+      access: proxy
+      orgId: 1
+      url: http://pyroscope.meta.svc.cluster.local:4040
+      basicAuth: false
+      isDefault: true
+      version: 1
+      editable: false
