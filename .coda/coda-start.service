@@ -1,0 +1,16 @@
+[Unit]
+Description=Coda Alloy Scenario Start
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/coda-start.sh
+WorkingDirectory=/opt/alloy-scenarios
+StandardOutput=journal
+StandardError=journal
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

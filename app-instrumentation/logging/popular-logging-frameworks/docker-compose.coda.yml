@@ -1,0 +1,63 @@
+services:
+  javascript-logging:
+    build:
+      context: ./javascript
+      dockerfile: Dockerfile
+    container_name: javascript
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+
+  python-logging:
+    build:
+      context: ./python
+      dockerfile: Dockerfile
+    container_name: python
+    environment:
+      - PYTHON_ENV=production
+    restart: unless-stopped
+
+  java-logging:
+    build:
+      context: ./java
+      dockerfile: Dockerfile
+    container_name: java
+    environment:
+      - JAVA_ENV=production
+    restart: unless-stopped
+
+  csharp-logging:
+    build:
+      context: ./csharp
+      dockerfile: Dockerfile
+    container_name: csharp
+    environment:
+      - DOTNET_ENVIRONMENT=Production
+    restart: unless-stopped
+
+  cpp-logging:
+    build:
+      context: ./cpp
+      dockerfile: Dockerfile
+    container_name: cpp
+    environment:
+      - CPP_ENV=production
+    restart: unless-stopped
+
+  go-logging:
+    build:
+      context: ./go
+      dockerfile: Dockerfile
+    container_name: go
+    environment:
+      - GO_ENV=production
+    restart: unless-stopped
+
+  php-logging:
+    build:
+      context: ./php
+      dockerfile: Dockerfile
+    container_name: php
+    environment:
+      - PHP_ENV=production
+    restart: unless-stopped

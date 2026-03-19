@@ -1,0 +1,253 @@
+services:
+  # Southern Capital
+  southern-capital:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    environment:
+      - LOCATION_ID=southern_capital
+      - FLASK_APP=location_server.py
+      - LOCATION_NAME=southern-capital
+      - DATABASE_FILE=/data/game_state.db
+    volumes:
+      - game-data:/data
+    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('southern_capital'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Northern Capital
+  northern-capital:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    ports:
+      - "5002:5002"
+    environment:
+      - LOCATION_ID=northern_capital
+      - FLASK_APP=location_server.py
+      - LOCATION_NAME=northern-capital
+      - DATABASE_FILE=/data/game_state.db
+    volumes:
+      - game-data:/data
+    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('northern_capital'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5002/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Village 1
+  village-1:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    ports:
+      - "5003:5003"
+    environment:
+      - LOCATION_ID=village_1
+      - FLASK_APP=location_server.py
+      - LOCATION_NAME=village-1
+      - DATABASE_FILE=/data/game_state.db
+    volumes:
+      - game-data:/data
+    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_1'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5003/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Village 2
+  village-2:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    ports:
+      - "5004:5004"
+    environment:
+      - LOCATION_ID=village_2
+      - FLASK_APP=location_server.py
+      - LOCATION_NAME=village-2
+      - DATABASE_FILE=/data/game_state.db
+    volumes:
+      - game-data:/data
+    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_2'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5004/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Village 3
+  village-3:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    ports:
+      - "5005:5005"
+    environment:
+      - LOCATION_ID=village_3
+      - FLASK_APP=location_server.py
+      - LOCATION_NAME=village-3
+      - DATABASE_FILE=/data/game_state.db
+    volumes:
+      - game-data:/data
+    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_3'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5005/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Village 4
+  village-4:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    ports:
+      - "5006:5006"
+    environment:
+      - LOCATION_ID=village_4
+      - FLASK_APP=location_server.py
+      - LOCATION_NAME=village-4
+      - DATABASE_FILE=/data/game_state.db
+    volumes:
+      - game-data:/data
+    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_4'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5006/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Village 5
+  village-5:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    ports:
+      - "5007:5007"
+    environment:
+      - LOCATION_ID=village_5
+      - FLASK_APP=location_server.py
+      - LOCATION_NAME=village-5
+      - DATABASE_FILE=/data/game_state.db
+    volumes:
+      - game-data:/data
+    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_5'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5007/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Village 6
+  village-6:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    ports:
+      - "5008:5008"
+    environment:
+      - LOCATION_ID=village_6
+      - FLASK_APP=location_server.py
+      - LOCATION_NAME=village-6
+      - DATABASE_FILE=/data/game_state.db
+    volumes:
+      - game-data:/data
+    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_6'); server.run()"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5008/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Web-based war map application
+  war-map:
+    build:
+      context: ./war_map
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_FILE=/data/game_state.db
+      - LOCATION_NAME=war-map
+      - SECRET_KEY=war_of_westeros_secret_key
+      - IN_DOCKER=1
+      - AI_URL=http://ai-opponent:8081
+      - TEMPO_URL=http://tempo:3200
+    volumes:
+      - game-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      southern-capital:
+        condition: service_healthy
+      northern-capital:
+        condition: service_healthy
+      village-1:
+        condition: service_healthy
+      village-2:
+        condition: service_healthy
+      village-3:
+        condition: service_healthy
+      village-4:
+        condition: service_healthy
+      village-5:
+        condition: service_healthy
+      village-6:
+        condition: service_healthy
+
+  # AI Opponent Service
+  ai-opponent:
+    build:
+      context: ./ai_opponent
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      - IN_DOCKER=1
+      - LOCATION_NAME=ai-opponent
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      southern-capital:
+        condition: service_healthy
+      northern-capital:
+        condition: service_healthy
+      village-1:
+        condition: service_healthy
+      village-2:
+        condition: service_healthy
+      village-3:
+        condition: service_healthy
+      village-4:
+        condition: service_healthy
+      village-5:
+        condition: service_healthy
+      village-6:
+        condition: service_healthy
+
+volumes:
+  game-data:

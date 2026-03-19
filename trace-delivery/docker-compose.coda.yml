@@ -1,0 +1,91 @@
+services:
+  # Sofa Shop Service
+  sofa-shop:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+      args:
+        - PYTHON_VERSION=${PYTHON_VERSION:-3.11-slim}
+    ports:
+      - 8080:8080
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
+      - OTEL_SERVICE_NAME=sofa-shop
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=sofa-shop,service.version=1.0.0,deployment.environment=delivery-demo
+      - SERVICE_FACTORY_URL=http://sofa-factory:8081
+    depends_on:
+      - sofa-factory
+    restart: on-failure
+
+  # Sofa Factory Service
+  sofa-factory:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+      args:
+        - PYTHON_VERSION=${PYTHON_VERSION:-3.11-slim}
+    ports:
+      - 8081:8081
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
+      - OTEL_SERVICE_NAME=sofa-factory
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=sofa-factory,service.version=1.0.0,deployment.environment=delivery-demo
+      - SERVICE_PORT=8081
+      - SERVICE_DISTRIBUTION_URL=http://global-distribution:8082
+    depends_on:
+      - global-distribution
+    restart: on-failure
+
+  # Global Distribution Service
+  global-distribution:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+      args:
+        - PYTHON_VERSION=${PYTHON_VERSION:-3.11-slim}
+    ports:
+      - 8082:8082
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
+      - OTEL_SERVICE_NAME=global-distribution
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=global-distribution,service.version=1.0.0,deployment.environment=delivery-demo
+      - SERVICE_PORT=8082
+      - SERVICE_LOCAL_URL=http://local-distribution:8083
+    depends_on:
+      - local-distribution
+    restart: on-failure
+
+  # Local Distribution Service
+  local-distribution:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+      args:
+        - PYTHON_VERSION=${PYTHON_VERSION:-3.11-slim}
+    ports:
+      - 8083:8083
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
+      - OTEL_SERVICE_NAME=local-distribution
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=local-distribution,service.version=1.0.0,deployment.environment=delivery-demo
+      - SERVICE_PORT=8083
+      - SERVICE_CUSTOMER_URL=http://customer-house:8084
+    depends_on:
+      - customer-house
+    restart: on-failure
+
+  # Customer House Service
+  customer-house:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+      args:
+        - PYTHON_VERSION=${PYTHON_VERSION:-3.11-slim}
+    ports:
+      - 8084:8084
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
+      - OTEL_SERVICE_NAME=customer-house
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=customer-house,service.version=1.0.0,deployment.environment=delivery-demo
+      - SERVICE_PORT=8084
+    restart: on-failure

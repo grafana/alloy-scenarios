@@ -1,0 +1,21 @@
+services:
+  rsyslog:
+    image: rsyslog/syslog_appliance_alpine:latest@sha256:c0dd7cad9ff3234967ff59879590175b7590e8a5f5621ec49a85aff546b44a3b
+    container_name: rsyslog
+    ports:
+      - "514:514/udp"
+      - "514:514/tcp"
+    volumes:
+      - ./rsyslog.conf:/etc/rsyslog.conf
+
+  syslog-simulator:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    container_name: syslog-simulator
+    volumes:
+      - ./syslog_simulator.py:/syslog_simulator.py
+    environment:
+      - SYSLOG_HOST=rsyslog
+      - SYSLOG_PORT=514
+    depends_on:
+      - rsyslog
+    command: ["python3", "/syslog_simulator.py"]

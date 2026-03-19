@@ -1,0 +1,10 @@
+services:
+  simulator:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    container_name: simulator
+    volumes:
+      - ./simulator.py:/simulator.py
+    environment:
+      - TARGET_HOST=alloy
+      - TARGET_PORT=9999
+    command: ["python3", "/simulator.py"]
