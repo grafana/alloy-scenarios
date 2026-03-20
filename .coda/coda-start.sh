@@ -20,9 +20,13 @@ done
 SCENARIO="$(cat "$SCENARIO_FILE")"
 echo "Scenario: ${SCENARIO}"
 
-# Pull latest changes so new scenarios are always available
+# Pull latest changes from main so new scenarios are always available.
+# Explicitly fetch+reset main to handle AMIs built from non-main branches.
 echo "Updating alloy-scenarios repo..."
-git -C "$REPO_DIR" pull --ff-only || echo "Warning: git pull failed, using baked version"
+git -C "$REPO_DIR" fetch origin main 2>/dev/null \
+  && git -C "$REPO_DIR" checkout main 2>/dev/null \
+  && git -C "$REPO_DIR" reset --hard origin/main 2>/dev/null \
+  || echo "Warning: git update failed, using baked version"
 
 # Start the scenario (builds images on demand)
 exec "$REPO_DIR/coda" start "$SCENARIO"
