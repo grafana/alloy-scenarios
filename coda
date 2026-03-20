@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+# When invoked via the /usr/local/bin/coda symlink, $0 resolves to the
+# symlink path, not the repo. Use BASH_SOURCE + readlink to find the real
+# location. Falls back to the well-known install path if resolution fails.
+_self="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)" || _self=""
+if [[ -n "$_self" ]]; then
+  REPO_DIR="$(cd "$(dirname "$_self")" && pwd)"
+else
+  REPO_DIR="/opt/alloy-scenarios"
+fi
 ENV_FILE="${REPO_DIR}/image-versions.env"
 SCENARIO_FILE="/etc/coda/scenario"
 
