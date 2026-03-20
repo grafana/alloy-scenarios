@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 ENV_FILE="${REPO_DIR}/image-versions.env"
 SCENARIO_FILE="/etc/coda/scenario"
 
