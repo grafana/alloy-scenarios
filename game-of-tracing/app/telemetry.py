@@ -1,3 +1,5 @@
+import os
+
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -20,6 +22,10 @@ from opentelemetry.sdk.metrics import TraceBasedExemplarFilter
 from opentelemetry.metrics import CallbackOptions, Observation
 from typing import Iterable
 
+# Profiling setup (Pyroscope v2 + OTel span-profile linking)
+import pyroscope
+from pyroscope.otel import PyroscopeSpanProcessor
+
 class GameTelemetry:
     def __init__(self, service_name, logging_endpoint="http://alloy:4318", tracing_endpoint="http://alloy:4317", metrics_endpoint="http://alloy:4318"):
         self.service_name = service_name
@@ -29,10 +35,11 @@ class GameTelemetry:
         self.resource = Resource.create(attributes={
             SERVICE_NAME: service_name
         })
-        
+
         self._setup_logging()
         self._setup_tracing()
         self._setup_metrics()
+        self._setup_profiling()
         
     def _setup_logging(self):
         """Configure OpenTelemetry logging"""
@@ -77,6 +84,23 @@ class GameTelemetry:
         
         trace.get_tracer_provider().add_span_processor(span_processor)
         self.tracer = trace.get_tracer(__name__)
+
+    def _setup_profiling(self):
+        """Configure Pyroscope profiling + OTel span-profile linkage.
+
+        Pyroscope collects CPU samples from this process and pushes pprof to
+        the configured server. ``PyroscopeSpanProcessor`` attaches the current
+        profile id to every span so the trace view in Grafana can link back
+        to the flamegraph captured while each span was active.
+        """
+        pyroscope.configure(
+            application_name=self.service_name,
+            server_address=os.getenv("PYROSCOPE_SERVER_ADDRESS", "http://alloy:9999"),
+            tags={"service_name": self.service_name},
+            oncpu=True,
+            gil_only=True,
+        )
+        trace.get_tracer_provider().add_span_processor(PyroscopeSpanProcessor())
 
     def _setup_metrics(self):
         """Configure OpenTelemetry metrics"""

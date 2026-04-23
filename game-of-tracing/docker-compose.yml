@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   loki:
-    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.7}
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.10}
     ports:
       - "3100:3100"
     volumes:
@@ -11,7 +11,7 @@ services:
 
   # Prometheus for metrics collection
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.10.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.2}
     command:
       - --web.enable-remote-write-receiver
       - --web.enable-otlp-receiver
@@ -25,7 +25,7 @@ services:
 
   # Tempo for tracing
   tempo:
-    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.1}
+    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.4}
     command: ["-config.file=/etc/tempo.yaml"]
     ports:
       - 3200:3200/tcp    # tempo
@@ -34,9 +34,21 @@ services:
     depends_on:
       - prometheus
 
+  # Pyroscope v2 for continuous profiling
+  pyroscope:
+    image: grafana/pyroscope:${GRAFANA_PYROSCOPE_VERSION:-2.0.1}
+    ports:
+      - "4040:4040"
+    command:
+      - "-config.file=/etc/pyroscope/config.yaml"
+      - "-architecture.storage=v1-v2-dual"
+    volumes:
+      - ./pyroscope-config.yaml:/etc/pyroscope/config.yaml
+      - pyroscope-data:/data
+
   # Grafana for visualization
   grafana:
-    image: grafana/grafana:${GRAFANA_VERSION:-12.4.0}
+    image: grafana/grafana:${GRAFANA_VERSION:-13.0.1}
     environment:
       - GF_SECURITY_ALLOW_EMBEDDING=true
       - GF_SECURITY_DISABLE_SANITIZE_HTML=true
@@ -50,17 +62,21 @@ services:
     depends_on:
       - prometheus
       - tempo
+      - pyroscope
 
   # Alloy for telemetry pipeline and tail sampling
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.14.0}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.16.0}
     ports:
       - 12345:12345      # Alloy HTTP server
       - 4317:4317/tcp    # OTLP gRPC
       - 4318:4318/tcp    # OTLP HTTP
+      - 9999:9999/tcp    # Pyroscope HTTP receiver
     volumes:
       - ./config.alloy:/etc/alloy/config.alloy
     command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    depends_on:
+      - pyroscope
 
   # Game of Kingdoms War Game Services
 
@@ -76,6 +92,7 @@ services:
       - FLASK_APP=location_server.py
       - LOCATION_NAME=southern-capital
       - DATABASE_FILE=/data/game_state.db
+      - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('southern_capital'); server.run()"]
@@ -100,6 +117,7 @@ services:
       - FLASK_APP=location_server.py
       - LOCATION_NAME=northern-capital
       - DATABASE_FILE=/data/game_state.db
+      - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('northern_capital'); server.run()"]
@@ -124,6 +142,7 @@ services:
       - FLASK_APP=location_server.py
       - LOCATION_NAME=village-1
       - DATABASE_FILE=/data/game_state.db
+      - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_1'); server.run()"]
@@ -148,6 +167,7 @@ services:
       - FLASK_APP=location_server.py
       - LOCATION_NAME=village-2
       - DATABASE_FILE=/data/game_state.db
+      - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_2'); server.run()"]
@@ -172,6 +192,7 @@ services:
       - FLASK_APP=location_server.py
       - LOCATION_NAME=village-3
       - DATABASE_FILE=/data/game_state.db
+      - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_3'); server.run()"]
@@ -196,6 +217,7 @@ services:
       - FLASK_APP=location_server.py
       - LOCATION_NAME=village-4
       - DATABASE_FILE=/data/game_state.db
+      - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_4'); server.run()"]
@@ -220,6 +242,7 @@ services:
       - FLASK_APP=location_server.py
       - LOCATION_NAME=village-5
       - DATABASE_FILE=/data/game_state.db
+      - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_5'); server.run()"]
@@ -244,6 +267,7 @@ services:
       - FLASK_APP=location_server.py
       - LOCATION_NAME=village-6
       - DATABASE_FILE=/data/game_state.db
+      - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
     volumes:
       - game-data:/data
     command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_6'); server.run()"]
@@ -270,6 +294,7 @@ services:
       - IN_DOCKER=1
       - AI_URL=http://ai-opponent:8081
       - TEMPO_URL=http://tempo:3200
+      - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
     volumes:
       - game-data:/data
     healthcheck:
@@ -308,6 +333,7 @@ services:
     environment:
       - IN_DOCKER=1
       - LOCATION_NAME=ai-opponent
+      - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/health')"]
       interval: 5s
@@ -336,3 +362,4 @@ services:
 
 volumes:
   game-data:
+  pyroscope-data:

@@ -1,0 +1,11 @@
+---
+# Minimal Pyroscope v2 config for local single-binary demo.
+# v2 defaults (filesystem backend, v1-v2-dual storage) handle the rest.
+
+server:
+  http_listen_port: 4040
+
+storage:
+  backend: filesystem
+  filesystem:
+    dir: /data
