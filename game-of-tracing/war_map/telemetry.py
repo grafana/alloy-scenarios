@@ -18,11 +18,10 @@ import pyroscope
 from pyroscope.otel import PyroscopeSpanProcessor
 
 class GameTelemetry:
-    def __init__(self, service_name, logging_endpoint="http://alloy:4318", tracing_endpoint="http://alloy:4317", metrics_endpoint="http://alloy:4318"):
+    def __init__(self, service_name, logging_endpoint="http://alloy:4318", tracing_endpoint="http://alloy:4317"):
         self.service_name = service_name
         self.logging_endpoint = logging_endpoint
         self.tracing_endpoint = tracing_endpoint
-        self.metrics_endpoint = metrics_endpoint
         self.resource = Resource.create(attributes={
             SERVICE_NAME: service_name
         })

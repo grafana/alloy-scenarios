@@ -31,11 +31,11 @@ Service names (hyphenated) match the `SERVICE_NAME` resource attribute used in t
 | File | Size | Purpose |
 |---|---|---|
 | `game_config.py` | ~3 KB | `LOCATIONS` dict: coordinates, connections, initial resources/army/faction, passive-rate, costs. |
-| `telemetry.py` | ~11 KB | `GameTelemetry` class — traces, logs, metrics + 5 observable gauges and 1 counter for game state. |
+| `telemetry.py` | ~11 KB | `GameTelemetry` class — traces, logs, metrics (5 observable gauges + 1 counter for game state), plus Pyroscope profiling with OTel span-profile linkage. |
 | `location_server.py` | ~52 KB (~1200 lines) | `LocationServer` class — Flask app, routes, DB access, pathfinding, battle resolution, background-thread movement. |
 | `run_game.py` | — | CLI to run all 8 services as separate local processes (non-Docker). |
 | `Dockerfile` | small | `python:3.11-slim`, `pip install -r requirements.txt`, runs `python location_server.py`. |
-| `requirements.txt` | small | Flask 3.1.3, requests 2.33.0, OpenTelemetry SDK/API + OTLP gRPC/HTTP exporters. |
+| `requirements.txt` | small | Flask 3.1.3, requests 2.33.0, OpenTelemetry SDK/API + OTLP gRPC/HTTP exporters, `pyroscope-io` + `pyroscope-otel` for profiling. |
 
 ## Routes
 
@@ -124,11 +124,11 @@ See `AGENTS.md` for the full cross-service metrics table. `app/`-specific:
 
 | Metric | Type | Callback location in `telemetry.py` |
 |---|---|---|
-| `game.resources` | observable gauge | `_observe_resources` at `:152-169` |
-| `game.army_size` | observable gauge | `_observe_army_size` at `:171-189` |
-| `game.battles` | counter | `record_battle` at `:250-266` |
-| `game.resource_transfer_cooldown` | observable gauge | `_observe_resource_cooldown` at `:191-209` |
-| `game.location_control` | observable gauge | `_observe_location_control` at `:211-236` (values: `northern=1`, `southern=2`, `neutral=0`, unknown=`-1`) |
+| `game.resources` | observable gauge | `_observe_resources` at `:176-193` |
+| `game.army_size` | observable gauge | `_observe_army_size` at `:195-213` |
+| `game.battles` | counter | `record_battle` at `:274-290` |
+| `game.resource_transfer_cooldown` | observable gauge | `_observe_resource_cooldown` at `:215-233` |
+| `game.location_control` | observable gauge | `_observe_location_control` at `:235-260` (values: `northern=1`, `southern=2`, `neutral=0`, unknown=`-1`) |
 
 The gauge callbacks read from live server state via `_get_location_state()`, which the `LocationServer` registers on the telemetry instance at construction time.
 
