@@ -3,50 +3,28 @@ cluster:
   name: meta-monitoring-tutorial
 
 destinations:
-  - name: loki
+  loki:
     type: loki
     url: http://loki-gateway.meta.svc.cluster.local/loki/api/v1/push
 
-
 clusterEvents:
   enabled: true
-  collector: alloy-logs
+  collector: alloy-singleton
   namespaces:
     - meta
     - prod
 
-nodeLogs:
-  enabled: false
-
-podLogs:
+podLogsViaKubernetesApi:
   enabled: true
-  gatherMethod: kubernetesApi
   collector: alloy-logs
-  labelsToKeep: ["app_kubernetes_io_name","container","instance","job","level","namespace","service_name","service_namespace","deployment_environment","deployment_environment_name"]
+  namespaces:
+    - meta
+    - prod
   structuredMetadata:
-    pod: pod  # Set structured metadata "pod" from label "pod"
-  namespaces:
-    - meta
-    - prod
+    pod: pod
 
-# Collectors
-alloy-singleton:
-  enabled: false
-
-alloy-metrics:
-  enabled: false
-
-alloy-logs:
-  enabled: true
-  alloy:
-    mounts:
-      varlog: false
-      dockercontainers: false
-    clustering:
-      enabled: true
-
-alloy-profiles:
-  enabled: false
-
-alloy-receiver:
-  enabled: false
+collectors:
+  alloy-singleton:
+    presets: [singleton]
+  alloy-logs:
+    presets: [clustered]

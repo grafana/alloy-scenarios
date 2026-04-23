@@ -3,42 +3,21 @@ cluster:
   name: meta-monitoring-tutorial
 
 destinations:
-  - name: prometheus
+  prometheus:
     type: prometheus
     url: http://prometheus-server.meta.svc.cluster.local:80/api/v1/write
 
 clusterMetrics:
   enabled: true
-  collector: alloy-metrics
-
-clusterEvents:
-  enabled: false
-
-nodeLogs:
-  enabled: false
-
-podLogs:
-  enabled: false
 
 annotationAutodiscovery:
   enabled: true
   collector: alloy-metrics
 
-# Collectors
-alloy-singleton:
-  enabled: false
+collectors:
+  alloy-metrics:
+    presets: [clustered, statefulset]
 
-alloy-metrics:
-  enabled: true
-  alloy:
-    clustering:
-      enabled: true
-
-alloy-logs:
-  enabled: false
-
-alloy-profiles:
-  enabled: false
-
-alloy-receiver:
-  enabled: false
+telemetryServices:
+  kube-state-metrics:
+    deploy: true

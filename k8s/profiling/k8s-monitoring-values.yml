@@ -3,38 +3,16 @@ cluster:
   name: meta-monitoring-tutorial
 
 destinations:
-  - name: pyroscope
+  pyroscope:
     type: pyroscope
     url: http://pyroscope.meta.svc.cluster.local:4040
 
 profiling:
   enabled: true
   collector: alloy-profiles
+  pprof:
+    enabled: true
 
-clusterMetrics:
-  enabled: false
-
-clusterEvents:
-  enabled: false
-
-nodeLogs:
-  enabled: false
-
-podLogs:
-  enabled: false
-
-# Collectors
-alloy-singleton:
-  enabled: false
-
-alloy-metrics:
-  enabled: false
-
-alloy-logs:
-  enabled: false
-
-alloy-profiles:
-  enabled: true
-
-alloy-receiver:
-  enabled: false
+collectors:
+  alloy-profiles:
+    presets: [privileged, daemonset]

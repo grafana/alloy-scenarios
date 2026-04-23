@@ -66,10 +66,10 @@ Note that within the `grafana-values.yml` file, the `grafana.ini` configuration 
 
 ## Install the K8s Monitoring Helm Chart
 
-The final step is to install the K8s monitoring Helm chart. This will install Alloy in the `meta` namespace. The `k8s-monitoring-values.yml` file contains the configuration for the K8s monitoring Helm chart. To install the K8s monitoring Helm chart, run the following command:
+The final step is to install the K8s monitoring Helm chart. This will install Alloy in the `meta` namespace. The `k8s-monitoring-values.yml` file contains the configuration for the K8s monitoring Helm chart. This scenario requires `grafana/k8s-monitoring` chart v4 or later. To install the K8s monitoring Helm chart, run the following command:
 
 ```bash
-helm install --values ./k8s-monitoring-values.yml k8s grafana/k8s-monitoring -n meta --create-namespace
+helm install --values ./k8s-monitoring-values.yml k8s grafana/k8s-monitoring --version "^4.0.0" -n meta --create-namespace
 ```
 Within the `k8s-monitoring-values.yml` file we declare the Alloy configuration. This configuration specifies the log sources that Alloy will collect logs from. In this scenario, we are collecting logs from two different sources: Pod Logs and Kubernetes Events.
 
