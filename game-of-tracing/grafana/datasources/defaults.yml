@@ -1,6 +1,7 @@
 apiVersion: 1
 datasources:
 - name: prometheus
+  uid: prometheus
   type: prometheus
   orgId: 1
   url: http://prometheus:9090
@@ -13,6 +14,7 @@ datasources:
       - datasourceUid: "tempo"
         name: "trace_id"
 - name: tempo
+  uid: tempo
   type: tempo
   access: proxy
   orgId: 1
@@ -31,7 +33,14 @@ datasources:
       filterBySpanID: true
     tracesToMetrics:
       datasourceUid: 'prometheus'
+    tracesToProfilesV2:
+      datasourceUid: 'pyroscope'
+      tags:
+        - key: 'service.name'
+          value: 'service_name'
+      profileTypeId: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds'
 - name: loki
+  uid: loki
   type: loki
   access: proxy
   orgId: 1
@@ -47,3 +56,12 @@ datasources:
         targetBlank: true
         url: "$${__value.raw}"
         urlDisplayLabel: ""
+- name: pyroscope
+  uid: pyroscope
+  type: grafana-pyroscope-datasource
+  access: proxy
+  orgId: 1
+  url: http://pyroscope:4040
+  basicAuth: false
+  isDefault: false
+  editable: false

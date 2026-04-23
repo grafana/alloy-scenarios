@@ -73,10 +73,12 @@ The application consists of:
 - **AI Opponent**: Intelligent computer player for single-player mode
 - **Telemetry Pipeline**:
   - OpenTelemetry SDK for instrumentation
-  - Grafana Alloy for trace processing
+  - `pyroscope-otel` bridge for linking traces to CPU profiles
+  - Grafana Alloy for trace/log/metric/profile processing
   - Tempo for trace storage
   - Prometheus for metrics
   - Loki for logs
+  - Pyroscope for continuous profiling
   - Grafana for visualization
 
 <!-- INTERACTIVE page intro.md END -->
@@ -105,6 +107,7 @@ The application consists of:
    - Game UI: [http://localhost:8080](http://localhost:8080)
    - Grafana: [http://localhost:3000](http://localhost:3000)
    - Prometheus: [http://localhost:9090](http://localhost:9090)
+   - Pyroscope: [http://localhost:4040](http://localhost:4040)
    - Alloy Debug: [http://localhost:12345/debug/livedebugging](http://localhost:12345/debug/livedebugging)
 
 5. Multiplayer Access:
@@ -127,22 +130,11 @@ The application consists of:
 
 ## Setting Up the Dashboard
 
-1. Open Grafana at http://localhost:3000 (anonymous admin auth is enabled, no login required)
+1. Open Grafana at http://localhost:3000 (anonymous admin auth is enabled, no login required).
 
-2. Import the dashboard:
-   - Click the "+" icon in the left sidebar
-   - Select "Import dashboard"
-   - Click "Upload JSON file"
-   - Navigate to `grafana/dashboards/War of Kingdoms-1747821967780.json`
-   - Click "Import"
+2. The **War of Kingdoms** dashboard is auto-provisioned at startup — no manual import needed. Find it under Dashboards → Browse.
 
-3. Configure data sources:
-   - The dashboard requires Prometheus, Loki, and Tempo data sources
-   - These should be automatically configured if you're using the provided Docker setup
-   - If not, ensure the following URLs are set:
-     - Prometheus: http://prometheus:9090
-     - Loki: http://loki:3100
-     - Tempo: http://tempo:3200
+3. Data sources (Prometheus, Loki, Tempo, **Pyroscope**) are auto-provisioned too. The Tempo datasource is pre-wired to Loki (traces-to-logs), Prometheus (traces-to-metrics), and Pyroscope (traces-to-profiles), so every span in Explore gets a "View profile" link.
 
 4. The dashboard provides:
    - Real-time army and resource metrics
@@ -150,6 +142,15 @@ The application consists of:
    - Territory control visualization
    - Service dependency mapping
    - Trace analytics for game events
+
+### Viewing Profiles
+
+With every player action the app emits CPU pprof samples via the `pyroscope-otel` bridge. Each span carries a `pyroscope.profile.id` attribute that Grafana uses to jump directly from a span to its flamegraph.
+
+- Explore → **Pyroscope** datasource → pick a service (e.g. `war-map`) → flamegraph renders.
+- Explore → **Tempo** → open a recent trace → right-click a span → **View Profile**.
+
+> **OTel-engine variant note**: when running the alternate pipeline via `docker compose -f docker-compose.yml -f docker-compose-otel.yml up -d`, Alloy's OTel-engine mode has no native Pyroscope receiver. The Python services still profile themselves, but the default profile endpoint (`http://alloy:9999`) won't exist. Override with `PYROSCOPE_SERVER_ADDRESS=http://pyroscope:4040` in the environment to push profiles straight to Pyroscope.
 
 <!-- INTERACTIVE page step2.md END -->
 
