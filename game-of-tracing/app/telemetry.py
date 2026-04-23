@@ -173,11 +173,34 @@ class GameTelemetry:
         # Log that metrics have been set up
         self.logger.info("Game metrics initialized")
 
+    # Faction → numeric value for the ``game.location_control`` gauge.
+    # Existing WoK values (0/1/2) preserved for dashboard backward compat;
+    # new factions appended with fresh values.
+    _FACTION_VALUE = {
+        "neutral": 0,
+        "northern": 1,
+        "southern": 2,
+        "nights_watch": 3,
+        "white_walkers": 4,
+        "barbarian": 5,
+    }
+
+    def _active_location_id(self):
+        """Return the currently served logical location id.
+
+        ``LocationServer`` sets ``self._location_id`` on the telemetry instance
+        at boot and refreshes it on ``/reload``. Fall back to the legacy
+        ``service_name.replace('-', '_')`` pattern for non-slot deployments.
+        """
+        return getattr(self, "_location_id", None) or self.service_name.replace("-", "_")
+
+    def _active_location_type(self):
+        return getattr(self, "_location_type", None) or "village"
+
     def _observe_resources(self, options: CallbackOptions) -> Iterable[Observation]:
         """Callback to observe current resources"""
         try:
-            from game_config import LOCATIONS
-            location_id = self.service_name.replace("-", "_")
+            location_id = self._active_location_id()
             if hasattr(self, '_get_location_state'):
                 state = self._get_location_state(location_id)
                 if state:
@@ -186,7 +209,7 @@ class GameTelemetry:
                         value=state["resources"],
                         attributes={
                             "location": self.service_name,
-                            "location_type": LOCATIONS[location_id]["type"]
+                            "location_type": self._active_location_type(),
                         }
                     )
         except Exception as e:
@@ -195,8 +218,7 @@ class GameTelemetry:
     def _observe_army_size(self, options: CallbackOptions) -> Iterable[Observation]:
         """Callback to observe current army size"""
         try:
-            from game_config import LOCATIONS
-            location_id = self.service_name.replace("-", "_")
+            location_id = self._active_location_id()
             if hasattr(self, '_get_location_state'):
                 state = self._get_location_state(location_id)
                 if state:
@@ -205,8 +227,8 @@ class GameTelemetry:
                         value=state["army"],
                         attributes={
                             "location": self.service_name,
-                            "location_type": LOCATIONS[location_id]["type"],
-                            "faction": state["faction"]
+                            "location_type": self._active_location_type(),
+                            "faction": state["faction"],
                         }
                     )
         except Exception as e:
@@ -216,7 +238,7 @@ class GameTelemetry:
         """Callback to observe resource transfer cooldown"""
         try:
             from datetime import datetime
-            location_id = self.service_name.replace("-", "_")
+            location_id = self._active_location_id()
             if hasattr(self, 'resource_cooldown') and location_id in self.resource_cooldown:
                 cooldown = self.resource_cooldown[location_id]
                 now = datetime.now()
@@ -233,27 +255,22 @@ class GameTelemetry:
             self.logger.error(f"Error observing resource cooldown: {e}")
 
     def _observe_location_control(self, options: CallbackOptions) -> Iterable[Observation]:
-        """Callback to observe location control status"""
+        """Callback to observe location control status."""
         try:
-            from game_config import LOCATIONS
-            location_id = self.service_name.replace("-", "_")
+            location_id = self._active_location_id()
             if hasattr(self, '_get_location_state'):
                 state = self._get_location_state(location_id)
                 if state:
-                    # Convert faction to numeric value for the gauge
-                    faction_value = {
-                        "northern": 1,
-                        "southern": 2,
-                        "neutral": 0
-                    }.get(state["faction"], -1)
-                    
-                    self.logger.debug(f"Observing control for {location_id}: {state['faction']} ({faction_value})")
+                    faction_value = self._FACTION_VALUE.get(state["faction"], -1)
+                    self.logger.debug(
+                        f"Observing control for {location_id}: {state['faction']} ({faction_value})"
+                    )
                     yield Observation(
                         value=faction_value,
                         attributes={
                             "location": self.service_name,
-                            "location_type": LOCATIONS[location_id]["type"],
-                            "faction": state["faction"]
+                            "location_type": self._active_location_type(),
+                            "faction": state["faction"],
                         }
                     )
         except Exception as e:

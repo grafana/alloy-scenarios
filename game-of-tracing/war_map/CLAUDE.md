@@ -6,12 +6,14 @@
 
 `war-map` is the human-facing surface of the game and the coordination point for everything the player touches:
 
-- Renders the interactive SVG game map (territory ownership, army sizes, supply routes).
+- Hosts the **map picker** (`/map_picker` + `/select_map`) that lets the user choose between `war_of_kingdoms` and `white_walkers_attack`, then renders the faction selection (or single-player auto-start) for the chosen map.
+- Renders the interactive game map (territory ownership, army sizes, supply routes, wall-hold HUD for WWA).
 - Manages faction selection, sessions, and the human player's identity.
-- Is the **sole writer** of the `game_actions` SQLite table — the record of every action's trace/span IDs that makes span-link replay possible.
-- Activates / deactivates the AI opponent on behalf of the player.
+- Is the **sole writer** of the `game_actions` SQLite table — the record of every action's trace/span IDs that makes span-link replay possible (rows carry a `map_id` column).
+- Activates / deactivates the AI opponent on behalf of the player (auto-activates as `white_walkers` when the chosen map is WWA).
 - Proxies trace-replay queries to Tempo and falls back to local SQLite when Tempo is unavailable.
 - Instruments player actions as `SERVER` spans with `trace.Link`s chaining each action to the previous one in the session.
+- Runs the **wall-hold tick thread** (`_wall_tick_thread`, 30 s cadence) that increments `wall_hold` when one faction owns every wall keep, and declares the WWA winner at 5 consecutive ticks.
 
 ## File map
 

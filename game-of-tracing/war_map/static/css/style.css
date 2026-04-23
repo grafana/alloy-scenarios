@@ -27,6 +27,28 @@
     --neutral-silver: #78909C;
     --neutral-glow: rgba(120, 144, 156, 0.3);
 
+    /* White Walkers Attack — Night's Watch (player on WWA) */
+    --nights-watch-black: #141824;
+    --nights-watch-accent: #d7e4f1;
+    --nights-watch-glow: rgba(215, 228, 241, 0.45);
+    --nights-watch-bg: linear-gradient(135deg, #0a0f1d, #2a3246);
+
+    /* White Walkers (AI on WWA) */
+    --white-walkers-blue: #88c4e6;
+    --white-walkers-ice: #d6f1ff;
+    --white-walkers-glow: rgba(136, 196, 230, 0.55);
+    --white-walkers-bg: linear-gradient(135deg, #0f2d3f, #88c4e6);
+
+    /* Barbarians (passive NPCs on WWA) */
+    --barbarian-orange: #c1442e;
+    --barbarian-glow: rgba(193, 68, 46, 0.4);
+    --barbarian-bg: linear-gradient(135deg, #5a1a0d, #c1442e);
+
+    /* Wall keeps (new settlement type) */
+    --wall-stone: #8a8a95;
+    --wall-stone-light: #b9b9c2;
+    --wall-rune: rgba(200, 225, 255, 0.5);
+
     /* Text */
     --text-primary: #e6edf3;
     --text-secondary: #8b949e;
@@ -449,6 +471,50 @@ code {
     border-color: var(--neutral-silver);
 }
 
+/* --- White Walkers Attack faction markers --- */
+.location-marker.nights_watch {
+    background: var(--nights-watch-bg);
+    box-shadow: 0 0 12px var(--nights-watch-glow), 0 0 24px rgba(215, 228, 241, 0.2);
+    border-color: var(--nights-watch-accent);
+}
+.location-marker.nights_watch.selected {
+    box-shadow: 0 0 20px var(--nights-watch-accent), 0 0 40px rgba(215, 228, 241, 0.35);
+}
+
+.location-marker.white_walkers {
+    background: var(--white-walkers-bg);
+    box-shadow: 0 0 14px var(--white-walkers-glow), 0 0 30px rgba(136, 196, 230, 0.25);
+    border-color: var(--white-walkers-ice);
+}
+.location-marker.white_walkers.selected {
+    box-shadow: 0 0 22px var(--white-walkers-ice), 0 0 44px rgba(214, 241, 255, 0.45);
+}
+
+.location-marker.barbarian {
+    background: var(--barbarian-bg);
+    box-shadow: 0 0 12px var(--barbarian-glow), 0 0 24px rgba(193, 68, 46, 0.22);
+    border-color: var(--barbarian-orange);
+}
+.location-marker.barbarian.selected {
+    box-shadow: 0 0 18px var(--barbarian-orange), 0 0 36px rgba(193, 68, 46, 0.35);
+}
+
+/* --- Wall settlement type: rounded rectangle, stonework styling --- */
+.location-marker.wall {
+    border-radius: 6px !important;
+    background: linear-gradient(135deg, #4a4a55, var(--wall-stone));
+    box-shadow: 0 0 10px rgba(138, 138, 149, 0.35);
+    border-color: var(--wall-stone-light);
+}
+.location-marker.wall.nights_watch {
+    background: linear-gradient(135deg, var(--nights-watch-black), #3a4055);
+    box-shadow: 0 0 16px var(--nights-watch-glow);
+}
+.location-marker.wall.white_walkers {
+    background: linear-gradient(135deg, #0f2d3f, var(--white-walkers-blue));
+    box-shadow: 0 0 16px var(--white-walkers-glow);
+}
+
 /* Capital crown effect */
 .location-marker.capital::before {
     content: '';
@@ -470,6 +536,13 @@ code {
 
 .location-marker.capital.neutral::before {
     border-bottom-color: var(--neutral-silver);
+}
+
+.location-marker.capital.nights_watch::before {
+    border-bottom-color: var(--nights-watch-accent);
+}
+.location-marker.capital.white_walkers::before {
+    border-bottom-color: var(--white-walkers-ice);
 }
 
 /* Location label */
@@ -559,6 +632,26 @@ code {
     box-shadow: 0 0 30px var(--northern-glow), 0 0 60px rgba(79, 195, 247, 0.15);
 }
 
+.faction-card.faction-selected.faction-nights-watch {
+    border-color: var(--nights-watch-accent);
+    box-shadow: 0 0 30px var(--nights-watch-glow), 0 0 60px rgba(215, 228, 241, 0.2);
+}
+
+.faction-card.faction-selected.faction-white-walkers {
+    border-color: var(--white-walkers-ice);
+    box-shadow: 0 0 30px var(--white-walkers-glow), 0 0 60px rgba(214, 241, 255, 0.2);
+}
+
+.faction-card.faction-selected.faction-barbarian {
+    border-color: var(--barbarian-orange);
+    box-shadow: 0 0 30px var(--barbarian-glow), 0 0 60px rgba(193, 68, 46, 0.18);
+}
+
+.faction-card.faction-selected.map-card {
+    border-color: var(--northern-blue);
+    box-shadow: 0 0 30px var(--northern-glow), 0 0 60px rgba(79, 195, 247, 0.15);
+}
+
 .faction-unavailable {
     opacity: 0.4;
     cursor: not-allowed;
@@ -599,6 +692,69 @@ code {
     box-shadow: 0 0 30px var(--northern-glow);
     border-color: var(--northern-blue);
 }
+
+/* --- WWA faction icons --- */
+.nights-watch-icon {
+    background: radial-gradient(circle, rgba(215, 228, 241, 0.18), transparent 70%);
+    color: var(--nights-watch-accent);
+    border: 2px solid rgba(215, 228, 241, 0.3);
+}
+.faction-card:hover .nights-watch-icon,
+.faction-card.faction-selected .nights-watch-icon {
+    box-shadow: 0 0 30px var(--nights-watch-glow);
+    border-color: var(--nights-watch-accent);
+}
+
+.white-walkers-icon {
+    background: radial-gradient(circle, rgba(136, 196, 230, 0.22), transparent 70%);
+    color: var(--white-walkers-ice);
+    border: 2px solid rgba(136, 196, 230, 0.35);
+}
+.faction-card:hover .white-walkers-icon,
+.faction-card.faction-selected .white-walkers-icon {
+    box-shadow: 0 0 30px var(--white-walkers-glow);
+    border-color: var(--white-walkers-ice);
+}
+
+.barbarian-icon {
+    background: radial-gradient(circle, rgba(193, 68, 46, 0.2), transparent 70%);
+    color: var(--barbarian-orange);
+    border: 2px solid rgba(193, 68, 46, 0.32);
+}
+
+/* --- Wall-hold HUD overlay for WWA --- */
+.wall-hold-hud {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 10;
+    background: var(--bg-glass);
+    backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    color: var(--text-primary);
+    min-width: 220px;
+    font-size: 0.9rem;
+}
+.wall-hold-hud h6 {
+    margin: 0 0 0.35rem 0;
+    color: var(--nights-watch-accent);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.wall-hold-hud .hold-row {
+    display: flex;
+    justify-content: space-between;
+    margin: 0.1rem 0;
+}
+.wall-hold-hud .hold-row .ticks {
+    font-family: monospace;
+    font-weight: 600;
+}
+.wall-hold-hud .hold-row.nights_watch .ticks { color: var(--nights-watch-accent); }
+.wall-hold-hud .hold-row.white_walkers .ticks { color: var(--white-walkers-ice); }
 
 @keyframes iconFloat {
     0%, 100% { transform: translateY(0); }

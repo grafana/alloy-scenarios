@@ -2,6 +2,7 @@ import os
 import json
 import sqlite3
 import requests
+import threading
 import uuid
 import time
 import atexit
@@ -31,31 +32,134 @@ GAME_OVER = False
 WINNER = None
 VICTORY_MESSAGE = None
 
-# Location positions and connections for the map
-LOCATION_POSITIONS = {
-    "southern_capital": {"name": "Southern Capital", "x": 20, "y": 80, "type": "capital"},
-    "northern_capital": {"name": "Northern Capital", "x": 80, "y": 20, "type": "capital"},
-    "village_1": {"name": "Village 1", "x": 35, "y": 60, "type": "village"},
-    "village_2": {"name": "Village 2", "x": 65, "y": 40, "type": "village"},
-    "village_3": {"name": "Village 3", "x": 15, "y": 50, "type": "village"},
-    "village_4": {"name": "Village 4", "x": 50, "y": 70, "type": "village"},
-    "village_5": {"name": "Village 5", "x": 50, "y": 30, "type": "village"},
-    "village_6": {"name": "Village 6", "x": 85, "y": 50, "type": "village"}
+# ----------------------------------------------------------------
+# Maps — in-UI picker metadata.
+# Full per-location config lives in app/game_config.py. This is a compact
+# read-only duplicate of the fields war_map actually needs: layout for the
+# canvas, tick rules for the hold-to-win loop, faction/AI wiring for the
+# picker screen. Keep the map-id strings in sync with app/game_config.py.
+# ----------------------------------------------------------------
+DEFAULT_MAP_ID = "war_of_kingdoms"
+
+MAPS_META = {
+    "war_of_kingdoms": {
+        "display_name": "War of Kingdoms",
+        "description": (
+            "Northern and Southern kingdoms clash for dominance. "
+            "Capture the enemy capital to win."
+        ),
+        "single_player": False,
+        "player_faction": None,
+        "ai_faction": None,
+        "factions": ["northern", "southern"],
+        "tick_interval_s": 0,
+        "win_hold_ticks": 0,
+        "icon": "fa-chess-knight",
+    },
+    "white_walkers_attack": {
+        "display_name": "White Walkers Attack",
+        "description": (
+            "The Long Night has come. As the Night's Watch, hold every Wall "
+            "keep for 5 ticks before the White Walkers do. Single-player."
+        ),
+        "single_player": True,
+        "player_faction": "nights_watch",
+        "ai_faction": "white_walkers",
+        "factions": ["nights_watch", "white_walkers", "barbarian"],
+        "tick_interval_s": 30,
+        "win_hold_ticks": 5,
+        "icon": "fa-icicles",
+    },
 }
 
-LOCATION_CONNECTIONS = [
-    ["southern_capital", "village_1"],
-    ["southern_capital", "village_3"],
-    ["northern_capital", "village_2"],
-    ["northern_capital", "village_6"],
-    ["village_1", "village_2"],
-    ["village_1", "village_4"],
-    ["village_2", "village_5"],
-    ["village_3", "village_5"],
-    ["village_3", "village_6"],
-    ["village_4", "village_5"],
-    ["village_5", "village_6"]
-]
+# Map layout — canvas x/y percentages per location. Each map's keys must
+# match the location ids in app/game_config.py's MAPS[map_id]["locations"].
+LOCATION_POSITIONS_BY_MAP = {
+    "war_of_kingdoms": {
+        "southern_capital": {"x": 20, "y": 70, "type": "capital", "name": "Southern Capital"},
+        "northern_capital": {"x": 80, "y": 20, "type": "capital", "name": "Northern Capital"},
+        "village_1": {"x": 35, "y": 55, "type": "village", "name": "Village 1"},
+        "village_2": {"x": 65, "y": 35, "type": "village", "name": "Village 2"},
+        "village_3": {"x": 30, "y": 40, "type": "village", "name": "Village 3"},
+        "village_4": {"x": 45, "y": 65, "type": "village", "name": "Village 4"},
+        "village_5": {"x": 50, "y": 50, "type": "village", "name": "Village 5"},
+        "village_6": {"x": 70, "y": 45, "type": "village", "name": "Village 6"},
+    },
+    "white_walkers_attack": {
+        "nights_watch_fortress": {"x": 50, "y": 85, "type": "capital", "name": "Castle Black"},
+        "white_walker_fortress": {"x": 50, "y": 15, "type": "capital", "name": "The Lands of Always Winter"},
+        "wall_west": {"x": 20, "y": 50, "type": "wall", "name": "Westwatch"},
+        "wall_center_west": {"x": 40, "y": 50, "type": "wall", "name": "Queensgate"},
+        "wall_center_east": {"x": 60, "y": 50, "type": "wall", "name": "Deep Lake"},
+        "wall_east": {"x": 80, "y": 50, "type": "wall", "name": "Eastwatch-by-the-Sea"},
+        "barbarian_village_west": {"x": 10, "y": 72, "type": "village", "name": "Free Folk Camp (West)"},
+        "barbarian_village_east": {"x": 90, "y": 72, "type": "village", "name": "Free Folk Camp (East)"},
+    },
+}
+
+LOCATION_CONNECTIONS_BY_MAP = {
+    "war_of_kingdoms": [
+        ["southern_capital", "village_1"],
+        ["southern_capital", "village_3"],
+        ["northern_capital", "village_2"],
+        ["northern_capital", "village_6"],
+        ["village_1", "village_2"],
+        ["village_1", "village_4"],
+        ["village_2", "village_5"],
+        ["village_3", "village_5"],
+        ["village_3", "village_6"],
+        ["village_4", "village_5"],
+        ["village_5", "village_6"],
+    ],
+    "white_walkers_attack": [
+        ["nights_watch_fortress", "wall_west"],
+        ["nights_watch_fortress", "wall_center_west"],
+        ["nights_watch_fortress", "wall_center_east"],
+        ["nights_watch_fortress", "wall_east"],
+        ["white_walker_fortress", "wall_west"],
+        ["white_walker_fortress", "wall_center_west"],
+        ["white_walker_fortress", "wall_center_east"],
+        ["white_walker_fortress", "wall_east"],
+        ["wall_west", "wall_center_west"],
+        ["wall_center_west", "wall_center_east"],
+        ["wall_center_east", "wall_east"],
+        ["wall_west", "barbarian_village_west"],
+        ["wall_east", "barbarian_village_east"],
+    ],
+}
+
+# Per-map list of wall-type locations for the hold-to-win check.
+WALL_LOCATIONS_BY_MAP = {
+    map_id: [
+        loc_id for loc_id, meta in positions.items()
+        if meta.get("type") == "wall"
+    ]
+    for map_id, positions in LOCATION_POSITIONS_BY_MAP.items()
+}
+
+# Kept for legacy call sites that still reference the module-level names.
+# These stay pointing at the WoK defaults — call sites that need per-map
+# behaviour should call _current_positions() / _current_connections() instead.
+LOCATION_POSITIONS = LOCATION_POSITIONS_BY_MAP[DEFAULT_MAP_ID]
+LOCATION_CONNECTIONS = LOCATION_CONNECTIONS_BY_MAP[DEFAULT_MAP_ID]
+
+
+def _current_positions():
+    """Positions for the currently active map (reads active_map_id from DB)."""
+    return LOCATION_POSITIONS_BY_MAP.get(
+        get_active_map_id(), LOCATION_POSITIONS_BY_MAP[DEFAULT_MAP_ID]
+    )
+
+
+def _current_connections():
+    """Connections for the currently active map."""
+    return LOCATION_CONNECTIONS_BY_MAP.get(
+        get_active_map_id(), LOCATION_CONNECTIONS_BY_MAP[DEFAULT_MAP_ID]
+    )
+
+
+def _current_walls():
+    return WALL_LOCATIONS_BY_MAP.get(get_active_map_id(), [])
 
 def init_game_session_tracking():
     """Initialize the game session tracking database"""
@@ -82,10 +186,20 @@ def init_game_session_tracking():
             target_location_id TEXT,
             timestamp INTEGER NOT NULL,
             game_state_after TEXT,
+            map_id TEXT,
             UNIQUE(game_session_id, action_sequence)
         )
         ''')
-        
+
+        # Best-effort migration for existing game_sessions.db files created
+        # before the map_id column existed. SQLite's ALTER TABLE only adds
+        # missing columns; the IGNORE/OperationalError guard keeps a
+        # fresh-install run idempotent.
+        try:
+            cursor.execute("ALTER TABLE game_actions ADD COLUMN map_id TEXT")
+        except sqlite3.OperationalError:
+            pass
+
         conn.commit()
         conn.close()
         logger.info(f"Game session tracking database initialized: {GAME_SESSIONS_DB}")
@@ -97,6 +211,9 @@ def init_game_session_tracking():
 
 # Initialize the game session tracking database immediately
 init_game_session_tracking()
+# Tables in game_state.db (game_config, wall_hold, faction_economy) are
+# initialized lazily on first call to _ensure_game_config_tables() — see
+# the in-process startup path later in this module.
 
 def store_game_action(game_session_id, action_type, player_name, faction, 
                      trace_id, span_id, location_id=None, target_location_id=None, 
@@ -197,7 +314,9 @@ def remove_frame_options(response):
 DATABASE_FILE = os.environ.get('DATABASE_FILE', '../app/game_state.db')
 API_BASE_URL = os.environ.get('API_BASE_URL', 'http://localhost')  # Base URL for API calls
 
-# Location server ports (from game_config.py)
+# Location server ports (from game_config.py). These are keyed by the
+# *current-map* location id; when the active map changes, the keys here
+# follow along because both maps assign the same port to the same slot.
 LOCATION_PORTS = {
     "southern_capital": 5001,
     "northern_capital": 5002,
@@ -206,46 +325,219 @@ LOCATION_PORTS = {
     "village_3": 5005,
     "village_4": 5006,
     "village_5": 5007,
-    "village_6": 5008
+    "village_6": 5008,
+    # White Walkers Attack mappings (same ports — just aliased).
+    "nights_watch_fortress": 5001,
+    "white_walker_fortress": 5002,
+    "wall_west": 5003,
+    "wall_center_west": 5004,
+    "wall_center_east": 5005,
+    "wall_east": 5006,
+    "barbarian_village_west": 5007,
+    "barbarian_village_east": 5008,
 }
 
-# Location positions for the map (x, y coordinates as percentages)
-LOCATION_POSITIONS = {
-    "southern_capital": {"x": 20, "y": 70, "type": "capital", "name": "Southern Capital"},
-    "northern_capital": {"x": 80, "y": 20, "type": "capital", "name": "Northern Capital"},
-    "village_1": {"x": 35, "y": 55, "type": "village", "name": "Village 1"},
-    "village_2": {"x": 65, "y": 35, "type": "village", "name": "Village 2"},
-    "village_3": {"x": 30, "y": 40, "type": "village", "name": "Village 3"},
-    "village_4": {"x": 45, "y": 65, "type": "village", "name": "Village 4"},
-    "village_5": {"x": 50, "y": 50, "type": "village", "name": "Village 5"},
-    "village_6": {"x": 70, "y": 45, "type": "village", "name": "Village 6"}
+# Container hostname (in docker-compose) per slot. Stable across maps.
+SLOT_CONTAINER_NAMES = {
+    "slot_1": "southern-capital",
+    "slot_2": "northern-capital",
+    "slot_3": "village-1",
+    "slot_4": "village-2",
+    "slot_5": "village-3",
+    "slot_6": "village-4",
+    "slot_7": "village-5",
+    "slot_8": "village-6",
 }
 
-# Location connections for the map (to draw lines between connected locations)
-LOCATION_CONNECTIONS = [
-    ["southern_capital", "village_1"],
-    ["southern_capital", "village_3"],
-    ["northern_capital", "village_2"],
-    ["northern_capital", "village_6"],
-    ["village_1", "village_2"],
-    ["village_1", "village_4"],
-    ["village_2", "village_5"],
-    ["village_3", "village_5"],
-    ["village_3", "village_6"],
-    ["village_4", "village_5"],
-    ["village_5", "village_6"]
-]
+# Port per slot.
+SLOT_PORTS = {
+    "slot_1": 5001,
+    "slot_2": 5002,
+    "slot_3": 5003,
+    "slot_4": 5004,
+    "slot_5": 5005,
+    "slot_6": 5006,
+    "slot_7": 5007,
+    "slot_8": 5008,
+}
 
-# Game state - track victory conditions
-GAME_OVER = False
-WINNER = None
-VICTORY_MESSAGE = None
+
+def _container_for_slot(slot_id):
+    """Return the docker-compose service name hosting ``slot_id`` (stable)."""
+    return SLOT_CONTAINER_NAMES.get(slot_id, slot_id.replace('_', '-'))
+
+
+def _slot_port_pairs():
+    """Yield (slot_id, port) tuples for all 8 slots."""
+    return list(SLOT_PORTS.items())
+
+# LOCATION_POSITIONS and LOCATION_CONNECTIONS are defined earlier (as the
+# WoK default slices of the LOCATION_*_BY_MAP dicts). Legacy call sites that
+# still reference the unsuffixed names get the WoK layout; new code should
+# go through _current_positions() / _current_connections().
+
+# Game state - track victory conditions (local process cache; also read
+# from wall_hold on map WWA).
+# Note: GAME_OVER/WINNER/VICTORY_MESSAGE already declared near top of file.
 
 def get_db_connection():
     """Create a connection to the SQLite database"""
     conn = sqlite3.connect(DATABASE_FILE)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+# ----------------------------------------------------------------
+# Active map + wall-hold state (lives in game_state.db so location
+# servers and war_map agree on the single source of truth).
+# ----------------------------------------------------------------
+
+def _ensure_game_config_tables():
+    """Create game_config, faction_economy, and wall_hold if missing, and
+    migrate the war_map table for single-player maps (adds map_id + drops the
+    faction UNIQUE constraint so nights_watch can be registered without
+    conflicting with the WoK two-faction model).
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS game_config (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+        ''')
+        cursor.execute(
+            "INSERT OR IGNORE INTO game_config (key, value) VALUES ('active_map_id', ?)",
+            (DEFAULT_MAP_ID,),
+        )
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS faction_economy (
+            faction TEXT PRIMARY KEY,
+            corpses INTEGER NOT NULL DEFAULT 0
+        )
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS wall_hold (
+            map_id TEXT NOT NULL,
+            faction TEXT NOT NULL,
+            ticks INTEGER NOT NULL DEFAULT 0,
+            last_update INTEGER NOT NULL,
+            PRIMARY KEY (map_id, faction)
+        )
+        ''')
+        # war_map table: additive map_id column for session-level bookkeeping.
+        try:
+            cursor.execute("ALTER TABLE war_map ADD COLUMN map_id TEXT")
+        except sqlite3.OperationalError:
+            pass
+        conn.commit()
+        conn.close()
+    except sqlite3.Error as e:
+        logger.error(f"Failed to ensure game_config tables: {e}")
+
+
+def get_active_map_id():
+    """Return the currently active map id from game_state.db (cached row)."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM game_config WHERE key = 'active_map_id'")
+        row = cursor.fetchone()
+        conn.close()
+        return row['value'] if row else DEFAULT_MAP_ID
+    except sqlite3.Error:
+        return DEFAULT_MAP_ID
+
+
+def set_active_map_id(map_id):
+    """Persist the active map id. Location services pick this up via /reload."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO game_config (key, value) VALUES ('active_map_id', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (map_id,),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.Error as e:
+        logger.error(f"Failed to set active map id: {e}")
+        return False
+
+
+def reset_wall_hold(map_id):
+    """Zero the wall-hold counter for every faction on ``map_id``."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM wall_hold WHERE map_id = ?", (map_id,))
+        conn.commit()
+        conn.close()
+    except sqlite3.Error as e:
+        logger.error(f"Failed to reset wall_hold for {map_id}: {e}")
+
+
+def bump_wall_hold(map_id, faction, reset_others=True):
+    """Increment ``faction``'s tick count on ``map_id``. Optionally reset
+    every other faction back to 0. Returns the new tick count.
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        now = int(time.time())
+        if reset_others:
+            cursor.execute(
+                "UPDATE wall_hold SET ticks = 0 WHERE map_id = ? AND faction != ?",
+                (map_id, faction),
+            )
+        cursor.execute(
+            "INSERT INTO wall_hold (map_id, faction, ticks, last_update) "
+            "VALUES (?, ?, 1, ?) "
+            "ON CONFLICT(map_id, faction) DO UPDATE SET "
+            "ticks = ticks + 1, last_update = excluded.last_update",
+            (map_id, faction, now),
+        )
+        cursor.execute(
+            "SELECT ticks FROM wall_hold WHERE map_id = ? AND faction = ?",
+            (map_id, faction),
+        )
+        row = cursor.fetchone()
+        conn.commit()
+        conn.close()
+        return int(row['ticks']) if row else 0
+    except sqlite3.Error as e:
+        logger.error(f"Failed to bump wall_hold: {e}")
+        return 0
+
+
+def get_wall_hold(map_id):
+    """Return {faction: ticks} for the given map."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT faction, ticks FROM wall_hold WHERE map_id = ?", (map_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        return {r['faction']: int(r['ticks']) for r in rows}
+    except sqlite3.Error:
+        return {}
+
+
+def get_faction_corpses(faction):
+    """Read a faction's corpse pool (0 when no row yet)."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT corpses FROM faction_economy WHERE faction = ?", (faction,))
+        row = cursor.fetchone()
+        conn.close()
+        return int(row['corpses']) if row else 0
+    except sqlite3.Error:
+        return 0
+
 
 def check_faction_availability(faction):
     """Check if a faction is already claimed by another player"""
@@ -404,25 +696,66 @@ def make_api_request(location_id, endpoint, method='GET', data=None):
         except requests.RequestException as e:
             return {"error": str(e)}
 
-def check_game_over(locations_data):
-    """Check if the game is over by examining location ownership"""
+def check_game_over(locations_data, map_id=None):
+    """Dispatch to the right win-condition check based on the active map."""
+    if map_id is None:
+        map_id = get_active_map_id()
+    if map_id == "white_walkers_attack":
+        # WWA games end only via hold-the-walls. Capital captures do not end
+        # the game (the capital can change hands mid-match).
+        return check_wall_hold_win(locations_data, map_id)
+    return check_capital_capture_win(locations_data)
+
+
+def check_capital_capture_win(locations_data):
+    """Classic WoK win: take the enemy capital."""
     global GAME_OVER, WINNER, VICTORY_MESSAGE
-    
-    # Check if Southern Capital is owned by Northern
+
     if locations_data.get('southern_capital', {}).get('faction') == 'northern':
         GAME_OVER = True
         WINNER = 'northern'
         VICTORY_MESSAGE = "The Northern Kingdom has conquered the Southern Capital! Victory through unity!"
         return True
-    
-    # Check if Northern Capital is owned by Southern
+
     if locations_data.get('northern_capital', {}).get('faction') == 'southern':
         GAME_OVER = True
         WINNER = 'southern'
         VICTORY_MESSAGE = "The Southern Kingdom has conquered the Northern Capital! Glory to the South!"
         return True
-    
+
     logger.info("Game is not over")
+    return False
+
+
+def check_wall_hold_win(locations_data, map_id):
+    """White Walkers Attack win: one faction has held every wall for the
+    configured number of ticks. This is a passive check — the tick thread
+    owns incrementing the counter; here we just observe + declare.
+    """
+    global GAME_OVER, WINNER, VICTORY_MESSAGE
+
+    threshold = MAPS_META.get(map_id, {}).get("win_hold_ticks", 0)
+    if threshold <= 0:
+        return False
+
+    holds = get_wall_hold(map_id)
+    for faction, ticks in holds.items():
+        if ticks >= threshold:
+            GAME_OVER = True
+            WINNER = faction
+            if faction == "nights_watch":
+                VICTORY_MESSAGE = (
+                    "The Night's Watch held the Wall! The Long Night is broken."
+                )
+            elif faction == "white_walkers":
+                VICTORY_MESSAGE = (
+                    "The Wall has fallen. The Long Night has come for Westeros."
+                )
+            else:
+                VICTORY_MESSAGE = f"{faction.title()} held every Wall keep for {threshold} ticks."
+            return True
+
+    logger.debug(f"Wall hold check: {holds} (threshold {threshold})")
     return False
 
 def reset_game_state():
@@ -474,56 +807,218 @@ def health():
 
 @app.route('/')
 def index():
-    """Home page - faction selection"""
-    # Check if user already has a faction
+    """Home page. Routes through the map picker on first visit; once the
+    user has picked a map the faction-selection view (WoK) or auto-start
+    view (WWA single-player) is served instead.
+    """
+    _ensure_game_config_tables()
+
+    # Already in a game with a faction? Go straight to the map.
     if 'session_id' in session and get_player_faction(session['session_id']):
         return redirect(url_for('game_map'))
-    
-    # Check which factions are available
+
+    # No map chosen yet → map picker.
+    if 'map_id' not in session:
+        return redirect(url_for('map_picker'))
+
+    map_id = session['map_id']
+    meta = MAPS_META.get(map_id, MAPS_META[DEFAULT_MAP_ID])
+
+    if meta["single_player"]:
+        # Single-player maps skip the faction cards. A single CTA button posts
+        # back with faction=player_faction.
+        player_faction = meta["player_faction"]
+        player_available = check_faction_availability(player_faction)
+        return render_template(
+            'index.html',
+            map_id=map_id,
+            map_meta=meta,
+            single_player=True,
+            player_faction=player_faction,
+            player_available=player_available,
+            southern_available=False,
+            northern_available=False,
+        )
+
+    # Classic WoK two-faction flow.
     southern_available = check_faction_availability('southern')
     northern_available = check_faction_availability('northern')
     logger.info(f"Southern available: {southern_available}, Northern available: {northern_available}")
-    
-    return render_template('index.html', 
-                          southern_available=southern_available, 
-                          northern_available=northern_available)
+
+    return render_template(
+        'index.html',
+        map_id=map_id,
+        map_meta=meta,
+        single_player=False,
+        southern_available=southern_available,
+        northern_available=northern_available,
+    )
+
+
+@app.route('/map_picker')
+def map_picker():
+    """Map selection screen. Renders one card per entry in MAPS_META."""
+    _ensure_game_config_tables()
+    return render_template('map_picker.html', maps=MAPS_META)
+
+
+@app.route('/select_map', methods=['POST'])
+def select_map():
+    """Persist the chosen map as active + reload every location service.
+
+    Steps:
+      1. Write ``active_map_id`` to game_config.
+      2. Reset the locations table via one location's ``/reset`` (shared DB —
+         one call repopulates the 8 rows from the new map's config).
+      3. POST ``/reload`` to every slot so the in-memory ``location_info`` on
+         each service rebinds without a container restart.
+      4. For single-player maps, auto-register the preset player faction and
+         auto-activate the AI as the preset enemy faction.
+      5. Redirect to the entry UI (map-aware from the session).
+    """
+    map_id = request.form.get('map_id') or DEFAULT_MAP_ID
+    if map_id not in MAPS_META:
+        logger.error(f"Unknown map_id: {map_id}")
+        return redirect(url_for('map_picker'))
+
+    with tracer.start_as_current_span(
+        "select_map",
+        kind=SpanKind.SERVER,
+        attributes={"game.map.id": map_id},
+    ) as span:
+        # 1. Persist + wipe any previous wall-hold counters.
+        set_active_map_id(map_id)
+        reset_wall_hold(map_id)
+        # Clear all maps' old counters to avoid stale wins after switching.
+        for mid in MAPS_META:
+            reset_wall_hold(mid)
+
+        # 2. Reset locations rows to match the new map.
+        try:
+            # Any one container will do — the DB is shared. Use the first
+            # Docker service name (stable across maps).
+            reset_container = _container_for_slot("slot_1")
+            requests.post(
+                f"http://{reset_container}:5001/reset" if os.environ.get('IN_DOCKER')
+                else f"http://localhost:5001/reset",
+                timeout=5,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to reset location rows during map switch: {e}")
+
+        # 3. Kick every slot to reload identity.
+        for slot_id, port in _slot_port_pairs():
+            try:
+                host = _container_for_slot(slot_id) if os.environ.get('IN_DOCKER') else "localhost"
+                requests.post(f"http://{host}:{port}/reload", timeout=5)
+            except Exception as e:
+                logger.warning(f"Failed to /reload {slot_id}: {e}")
+
+        # 4. Clear faction claims + session data so the new map starts clean.
+        release_all_factions()
+        session.pop('faction', None)
+        session.pop('player_name', None)
+        session.pop('game_session_id', None)
+        session.pop('action_sequence', None)
+        session.pop('session_id', None)
+        session['map_id'] = map_id
+
+        meta = MAPS_META[map_id]
+
+        # 5. Single-player: AI activation is deferred until the player clicks
+        # "Take the Black" on the index page (so the player always explicitly
+        # starts the game). But we do pre-reset the game-over flags.
+        reset_game_state()
+        span.set_attribute("single_player", meta["single_player"])
+
+    return redirect(url_for('index'))
+
 
 @app.route('/select_faction', methods=['POST'])
 def select_faction():
-    """Process faction selection"""
+    """Process faction selection (WoK two-player or single-player preset)."""
+    map_id = session.get('map_id', DEFAULT_MAP_ID)
+    meta = MAPS_META.get(map_id, MAPS_META[DEFAULT_MAP_ID])
+
     faction = request.form.get('faction')
     player_name = request.form.get('player_name', 'Unknown Player')
-    
-    if not faction or faction not in ['southern', 'northern']:
-        return render_template('index.html', error="Invalid faction selected")
-    
+
+    allowed = set(meta.get("factions", []))
+    if not faction or faction not in allowed:
+        return render_template(
+            'index.html',
+            map_id=map_id,
+            map_meta=meta,
+            single_player=meta["single_player"],
+            player_faction=meta.get("player_faction"),
+            southern_available=check_faction_availability('southern'),
+            northern_available=check_faction_availability('northern'),
+            player_available=(
+                check_faction_availability(meta.get("player_faction"))
+                if meta["single_player"] else False
+            ),
+            error="Invalid faction selected",
+        )
+
     # Check if faction is available
     if not check_faction_availability(faction):
         logger.info(f"Faction {faction} is already taken")
-        return render_template('index.html', 
-                              error=f"The {faction.capitalize()} faction is already taken")
-    
+        return render_template(
+            'index.html',
+            map_id=map_id,
+            map_meta=meta,
+            single_player=meta["single_player"],
+            player_faction=meta.get("player_faction"),
+            southern_available=check_faction_availability('southern'),
+            northern_available=check_faction_availability('northern'),
+            player_available=False,
+            error=f"The {faction.replace('_', ' ').title()} faction is already taken",
+        )
+
     # Generate a session ID if not present
     if 'session_id' not in session:
         session['session_id'] = str(uuid.uuid4())
-    
+
     # Generate a game session ID for span linking
     if 'game_session_id' not in session:
         session['game_session_id'] = str(uuid.uuid4())
         session['action_sequence'] = 0  # Initialize action sequence
         logger.info(f"Initialized game session: {session['game_session_id']}")
-    
+
     # Register the faction
     if register_faction(faction, player_name, session['session_id']):
         session['faction'] = faction
         session['player_name'] = player_name
         session['is_ai'] = False  # Human player by default
-        logger.info(f"Player {player_name} selected faction {faction}")
+        logger.info(f"Player {player_name} selected faction {faction} on map {map_id}")
+
+        # On single-player maps, auto-activate the AI as the preset enemy
+        # the moment the human commits to playing.
+        if meta["single_player"] and meta.get("ai_faction"):
+            try:
+                requests.post(
+                    f"{AI_SERVICE_URL}/activate",
+                    json={"faction": meta["ai_faction"], "map_id": map_id},
+                    timeout=5,
+                )
+                logger.info(f"Auto-activated AI as {meta['ai_faction']} for single-player map {map_id}")
+            except Exception as e:
+                logger.warning(f"Auto-activation of AI failed: {e}")
+
         return redirect(url_for('game_map'))
     else:
         logger.error(f"Failed to register faction {faction}")
-        return render_template('index.html', 
-                              error=f"Failed to register {faction.capitalize()} faction")
+        return render_template(
+            'index.html',
+            map_id=map_id,
+            map_meta=meta,
+            single_player=meta["single_player"],
+            player_faction=meta.get("player_faction"),
+            southern_available=check_faction_availability('southern'),
+            northern_available=check_faction_availability('northern'),
+            player_available=False,
+            error=f"Failed to register {faction.replace('_', ' ').title()} faction",
+        )
 
 @app.route('/logout')
 def logout():
@@ -564,38 +1059,56 @@ def restart_game():
 
 @app.route('/map')
 def game_map():
-    """Game map page"""
+    """Game map page — renders the canvas for the currently active map."""
     # Check if user has selected a faction
     if 'faction' not in session:
         return redirect(url_for('index'))
-    
+
+    map_id = session.get('map_id') or get_active_map_id()
+    positions = LOCATION_POSITIONS_BY_MAP.get(map_id, LOCATION_POSITIONS_BY_MAP[DEFAULT_MAP_ID])
+    connections = LOCATION_CONNECTIONS_BY_MAP.get(map_id, LOCATION_CONNECTIONS_BY_MAP[DEFAULT_MAP_ID])
+    meta = MAPS_META.get(map_id, MAPS_META[DEFAULT_MAP_ID])
+
     faction = session['faction']
     player_name = session.get('player_name', 'Unknown Player')
-    
-    # Get all location data for the map
+
+    # Get all location data for the map (only the ids relevant to this map).
     locations_data = {}
-    for loc_id in LOCATION_POSITIONS.keys():
+    for loc_id in positions.keys():
         data = make_api_request(loc_id, '')
         if 'error' not in data:
-            # Combine API data with position data
             locations_data[loc_id] = {
-                **LOCATION_POSITIONS[loc_id],
+                **positions[loc_id],
                 'faction': data['faction'],
                 'resources': data['resources'],
-                'army': data['army']
+                'army': data['army'],
             }
-    
-    # Check for game over condition
-    check_game_over(locations_data)
-    
-    return render_template('map.html', 
-                          player_name=player_name,
-                          faction=faction,
-                          locations=locations_data,
-                          connections=LOCATION_CONNECTIONS,
-                          game_over=GAME_OVER,
-                          winner=WINNER,
-                          victory_message=VICTORY_MESSAGE)
+
+    # Check for game over condition (map-aware).
+    check_game_over(locations_data, map_id=map_id)
+
+    # Wall-hold HUD payload for WWA.
+    wall_hold_state = None
+    if map_id == "white_walkers_attack":
+        wall_hold_state = {
+            "threshold": meta.get("win_hold_ticks", 0),
+            "holds": get_wall_hold(map_id),
+            "walls": WALL_LOCATIONS_BY_MAP.get(map_id, []),
+        }
+
+    return render_template(
+        'map.html',
+        player_name=player_name,
+        faction=faction,
+        map_id=map_id,
+        map_meta=meta,
+        locations=locations_data,
+        connections=connections,
+        wall_hold=wall_hold_state,
+        game_over=GAME_OVER,
+        winner=WINNER,
+        victory_message=VICTORY_MESSAGE,
+    )
 
 @app.route('/api/collect_resources', methods=['POST'])
 def collect_resources():
@@ -780,7 +1293,7 @@ def move_army():
         # Check if this move resulted in a victory condition
         if target_id in ['southern_capital', 'northern_capital'] and result.get('success'):
             locations_data = {}
-            for loc_id in LOCATION_POSITIONS.keys():
+            for loc_id in _current_positions().keys():
                 data = make_api_request(loc_id, '')
                 if 'error' not in data:
                     locations_data[loc_id] = {
@@ -817,7 +1330,7 @@ def move_army():
 @app.route('/api/location_info/<location_id>', methods=['GET'])
 def location_info(location_id):
     """API endpoint to get information about a location"""
-    if location_id not in LOCATION_POSITIONS:
+    if location_id not in _current_positions():
         return jsonify({"error": "Invalid location ID"}), 400
     
     result = make_api_request(location_id, '')
@@ -827,37 +1340,47 @@ def location_info(location_id):
 @app.route('/api/map_data', methods=['GET'])
 def map_data():
     """API endpoint to get all map data for updating the UI"""
-    # Get all location data for the map
+    map_id = get_active_map_id()
+    meta = MAPS_META.get(map_id, MAPS_META[DEFAULT_MAP_ID])
     locations_data = {}
-    for loc_id in LOCATION_POSITIONS.keys():
+    for loc_id in _current_positions().keys():
         data = make_api_request(loc_id, '')
         if 'error' not in data:
-            # Combine API data with position data and location type
             locations_data[loc_id] = {
-                **LOCATION_POSITIONS[loc_id],
+                **_current_positions()[loc_id],
                 'faction': data['faction'],
                 'resources': data['resources'],
                 'army': data['army'],
-                'type': LOCATION_POSITIONS[loc_id]['type']  # Add location type
+                'type': _current_positions()[loc_id]['type']
             }
-    
-    # Check for game over condition
-    check_game_over(locations_data)
-    
-    return jsonify({
+
+    check_game_over(locations_data, map_id=map_id)
+
+    response = {
         "locations": locations_data,
-        "connections": LOCATION_CONNECTIONS,
+        "connections": _current_connections(),
         "game_over": GAME_OVER,
         "winner": WINNER,
-        "victory_message": VICTORY_MESSAGE
-    })
+        "victory_message": VICTORY_MESSAGE,
+        "map_id": map_id,
+    }
+
+    # Include wall-hold state when the active map uses the tick mechanic.
+    if meta.get("win_hold_ticks", 0) > 0:
+        response["wall_hold"] = {
+            "threshold": meta["win_hold_ticks"],
+            "holds": get_wall_hold(map_id),
+            "walls": WALL_LOCATIONS_BY_MAP.get(map_id, []),
+        }
+
+    return jsonify(response)
 
 @app.route('/api/game_status', methods=['GET'])
 def game_status():
     """API endpoint to get the current game status"""
     # Always check the current state to catch AI victories
     locations_data = {}
-    for loc_id in LOCATION_POSITIONS.keys():
+    for loc_id in _current_positions().keys():
         data = make_api_request(loc_id, '')
         if 'error' not in data:
             locations_data[loc_id] = {
@@ -946,7 +1469,7 @@ def all_out_attack():
             # Check if this attack resulted in game over
             if result.get('success'):
                 locations_data = {}
-                for loc_id in LOCATION_POSITIONS.keys():
+                for loc_id in _current_positions().keys():
                     data = make_api_request(loc_id, '')
                     if 'error' not in data:
                         locations_data[loc_id] = {
@@ -1203,7 +1726,7 @@ def replay_session_page(session_id):
         # Check if location database reset to initial state
         try:
             locations_data = {}
-            for loc_id in LOCATION_POSITIONS.keys():
+            for loc_id in _current_positions().keys():
                 data = make_api_request(loc_id, '')
                 if 'error' not in data:
                     locations_data[loc_id] = data
@@ -1601,6 +2124,85 @@ def verify_action_links(actions):
         chain_verification.append(verification)
     
     return chain_verification
+
+# ----------------------------------------------------------------
+# Wall-hold tick thread — WWA win condition.
+# Runs every tick_interval_s, reads every wall-type location's faction from
+# game_state.db, increments the hold counter for whoever owns them all, and
+# resets the counter otherwise. When a faction's count reaches win_hold_ticks
+# the global game-over flags flip and the map.html poll picks up the winner.
+# ----------------------------------------------------------------
+
+def _wall_tick_thread():
+    _ensure_game_config_tables()
+    logger.info("Wall-hold tick thread started")
+    while True:
+        try:
+            map_id = get_active_map_id()
+            meta = MAPS_META.get(map_id)
+            interval = meta.get("tick_interval_s", 0) if meta else 0
+            if not meta or interval <= 0:
+                # WoK or any map that doesn't use the hold-to-win mechanic:
+                # sleep in short slices so a map switch to WWA picks up
+                # within 5 s rather than waiting out a long interval.
+                time.sleep(5)
+                continue
+
+            # Measure wall ownership from game_state.db directly (faster and
+            # more consistent than round-tripping through the HTTP API, and
+            # avoids producing tracing noise every 30 s).
+            wall_ids = WALL_LOCATIONS_BY_MAP.get(map_id, [])
+            if not wall_ids:
+                time.sleep(interval)
+                continue
+
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            placeholders = ",".join("?" for _ in wall_ids)
+            cursor.execute(
+                f"SELECT id, faction FROM locations WHERE id IN ({placeholders})",
+                wall_ids,
+            )
+            rows = cursor.fetchall()
+            conn.close()
+
+            factions = {r['faction'] for r in rows}
+            playable = factions - {"neutral"}
+            threshold = meta.get("win_hold_ticks", 0)
+
+            with tracer.start_as_current_span(
+                "wall_tick",
+                kind=SpanKind.INTERNAL,
+                attributes={
+                    "game.map.id": map_id,
+                    "wall.count": len(wall_ids),
+                    "wall.factions": ",".join(sorted(factions)),
+                },
+            ) as tick_span:
+                if len(rows) == len(wall_ids) and len(playable) == 1 and "neutral" not in factions:
+                    holder = playable.pop()
+                    ticks = bump_wall_hold(map_id, holder, reset_others=True)
+                    tick_span.set_attribute("wall.holder", holder)
+                    tick_span.set_attribute("game.wall.hold_counter", ticks)
+                    if threshold > 0 and ticks >= threshold:
+                        tick_span.add_event(
+                            "game.wall.hold_win",
+                            attributes={"faction": holder, "ticks": ticks},
+                        )
+                        logger.info(f"Wall-hold win detected for {holder} on {map_id}")
+                else:
+                    reset_wall_hold(map_id)
+                    tick_span.set_attribute("wall.holder", "contested")
+
+            time.sleep(interval)
+        except Exception as e:
+            logger.error(f"Wall-tick thread error: {e}")
+            time.sleep(5)
+
+
+# Kick off the wall-tick thread once per process.
+threading.Thread(target=_wall_tick_thread, daemon=True, name="wall-tick").start()
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))

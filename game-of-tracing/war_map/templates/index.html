@@ -1,13 +1,26 @@
 {% extends "layout.html" %}
 
-{% block title %}Choose Your Faction{% endblock %}
+{% block title %}
+    {% if single_player %}Take the Black — {{ map_meta.display_name }}{% else %}Choose Your Faction{% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="faction-hero">
     <div class="col-lg-8 col-xl-7">
         <div class="text-center mb-5">
-            <h1 class="faction-hero-title">A Game of Traces</h1>
-            <p class="faction-hero-subtitle">Choose your kingdom. Command your armies. Master distributed tracing.</p>
+            <h1 class="faction-hero-title">
+                {% if single_player %}{{ map_meta.display_name }}{% else %}A Game of Traces{% endif %}
+            </h1>
+            <p class="faction-hero-subtitle">
+                {% if single_player %}{{ map_meta.description }}
+                {% else %}Choose your kingdom. Command your armies. Master distributed tracing.
+                {% endif %}
+            </p>
+            <p class="small">
+                <a href="{{ url_for('map_picker') }}" class="text-decoration-none">
+                    <i class="fas fa-map me-1"></i>Pick a different map
+                </a>
+            </p>
         </div>
 
         <!-- Show reset status if coming from restart -->
@@ -24,13 +37,48 @@
 
         <form method="POST" action="{{ url_for('select_faction') }}" id="factionForm">
             <div class="mb-4">
-                <label for="player_name" class="form-label">Commander Name</label>
+                <label for="player_name" class="form-label">
+                    {% if single_player %}Your name, brother of the Watch{% else %}Commander Name{% endif %}
+                </label>
                 <input type="text" class="form-control form-control-lg" id="player_name" name="player_name"
                        placeholder="Enter your name..." required
                        style="max-width: 400px; margin: 0 auto; text-align: center;">
             </div>
-            <input type="hidden" name="faction" id="factionInput" value="" required>
+            <input type="hidden" name="faction" id="factionInput" value="{% if single_player %}{{ player_faction }}{% endif %}" required>
 
+            {% if single_player %}
+            <!-- Single-player: one preset faction card, auto-selected. -->
+            <div class="row g-4 faction-selection justify-content-center mb-4">
+                <div class="col-md-6">
+                    <div class="card faction-card faction-nights-watch faction-selected {% if not player_available %}faction-unavailable{% endif %}"
+                         data-faction="{{ player_faction }}">
+                        <div class="card-body">
+                            <span class="faction-icon nights-watch-icon">
+                                <i class="fas fa-shield-halved"></i>
+                            </span>
+                            <h4>The Night's Watch</h4>
+                            <p class="faction-motto">"Night gathers, and now my watch begins."</p>
+                            <p class="faction-start">
+                                <i class="fas fa-map-marker-alt me-1"></i>Castle Black
+                            </p>
+                            {% if not player_available %}
+                            <div class="mt-2">
+                                <span class="badge bg-danger"><i class="fas fa-ban me-1"></i>Already taken — reset the game</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center">
+                <button type="submit" id="enterGameBtn" class="btn btn-primary btn-lg px-5 py-2"
+                        {% if not player_available %}disabled{% endif %}>
+                    <i class="fas fa-chess-knight me-2"></i>Take the Black
+                </button>
+            </div>
+            {% else %}
+            <!-- Two-faction WoK selection -->
             <div class="row g-4 faction-selection justify-content-center mb-4">
                 <div class="col-md-5">
                     <div class="card faction-card faction-southern {% if not southern_available %}faction-unavailable{% endif %}"
@@ -81,6 +129,7 @@
                     <i class="fas fa-dungeon me-2"></i>Enter The Game
                 </button>
             </div>
+            {% endif %}
         </form>
 
         <!-- Reset & Replay links -->

@@ -1,9 +1,34 @@
-"""Location server implementation."""
+"""Location server implementation.
+
+Each of the 8 location containers has a constant ``SLOT_ID`` env var
+(``slot_1`` … ``slot_8``). The in-game identity a slot serves (e.g.
+``southern_capital`` in War of Kingdoms, ``wall_west`` in White Walkers
+Attack) is resolved at boot and on ``/reload`` via the active map stored
+in the shared ``game_config`` key-value table. See ``game_config.MAPS``.
+
+The per-container SERVICE_NAME (used by Grafana dashboards) stays stable
+regardless of map — it's derived from ``LOCATION_NAME`` env / slot id, not
+from the logical location id.
+"""
 import os, sqlite3, requests, random, time, threading, atexit
 from threading import Thread, Lock
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request
-from game_config import LOCATIONS, COSTS, RESOURCE_GENERATION, DATABASE_FILE
+from game_config import (
+    MAPS,
+    COSTS,
+    DATABASE_FILE,
+    DEFAULT_MAP_ID,
+    LOCATIONS,
+    RESOURCE_GENERATION,
+    SLOT_IDS,
+    get_army_cost,
+    get_army_currency,
+    get_location_config,
+    get_map,
+    get_rules,
+    resolve_slot,
+)
 from telemetry import GameTelemetry
 from opentelemetry.propagate import extract, inject
 from opentelemetry import trace
@@ -17,32 +42,203 @@ class PathType(Enum):
     ATTACK = 'attack'
 
 class LocationServer:
-    def __init__(self, location_id):
-        self.location_id = location_id
-        self.location_info = LOCATIONS[location_id]
+    def __init__(self, slot_or_location=None):
+        # Accept either a slot id (new, preferred) or a legacy location id
+        # (for backward compat with local dev scripts). Falls back to env.
+        raw = slot_or_location or os.environ.get('SLOT_ID')
+        if raw in SLOT_IDS:
+            self.slot_id = raw
+        elif raw in MAPS[DEFAULT_MAP_ID]["locations"]:
+            # Legacy: caller passed a War of Kingdoms location id; resolve to
+            # its slot via the reverse map.
+            inverse = {v: k for k, v in MAPS[DEFAULT_MAP_ID]["slot_assignments"].items()}
+            self.slot_id = inverse[raw]
+        else:
+            raise ValueError(
+                f"Cannot determine SLOT_ID from {raw!r}; expected one of {SLOT_IDS} "
+                f"or a War of Kingdoms location id."
+            )
+
         self.app = Flask(__name__)
         self.last_resource_collection = {}
         self.resource_cooldown = {}
         self.lock = Lock()
-        
-        # Initialize telemetry with consistent service name
-        # Always use hyphenated lowercase for service names
-        service_name = location_id.replace('_', '-')
+
+        # SERVICE_NAME must stay stable across map switches so Grafana
+        # dashboards keep their series. Prefer the explicit LOCATION_NAME env
+        # (matches container name in docker-compose); else synthesise from the
+        # slot id.
+        service_name = os.environ.get('LOCATION_NAME') or self.slot_id.replace('_', '-')
         self.telemetry = GameTelemetry(service_name=service_name)
         self.logger = self.telemetry.get_logger()
         self.tracer = self.telemetry.get_tracer()
-        
+
         # Give telemetry access to location state
         self.telemetry._get_location_state = self._get_location_state
-        
-        self.setup_routes()
+        # And access to faction-scoped economy (for the corpse gauge).
+        self.telemetry._get_corpse_count = self._get_corpses
+
         self.db_path = os.environ.get('DATABASE_FILE', DATABASE_FILE)
+
+        # Populated by _load_identity().
+        self.map_id = DEFAULT_MAP_ID
+        self.location_id = None
+        self.location_info = None
+        self._passive_thread_started = False
+        self._barbarian_thread_started = False
+        self._corpse_thread_started = False
+
         self._initialize_database()
-        
-        if self.location_info["type"] == "village":
-            self._start_passive_generation()
+        self._load_identity()
+        self.setup_routes()
 
         atexit.register(self.telemetry.shutdown)
+
+    # ----------------------------------------------------------------
+    # Map / slot identity resolution
+    # ----------------------------------------------------------------
+
+    def _current_locations(self) -> Dict:
+        """Return the active map's ``location_id → config`` dict."""
+        return MAPS[self.map_id]["locations"]
+
+    def _current_rules(self) -> Dict:
+        return MAPS[self.map_id]["rules"]
+
+    def _read_active_map_id(self) -> str:
+        conn = self._get_db_connection()
+        try:
+            row = conn.execute(
+                "SELECT value FROM game_config WHERE key = 'active_map_id'"
+            ).fetchone()
+        finally:
+            conn.close()
+        return row['value'] if row else DEFAULT_MAP_ID
+
+    def _load_identity(self):
+        """Resolve slot → (map, location_id, config); seed this slot's row."""
+        self.map_id = self._read_active_map_id()
+        self.location_id = resolve_slot(self.map_id, self.slot_id)
+        self.location_info = get_location_config(self.map_id, self.location_id)
+
+        # Publish live identity to the telemetry instance so the observable
+        # gauges report the currently-served id, not whatever id was derived
+        # from the container's SERVICE_NAME at boot.
+        self.telemetry._location_id = self.location_id
+        self.telemetry._location_type = self.location_info["type"]
+
+        # Seed this slot's row in the locations table if missing. Idempotent:
+        # INSERT OR IGNORE handles the case where war_map already re-seeded.
+        conn = self._get_db_connection()
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO locations (id, resources, army, faction) VALUES (?, ?, ?, ?)",
+                (
+                    self.location_id,
+                    self.location_info["initial_resources"],
+                    self.location_info["initial_army"],
+                    self.location_info["faction"],
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        self._start_passive_threads_if_needed()
+
+        self.logger.info(
+            f"Identity loaded: slot={self.slot_id} map={self.map_id} "
+            f"location_id={self.location_id} type={self.location_info['type']} "
+            f"faction={self.location_info['faction']}"
+        )
+
+    def _start_passive_threads_if_needed(self):
+        """Kick off whichever passive loop matches this slot's identity.
+
+        Threads are started at most once per process lifetime. If a slot's
+        identity changes through ``/reload``, the *old* thread keeps running
+        but becomes a no-op because it guards each iteration against the
+        current location type/faction.
+        """
+        loc_type = self.location_info["type"]
+        faction = self.location_info["faction"]
+        rules = self._current_rules()
+
+        if loc_type == "village" and faction != "barbarian" and not self._passive_thread_started:
+            self._start_passive_generation()
+            self._passive_thread_started = True
+
+        if faction == "barbarian" and not self._barbarian_thread_started:
+            interval = rules.get("barbarian_army_growth_interval_s", 0) or 0
+            if interval > 0:
+                self._start_barbarian_growth(interval)
+                self._barbarian_thread_started = True
+
+        if (
+            loc_type == "capital"
+            and faction == "white_walkers"
+            and not self._corpse_thread_started
+        ):
+            interval = rules.get("white_walker_passive_corpse_interval_s", 0) or 0
+            if interval > 0:
+                self._start_white_walker_corpse_tick(interval)
+                self._corpse_thread_started = True
+
+    # ----------------------------------------------------------------
+    # Corpse economy (faction-scoped; lives in faction_economy table)
+    # ----------------------------------------------------------------
+
+    def _get_corpses(self, faction: str = "white_walkers") -> int:
+        conn = self._get_db_connection()
+        try:
+            row = conn.execute(
+                "SELECT corpses FROM faction_economy WHERE faction = ?", (faction,)
+            ).fetchone()
+        finally:
+            conn.close()
+        return int(row['corpses']) if row else 0
+
+    def _add_corpses(self, delta: int, faction: str = "white_walkers"):
+        if delta <= 0:
+            return
+        conn = self._get_db_connection()
+        try:
+            conn.execute(
+                "INSERT INTO faction_economy (faction, corpses) VALUES (?, ?) "
+                "ON CONFLICT(faction) DO UPDATE SET corpses = corpses + excluded.corpses",
+                (faction, delta),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _spend_corpses(self, amount: int, faction: str = "white_walkers") -> bool:
+        """Atomically decrement ``faction``'s corpse pool. Returns True on success."""
+        conn = self._get_db_connection()
+        try:
+            cursor = conn.execute(
+                "UPDATE faction_economy SET corpses = corpses - ? "
+                "WHERE faction = ? AND corpses >= ?",
+                (amount, faction, amount),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        finally:
+            conn.close()
+
+    def _find_capital(self, faction: str) -> Optional[str]:
+        """Return the location_id of the capital with the given faction in the active map, by static config."""
+        for loc_id, cfg in self._current_locations().items():
+            if cfg["type"] == "capital" and cfg["faction"] == faction:
+                return loc_id
+        return None
+
+    def _find_enemy_capital(self, faction: str) -> Optional[str]:
+        """Return the location_id of a capital not belonging to ``faction`` (and not barbarian), by static config."""
+        for loc_id, cfg in self._current_locations().items():
+            if cfg["type"] == "capital" and cfg["faction"] not in (faction, "barbarian"):
+                return loc_id
+        return None
 
     def _get_db_connection(self):
         conn = sqlite3.connect(self.db_path)
@@ -54,7 +250,8 @@ class LocationServer:
     def _initialize_database(self):
         conn = self._get_db_connection()
         cursor = conn.cursor()
-        
+
+        # Canonical per-location state.
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS locations (
             id TEXT PRIMARY KEY,
@@ -63,15 +260,30 @@ class LocationServer:
             faction TEXT NOT NULL
         )
         ''')
-        
-        cursor.execute("SELECT COUNT(*) FROM locations")
-        if cursor.fetchone()[0] == 0:
-            for loc_id, loc_info in LOCATIONS.items():
-                cursor.execute(
-                    "INSERT INTO locations VALUES (?, ?, ?, ?)",
-                    (loc_id, loc_info["initial_resources"], loc_info["initial_army"], loc_info["faction"])
-                )
-            conn.commit()
+
+        # Key/value game-wide config; holds active_map_id (authoritative at
+        # runtime; overrides whatever the process started with).
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS game_config (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+        ''')
+        cursor.execute(
+            "INSERT OR IGNORE INTO game_config (key, value) VALUES ('active_map_id', ?)",
+            (DEFAULT_MAP_ID,),
+        )
+
+        # Faction-scoped economy (White Walkers' corpse pool today; room for
+        # additional faction-level currencies later).
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS faction_economy (
+            faction TEXT PRIMARY KEY,
+            corpses INTEGER NOT NULL DEFAULT 0
+        )
+        ''')
+
+        conn.commit()
         conn.close()
 
     def _get_location_state(self, location_id):
@@ -126,22 +338,26 @@ class LocationServer:
         return True
 
     def _find_path(self, target: str, path_type: PathType) -> Optional[List[str]]:
-        """Unified pathfinding for both resources and armies."""
+        """Unified pathfinding for both resources and armies on the active map."""
+        locations = self._current_locations()
         location_state = self._get_location_state(self.location_id)
         faction = location_state["faction"]
-        
-        if path_type == PathType.RESOURCE and faction not in ['southern', 'northern']:
+
+        # Resource routing only makes sense for factions that have a resource
+        # economy. ``barbarian`` and ``white_walkers`` don't send resources.
+        resource_factions = {"southern", "northern", "nights_watch"}
+        if path_type == PathType.RESOURCE and faction not in resource_factions:
             return None
-            
-        distances = {loc: float('infinity') for loc in LOCATIONS.keys()}
+
+        distances = {loc: float('infinity') for loc in locations.keys()}
         distances[self.location_id] = 0
-        previous = {loc: None for loc in LOCATIONS.keys()}
-        unvisited = set(LOCATIONS.keys())
-        
+        previous = {loc: None for loc in locations.keys()}
+        unvisited = set(locations.keys())
+
         def get_weight(loc_id: str) -> float:
             state = self._get_location_state(loc_id)
-            loc_faction = state["faction"]
-            
+            loc_faction = state["faction"] if state else "neutral"
+
             if path_type == PathType.RESOURCE:
                 if loc_faction == faction:
                     return 1
@@ -154,55 +370,78 @@ class LocationServer:
                 elif loc_faction == "neutral":
                     return 2
                 return 3
-        
+
         while unvisited:
             current = min(unvisited, key=lambda loc: distances[loc])
             if current == target:
                 break
-                
+
             unvisited.remove(current)
-            for neighbor in LOCATIONS[current]["connections"]:
+            for neighbor in locations[current]["connections"]:
                 if neighbor in unvisited:
                     weight = get_weight(neighbor)
                     distance = distances[current] + weight
-                    
+
                     if distance < distances[neighbor]:
                         distances[neighbor] = distance
                         previous[neighbor] = current
-        
+
         if previous[target] is None:
             return None
-            
+
         path = []
         current = target
         while current is not None:
             path.append(current)
             current = previous[current]
-        
+
         return list(reversed(path))
 
-    def _handle_battle(self, attacking_army: int, attacking_faction: str, 
-                      defending_army: int, defending_faction: str) -> tuple[str, int, str]:
-        """Handle battle between armies and return result."""
-        # Same faction = reinforcement
+    def _handle_battle(self, attacking_army: int, attacking_faction: str,
+                      defending_army: int, defending_faction: str,
+                      location_type: Optional[str] = None) -> tuple[str, int, str]:
+        """Handle battle between armies and return ``(result, remaining_army, new_faction)``.
+
+        ``location_type`` lets the active map's rules modify the fight. For
+        ``wall`` settlements on a map with ``wall_multiplier`` > 1 the defender's
+        effective strength is scaled up — the physical garrison plays harder to
+        dislodge, but the ``remaining_army`` reported back is converted back to
+        physical units so DB rows stay honest.
+        """
+        # Same faction = reinforcement. Multiplier never applies.
         if attacking_faction == defending_faction:
             self.logger.info(f"Reinforcement battle between {attacking_faction} armies")
             self.telemetry.record_battle(attacking_faction, defending_faction, "reinforcement")
             return "reinforcement", attacking_army + defending_army, attacking_faction
-        
-        # Actual combat
-        if attacking_army > defending_army:
-            self.logger.info(f"Attacker victory: {attacking_army} vs {defending_army}")
-            remaining = attacking_army - defending_army
+
+        multiplier = 1.0
+        if location_type == "wall":
+            multiplier = float(self._current_rules().get("wall_multiplier", 1.0) or 1.0)
+        effective_defender = int(defending_army * multiplier)
+
+        if attacking_army > effective_defender:
+            remaining = attacking_army - effective_defender
+            self.logger.info(
+                f"Attacker victory: {attacking_army} vs {defending_army} "
+                f"(effective {effective_defender}, mult {multiplier}) -> {remaining}"
+            )
             self.telemetry.record_battle(attacking_faction, defending_faction, "attacker_victory")
             return "attacker_victory", remaining, attacking_faction
-        elif defending_army > attacking_army:
-            remaining = defending_army - attacking_army
-            self.logger.info(f"Defender victory: {defending_army} vs {attacking_army}")
+        elif effective_defender > attacking_army:
+            # Convert defender's surviving *effective* strength back to physical.
+            effective_remaining = effective_defender - attacking_army
+            remaining = max(1, int(effective_remaining / multiplier)) if multiplier > 0 else effective_remaining
+            self.logger.info(
+                f"Defender victory: {defending_army} vs {attacking_army} "
+                f"(effective {effective_defender}, mult {multiplier}) -> {remaining}"
+            )
             self.telemetry.record_battle(attacking_faction, defending_faction, "defender_victory")
             return "defender_victory", remaining, defending_faction
         else:
-            self.logger.info(f"Stalemate: {attacking_army} vs {defending_army}")
+            self.logger.info(
+                f"Stalemate: {attacking_army} vs {defending_army} "
+                f"(effective {effective_defender}, mult {multiplier})"
+            )
             self.telemetry.record_battle(attacking_faction, defending_faction, "stalemate")
             return "stalemate", 0, defending_faction
 
@@ -384,53 +623,146 @@ class LocationServer:
             self.resource_cooldown[self.location_id] = datetime.now() + timedelta(seconds=5)
 
     def get_location_url(self, location_id):
-        port = LOCATIONS[location_id]["port"]
-        if os.environ.get('LOCATION_ID'):
-            docker_service_name = location_id.replace('_', '-')
+        """Return the HTTP base URL for reaching another location service.
+
+        Uses the active map's port assignment; falls back to WoK's port for a
+        legacy id if the location isn't on the current map (shouldn't happen
+        during a coherent game but guards against transition races).
+        """
+        locations = self._current_locations()
+        if location_id in locations:
+            port = locations[location_id]["port"]
+        else:
+            port = MAPS[DEFAULT_MAP_ID]["locations"][location_id]["port"]
+        if os.environ.get('IN_DOCKER') or os.environ.get('LOCATION_ID'):
+            docker_service_name = self._container_for(location_id)
             return f"http://{docker_service_name}:{port}"
         return f"http://localhost:{port}"
+
+    def _container_for(self, location_id: str) -> str:
+        """Return the stable container hostname for another location id.
+
+        Containers are named after their *slot* (slot_1 → southern-capital in
+        docker-compose, which is slot_1's stable identity). We reverse-look up
+        the slot that currently serves ``location_id`` on the active map, then
+        translate that slot back to its container hostname using the WoK
+        default slot assignments (which match docker-compose service names).
+        """
+        active = MAPS[self.map_id]["slot_assignments"]
+        wok = MAPS[DEFAULT_MAP_ID]["slot_assignments"]
+        for slot, active_loc in active.items():
+            if active_loc == location_id:
+                return wok[slot].replace('_', '-')
+        # Unknown id — best-effort: use the hyphenated form.
+        return location_id.replace('_', '-')
 
     def _start_passive_generation(self):
         def generate_resources():
             while True:
                 time.sleep(15)
+                # Guard against identity changes: if /reload flipped this slot
+                # to a non-village identity, stop producing resources silently.
+                if self.location_info["type"] != "village" or self.location_info["faction"] == "barbarian":
+                    continue
+                amount = self._current_rules()["resource_generation"]["village"]
                 with self.tracer.start_as_current_span(
                     "passive_resource_generation",
                     attributes={
                         "location.id": self.location_id,
-                        "resources_gained": RESOURCE_GENERATION["village"]
+                        "resources_gained": amount,
+                        "game.map.id": self.map_id,
                     }
                 ):
                     location_state = self._get_location_state(self.location_id)
+                    if location_state is None:
+                        continue
                     current_resources = location_state["resources"]
-                    new_resources = current_resources + RESOURCE_GENERATION["village"]
+                    new_resources = current_resources + amount
                     self._update_location_state(self.location_id, resources=new_resources)
-                    # Force metric collection after passive resource generation
                     self.telemetry.collect_metrics()
 
         Thread(target=generate_resources, daemon=True).start()
 
+    def _start_barbarian_growth(self, interval_s: int):
+        """Barbarian villages grow +1 army every ``interval_s`` seconds.
+
+        Barbarians never initiate combat; they exist to pressure the map and
+        feed the White Walker corpse economy. The thread self-gates against
+        identity changes so it becomes a no-op if /reload moves this slot off
+        a barbarian role.
+        """
+        def grow():
+            while True:
+                time.sleep(interval_s)
+                if self.location_info["faction"] != "barbarian":
+                    continue
+                with self.tracer.start_as_current_span(
+                    "barbarian_passive_growth",
+                    attributes={
+                        "location.id": self.location_id,
+                        "game.map.id": self.map_id,
+                        "army_gained": 1,
+                    }
+                ):
+                    state = self._get_location_state(self.location_id)
+                    if state is None:
+                        continue
+                    # Only grow while still barbarian-controlled.
+                    if state["faction"] != "barbarian":
+                        continue
+                    self._update_location_state(self.location_id, army=state["army"] + 1)
+                    self.telemetry.collect_metrics()
+
+        Thread(target=grow, daemon=True).start()
+
+    def _start_white_walker_corpse_tick(self, interval_s: int):
+        """Passive corpse generation at the White Walker fortress.
+
+        Simulates the undead slowly rising — keeps the WW economy nonzero even
+        when no battles are happening. Corpses accrue to the faction pool.
+        """
+        def tick():
+            while True:
+                time.sleep(interval_s)
+                if self.location_info["faction"] != "white_walkers" or self.location_info["type"] != "capital":
+                    continue
+                with self.tracer.start_as_current_span(
+                    "white_walker_corpse_tick",
+                    attributes={
+                        "location.id": self.location_id,
+                        "game.map.id": self.map_id,
+                        "game.corpses.harvested": 1,
+                        "corpse.source": "passive",
+                    }
+                ):
+                    self._add_corpses(1, "white_walkers")
+                    self.telemetry.collect_metrics()
+
+        Thread(target=tick, daemon=True).start()
+
     def reset_database(self):
-        """Reset the database to initial state."""
+        """Reset every location row + the corpse pool to the active map's initial state."""
         conn = self._get_db_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("DELETE FROM locations")
-        
-        for loc_id, loc_info in LOCATIONS.items():
+
+        for loc_id, loc_info in self._current_locations().items():
             cursor.execute(
                 "INSERT INTO locations VALUES (?, ?, ?, ?)",
                 (
                     loc_id,
                     loc_info["initial_resources"],
                     loc_info["initial_army"],
-                    loc_info["faction"]
-                )
+                    loc_info["faction"],
+                ),
             )
-        
+
+        cursor.execute("DELETE FROM faction_economy")
+
         conn.commit()
         conn.close()
-        self.logger.info("Database reset to initial state")
+        self.logger.info(f"Database reset to initial state for map {self.map_id}")
 
     def setup_routes(self):
         @self.app.route('/', methods=['GET'])
@@ -499,8 +831,8 @@ class LocationServer:
                     }), 200  # Return 200 for cooldown, as it's an expected state
                 
                 location_type = self.location_info["type"]
-                resources_gained = RESOURCE_GENERATION[location_type]
-                
+                resources_gained = self._current_rules()["resource_generation"].get(location_type, 0)
+
                 location_state = self._get_location_state(self.location_id)
                 new_resources = location_state["resources"] + resources_gained
                 self._update_location_state(self.location_id, resources=new_resources)
@@ -525,14 +857,15 @@ class LocationServer:
         def create_army():
             # Extract trace context from request headers
             context = extract(request.headers)
-            
+
             with self.tracer.start_as_current_span(
                 "create_army",
                 context=context,
                 kind=SpanKind.SERVER,
                 attributes={
                     "location_name": self.location_info["name"],
-                    "location_type": self.location_info["type"]
+                    "location_type": self.location_info["type"],
+                    "game.map.id": self.map_id,
                 }
             ) as span:
                 if self.location_info["type"] != "capital":
@@ -541,43 +874,63 @@ class LocationServer:
                         "success": False,
                         "message": "Only capitals can create armies"
                     }), 403
-                
+
                 location_state = self._get_location_state(self.location_id)
                 current_resources = location_state["resources"]
                 current_army = location_state["army"]
-                cost = COSTS["create_army"]
-                
+                faction = location_state["faction"]
+                currency = get_army_currency(self.map_id, faction)
+                cost = get_army_cost(self.map_id, faction)
+
                 span.set_attribute("current_resources", current_resources)
                 span.set_attribute("current_army", current_army)
                 span.set_attribute("army_cost", cost)
-                
-                if current_resources < cost:
-                    span.set_status(trace.StatusCode.ERROR, "Insufficient resources")
-                    return jsonify({
-                        "success": False,
-                        "message": f"Not enough resources. Need {cost}, have {current_resources}"
-                    }), 400
-                
-                new_resources = current_resources - cost
-                new_army = current_army + 1
-                
-                self._update_location_state(
-                    self.location_id,
-                    resources=new_resources,
-                    army=new_army
-                )
-                
+                span.set_attribute("army_currency", currency)
+                span.set_attribute("faction", faction)
+
+                if currency == "corpses":
+                    # White Walkers spend corpses from the faction pool, not
+                    # resources from the location.
+                    if not self._spend_corpses(cost, faction):
+                        available = self._get_corpses(faction)
+                        span.set_status(trace.StatusCode.ERROR, "Insufficient corpses")
+                        return jsonify({
+                            "success": False,
+                            "message": f"Not enough corpses. Need {cost}, have {available}"
+                        }), 400
+                    new_resources = current_resources
+                    new_army = current_army + 1
+                    self._update_location_state(self.location_id, army=new_army)
+                    span.set_attribute("game.corpses.spent", cost)
+                    span.set_attribute("corpses_remaining", self._get_corpses(faction))
+                else:
+                    if current_resources < cost:
+                        span.set_status(trace.StatusCode.ERROR, "Insufficient resources")
+                        return jsonify({
+                            "success": False,
+                            "message": f"Not enough resources. Need {cost}, have {current_resources}"
+                        }), 400
+
+                    new_resources = current_resources - cost
+                    new_army = current_army + 1
+
+                    self._update_location_state(
+                        self.location_id,
+                        resources=new_resources,
+                        army=new_army
+                    )
+
                 span.set_attribute("new_resources", new_resources)
                 span.set_attribute("new_army", new_army)
-                
-                # Force metric collection after army creation
+
                 self.telemetry.collect_metrics()
-                
+
                 return jsonify({
                     "success": True,
                     "message": "Army created",
                     "current_army": new_army,
-                    "current_resources": new_resources
+                    "current_resources": new_resources,
+                    "currency": currency,
                 })
         
         @self.app.route('/move_army', methods=['POST'])
@@ -688,8 +1041,14 @@ class LocationServer:
                             "message": "No army available for attack"
                         }), 400
                     
-                    # Determine enemy capital based on faction
-                    target_capital = "northern_capital" if faction == "southern" else "southern_capital"
+                    # Determine enemy capital based on the active map's config.
+                    target_capital = self._find_enemy_capital(faction)
+                    if not target_capital:
+                        attack_span.set_status(trace.StatusCode.ERROR, "No enemy capital on this map")
+                        return jsonify({
+                            "success": False,
+                            "message": "No enemy capital to attack on this map"
+                        }), 400
                     attack_span.set_attribute("target_capital", target_capital)
                     
                     attack_path = self._find_path(target_capital, PathType.ATTACK)
@@ -851,17 +1210,32 @@ class LocationServer:
                         attacking_army,
                         attacking_faction,
                         defending_army,
-                        defending_faction
+                        defending_faction,
+                        location_type=self.location_info["type"],
                     )
-                    
+
+                    # Corpse harvesting: the White Walkers reap from any battle
+                    # they win (either as attacker or defender). Corpses equal
+                    # the total physical units that died on both sides.
+                    if new_faction == "white_walkers":
+                        dead = max(0, attacking_army + defending_army - remaining_army)
+                        if dead > 0:
+                            self._add_corpses(dead, "white_walkers")
+                            battle_span.set_attribute("game.corpses.harvested", dead)
+                            battle_span.set_attribute("corpse.source", "battle")
+
                     self._update_location_state(
                         self.location_id,
                         army=remaining_army,
                         faction=new_faction
                     )
-                    
+
                     battle_span.set_attribute("result", battle_result)
                     battle_span.set_attribute("remaining_army", remaining_army)
+                    battle_span.set_attribute("game.map.id", self.map_id)
+                    if self.location_info["type"] == "wall":
+                        battle_span.set_attribute("game.wall.held", new_faction != "neutral")
+                        battle_span.set_attribute("span.wall.battle", True)
                     
                     if battle_result == "attacker_victory" and is_attack_move and remaining_path:
                         self.logger.info(f"Continuing army movement at {self.location_id}: {remaining_army}")
@@ -903,6 +1277,34 @@ class LocationServer:
         def reset():
             self.reset_database()
             return jsonify({"success": True, "message": "Game state reset to initial values"})
+
+        @self.app.route('/reload', methods=['POST'])
+        def reload_identity():
+            """Re-read the active map from the DB and rebind this slot's identity.
+
+            Called by ``war_map`` after ``/select_map``. The slot's port + the
+            telemetry service name do not change — only the logical
+            ``location_id``, ``name``, ``type``, ``faction``, connections, and
+            rules-scoped behaviour.
+            """
+            self._load_identity()
+            return jsonify({
+                "success": True,
+                "slot_id": self.slot_id,
+                "map_id": self.map_id,
+                "location_id": self.location_id,
+                "faction": self.location_info["faction"],
+                "type": self.location_info["type"],
+            })
+
+        @self.app.route('/faction_economy', methods=['GET'])
+        def faction_economy():
+            """Expose the corpse pool for a faction (used by the AI)."""
+            faction = request.args.get('faction', 'white_walkers')
+            return jsonify({
+                "faction": faction,
+                "corpses": self._get_corpses(faction),
+            })
         
         @self.app.route('/send_resources_to_capital', methods=['POST'])
         def send_resources_to_capital():
@@ -934,16 +1336,25 @@ class LocationServer:
                             "message": "Only villages can send resources to capital"
                         }), 403
                     
-                    if faction not in ['southern', 'northern']:
-                        span.set_status(trace.StatusCode.ERROR, "Village must belong to a faction")
-                        self.logger.error(f"Village must belong to a faction to send resources")
+                    resource_factions = {"southern", "northern", "nights_watch"}
+                    if faction not in resource_factions:
+                        span.set_status(trace.StatusCode.ERROR, "Faction has no resource economy")
+                        self.logger.error(
+                            f"Faction {faction!r} has no resource economy; cannot send to capital"
+                        )
                         return jsonify({
                             "success": False,
-                            "message": "Village must belong to a faction to send resources"
+                            "message": "This faction does not send resources",
                         }), 403
-                    
-                    # Determine target capital based on faction
-                    target_capital = "southern_capital" if faction == "southern" else "northern_capital"
+
+                    # Target this faction's capital on the active map.
+                    target_capital = self._find_capital(faction)
+                    if not target_capital:
+                        span.set_status(trace.StatusCode.ERROR, "No friendly capital on this map")
+                        return jsonify({
+                            "success": False,
+                            "message": "No friendly capital to send resources to"
+                        }), 400
                     path = self._find_path(target_capital, PathType.RESOURCE)
                     if not path:
                         span.set_status(trace.StatusCode.ERROR, "No valid path to capital")
@@ -1079,5 +1490,12 @@ class LocationServer:
     
     def run(self):
         port = self.location_info["port"]
-        self.app.run(host='0.0.0.0', port=port) 
+        self.app.run(host='0.0.0.0', port=port)
         self.logger.info(f"Location server running on port {port}")
+
+
+if __name__ == '__main__':
+    # Docker entrypoint: read SLOT_ID env var, resolve identity from the
+    # shared active_map_id, and serve. SERVICE_NAME comes from LOCATION_NAME
+    # (set per-container in docker-compose.yml) or is synthesised from slot.
+    LocationServer().run()

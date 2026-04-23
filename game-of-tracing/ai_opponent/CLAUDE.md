@@ -4,7 +4,14 @@
 
 ## Purpose
 
-`ai-opponent` is a Flask service on port **8081** that takes control of a faction's capital and makes strategic decisions on a recurring loop. It is activated by `war_map` via `POST /activate` (with the faction as payload) when the player toggles "Enable AI Opponent". The AI then:
+`ai-opponent` is a Flask service on port **8081** that takes control of a faction and makes strategic decisions on a recurring loop. It is activated by `war_map` via `POST /activate` with JSON body `{"faction": ..., "map_id": ...}` — on the WoK map the player toggles it on manually; on WWA it auto-activates as `white_walkers` the moment the player picks the map.
+
+Two AI variants dispatch off the `faction` field at activation time:
+
+- **`StrategicAI`** — classic WoK opponent (southern / northern). 6-step priority cascade: capital defense → zero-risk captures → resource transfers → plan execution → plan creation → fallback.
+- **`WhiteWalkerAI(StrategicAI)`** — single-player WWA opponent. Different cascade: defend fortress → capture unowned wall → reinforce weakest wall → raid barbarian village (for corpses) → raise army from corpses (at fortress) → idle. Reads its corpse pool via `GET /faction_economy?faction=white_walkers` on any location service; spends 5 corpses per army unit instead of 30 resources.
+
+Common to both: the AI:
 
 - Fetches the state of all 8 locations.
 - Runs a priority cascade of checks to decide the next action (defend, capture, transfer, plan, fallback).

@@ -23,22 +23,109 @@ atexit.register(telemetry.shutdown)
 
 # ─── Constants ─────────────────────────────────────────────────────────────────
 
-MAP_GRAPH = {
-    "southern_capital": ["village_1", "village_3"],
-    "northern_capital": ["village_2", "village_6"],
-    "village_1": ["southern_capital", "village_2", "village_4"],
-    "village_2": ["northern_capital", "village_1", "village_5"],
-    "village_3": ["southern_capital", "village_5", "village_6"],
-    "village_4": ["village_1", "village_5"],
-    "village_5": ["village_2", "village_3", "village_4", "village_6"],
-    "village_6": ["northern_capital", "village_3", "village_5"],
+# Per-map adjacency lists. Keep keys in sync with
+# game-of-tracing/app/game_config.py's MAPS[*]["locations"][*]["connections"].
+MAP_GRAPHS_BY_MAP = {
+    "war_of_kingdoms": {
+        "southern_capital": ["village_1", "village_3"],
+        "northern_capital": ["village_2", "village_6"],
+        "village_1": ["southern_capital", "village_2", "village_4"],
+        "village_2": ["northern_capital", "village_1", "village_5"],
+        "village_3": ["southern_capital", "village_5", "village_6"],
+        "village_4": ["village_1", "village_5"],
+        "village_5": ["village_2", "village_3", "village_4", "village_6"],
+        "village_6": ["northern_capital", "village_3", "village_5"],
+    },
+    "white_walkers_attack": {
+        "nights_watch_fortress": [
+            "wall_west", "wall_center_west", "wall_center_east", "wall_east",
+        ],
+        "white_walker_fortress": [
+            "wall_west", "wall_center_west", "wall_center_east", "wall_east",
+        ],
+        "wall_west": [
+            "nights_watch_fortress", "white_walker_fortress",
+            "wall_center_west", "barbarian_village_west",
+        ],
+        "wall_center_west": [
+            "nights_watch_fortress", "white_walker_fortress",
+            "wall_west", "wall_center_east",
+        ],
+        "wall_center_east": [
+            "nights_watch_fortress", "white_walker_fortress",
+            "wall_center_west", "wall_east",
+        ],
+        "wall_east": [
+            "nights_watch_fortress", "white_walker_fortress",
+            "wall_center_east", "barbarian_village_east",
+        ],
+        "barbarian_village_west": ["wall_west"],
+        "barbarian_village_east": ["wall_east"],
+    },
 }
+
+# Per-map capital mapping (faction -> location_id of that faction's capital).
+CAPITALS_BY_MAP = {
+    "war_of_kingdoms": {
+        "southern": "southern_capital",
+        "northern": "northern_capital",
+    },
+    "white_walkers_attack": {
+        "nights_watch": "nights_watch_fortress",
+        "white_walkers": "white_walker_fortress",
+    },
+}
+
+# Per-map location type lookup (capital / village / wall).
+LOCATION_TYPES_BY_MAP = {
+    "war_of_kingdoms": {
+        "southern_capital": "capital", "northern_capital": "capital",
+        "village_1": "village", "village_2": "village", "village_3": "village",
+        "village_4": "village", "village_5": "village", "village_6": "village",
+    },
+    "white_walkers_attack": {
+        "nights_watch_fortress": "capital",
+        "white_walker_fortress": "capital",
+        "wall_west": "wall", "wall_center_west": "wall",
+        "wall_center_east": "wall", "wall_east": "wall",
+        "barbarian_village_west": "village",
+        "barbarian_village_east": "village",
+    },
+}
+
+# Per-map location faction (static initial ownership — what the AI reasons
+# about for walls-are-neutral / barbarian-villages-are-barbarian etc.).
+INITIAL_FACTIONS_BY_MAP = {
+    "war_of_kingdoms": {
+        "southern_capital": "southern", "northern_capital": "northern",
+        "village_1": "neutral", "village_2": "neutral", "village_3": "neutral",
+        "village_4": "neutral", "village_5": "neutral", "village_6": "neutral",
+    },
+    "white_walkers_attack": {
+        "nights_watch_fortress": "nights_watch",
+        "white_walker_fortress": "white_walkers",
+        "wall_west": "neutral", "wall_center_west": "neutral",
+        "wall_center_east": "neutral", "wall_east": "neutral",
+        "barbarian_village_west": "barbarian",
+        "barbarian_village_east": "barbarian",
+    },
+}
+
+# Per-map army cost per faction. Matches app/game_config.py's rules.army_cost.
+ARMY_COST_BY_MAP = {
+    "war_of_kingdoms": {"default": 30},
+    "white_walkers_attack": {"default": 30, "white_walkers": 5},
+}
+
+# Backward-compat alias: legacy code that references MAP_GRAPH still sees WoK.
+MAP_GRAPH = MAP_GRAPHS_BY_MAP["war_of_kingdoms"]
 
 ARMY_COST = 30
 VILLAGE_INCOME_PER_MIN = 40  # ~10 resources every 15s
 RESOURCE_TRANSFER_THRESHOLD = 30
 
-# Location configuration (matches game_config.py)
+# Single port table keyed by location id (same ports are shared across maps
+# because a slot's port is fixed and each map just renames the slot).
 LOCATION_PORTS = {
     "southern_capital": 5001,
     "northern_capital": 5002,
@@ -47,8 +134,60 @@ LOCATION_PORTS = {
     "village_3": 5005,
     "village_4": 5006,
     "village_5": 5007,
-    "village_6": 5008
+    "village_6": 5008,
+    # White Walkers Attack aliases (same physical slot → same port).
+    "nights_watch_fortress": 5001,
+    "white_walker_fortress": 5002,
+    "wall_west": 5003,
+    "wall_center_west": 5004,
+    "wall_center_east": 5005,
+    "wall_east": 5006,
+    "barbarian_village_west": 5007,
+    "barbarian_village_east": 5008,
 }
+
+# Container hostname per logical location id (resolves HTTP URLs in docker).
+CONTAINER_FOR_LOCATION_ID = {
+    # WoK ids are their own container names.
+    "southern_capital": "southern-capital",
+    "northern_capital": "northern-capital",
+    "village_1": "village-1",
+    "village_2": "village-2",
+    "village_3": "village-3",
+    "village_4": "village-4",
+    "village_5": "village-5",
+    "village_6": "village-6",
+    # WWA ids share containers with their slot peer.
+    "nights_watch_fortress": "southern-capital",
+    "white_walker_fortress": "northern-capital",
+    "wall_west": "village-1",
+    "wall_center_west": "village-2",
+    "wall_center_east": "village-3",
+    "wall_east": "village-4",
+    "barbarian_village_west": "village-5",
+    "barbarian_village_east": "village-6",
+}
+
+
+def get_map_graph(map_id):
+    return MAP_GRAPHS_BY_MAP.get(map_id, MAP_GRAPH)
+
+
+def get_capitals(map_id):
+    return CAPITALS_BY_MAP.get(map_id, CAPITALS_BY_MAP["war_of_kingdoms"])
+
+
+def get_location_types(map_id):
+    return LOCATION_TYPES_BY_MAP.get(map_id, LOCATION_TYPES_BY_MAP["war_of_kingdoms"])
+
+
+def get_initial_factions(map_id):
+    return INITIAL_FACTIONS_BY_MAP.get(map_id, INITIAL_FACTIONS_BY_MAP["war_of_kingdoms"])
+
+
+def get_army_cost_for(map_id, faction):
+    costs = ARMY_COST_BY_MAP.get(map_id, ARMY_COST_BY_MAP["war_of_kingdoms"])
+    return costs.get(faction, costs["default"])
 
 # ─── Game Phase ────────────────────────────────────────────────────────────────
 
@@ -64,7 +203,12 @@ class GamePhase(Enum):
 class MapAnalyzer:
     """Precomputed map analysis: BFS distances, strategic values, path army estimation."""
 
-    def __init__(self):
+    def __init__(self, graph=None, capitals=None):
+        # ``graph`` defaults to WoK to preserve legacy behaviour; new callers
+        # pass the active map's adjacency list. ``capitals`` is the map's
+        # faction→capital dict (needed for the strategic-value heuristic).
+        self.graph = graph if graph is not None else MAP_GRAPH
+        self.capitals = capitals if capitals is not None else CAPITALS_BY_MAP["war_of_kingdoms"]
         self.distances = self._compute_all_distances()
         self.strategic_values = self._compute_strategic_values()
 
@@ -74,7 +218,7 @@ class MapAnalyzer:
         queue = deque([start])
         while queue:
             node = queue.popleft()
-            for neighbor in MAP_GRAPH[node]:
+            for neighbor in self.graph[node]:
                 if neighbor not in visited:
                     visited[neighbor] = visited[node] + 1
                     queue.append(neighbor)
@@ -82,18 +226,25 @@ class MapAnalyzer:
 
     def _compute_all_distances(self):
         """Precompute all-pairs BFS distances."""
-        return {loc: self._bfs_distances(loc) for loc in MAP_GRAPH}
+        return {loc: self._bfs_distances(loc) for loc in self.graph}
 
     def _compute_strategic_values(self):
         """Score each location by connectivity + centrality.
-        Village 5 scores highest (4 connections, center of map)."""
+
+        High connectivity or short distance to either capital = valuable.
+        Works identically across maps because it reads capitals from the
+        per-map mapping rather than hardcoding WoK's capital names.
+        """
         values = {}
-        for loc in MAP_GRAPH:
-            connections = len(MAP_GRAPH[loc])
-            avg_capital_dist = (
-                self.distances[loc].get("southern_capital", 99) +
-                self.distances[loc].get("northern_capital", 99)
-            ) / 2.0
+        capital_ids = list(self.capitals.values())
+        for loc in self.graph:
+            connections = len(self.graph[loc])
+            if capital_ids:
+                avg_capital_dist = sum(
+                    self.distances[loc].get(cap, 99) for cap in capital_ids
+                ) / float(len(capital_ids))
+            else:
+                avg_capital_dist = 99
             values[loc] = connections + (4.0 / max(avg_capital_dist, 1))
         return values
 
@@ -101,7 +252,7 @@ class MapAnalyzer:
         return self.distances[a].get(b, 99)
 
     def neighbors(self, loc):
-        return MAP_GRAPH.get(loc, [])
+        return self.graph.get(loc, [])
 
     def path_army_estimate(self, game_state, from_loc, to_loc, my_faction):
         """Estimate total enemy army along BFS shortest path from from_loc to to_loc."""
@@ -111,7 +262,7 @@ class MapAnalyzer:
             node = queue.popleft()
             if node == to_loc:
                 break
-            for neighbor in MAP_GRAPH[node]:
+            for neighbor in self.graph[node]:
                 if neighbor not in parent:
                     parent[neighbor] = node
                     queue.append(neighbor)
@@ -268,11 +419,14 @@ class Planner:
 class StrategicAI:
     """Main decision engine with priority cascade."""
 
-    def __init__(self, faction):
+    def __init__(self, faction, map_id="war_of_kingdoms"):
         self.faction = faction
-        self.my_capital = "southern_capital" if faction == "southern" else "northern_capital"
-        self.enemy_capital = "northern_capital" if faction == "southern" else "southern_capital"
-        self.map = MapAnalyzer()
+        self.map_id = map_id
+        capitals = get_capitals(map_id)
+        self.my_capital = capitals.get(faction)
+        enemies = [cap for fac, cap in capitals.items() if fac != faction]
+        self.enemy_capital = enemies[0] if enemies else None
+        self.map = MapAnalyzer(graph=get_map_graph(map_id), capitals=capitals)
         self.memory = GameMemory()
         self.planner = Planner()
         self.phase = GamePhase.BALANCED
@@ -282,6 +436,8 @@ class StrategicAI:
         self._previous_phase = None
         self._previous_territories = set()
         self._last_evaluated = []
+        # Army cost for this faction on this map.
+        self.army_cost = get_army_cost_for(map_id, faction)
 
     def decide(self, game_state):
         """Run the priority cascade and return an action dict or None."""
@@ -780,11 +936,260 @@ class StrategicAI:
         else:
             return random.randint(5, 15)
 
+
+# ─── White Walkers AI ─────────────────────────────────────────────────────────
+
+class WhiteWalkerAI(StrategicAI):
+    """Single-player opponent on the White Walkers Attack map.
+
+    Economy: corpses, not resources. Corpses come from winning battles and
+    passive generation at the fortress. Army units cost
+    ``ARMY_COST_BY_MAP["white_walkers_attack"]["white_walkers"]`` corpses.
+
+    Priority cascade (replaces ``StrategicAI.decide``):
+
+      1. Defend the fortress when enemies are adjacent and the garrison is
+         outnumbered.
+      2. Capture any wall that the White Walkers do not already control,
+         preferring the wall that needs the fewest attacking troops to beat
+         its 2× defender multiplier.
+      3. Reinforce the weakest White Walker-held wall.
+      4. Raid the nearest barbarian village whose army is less than or equal
+         to the closest White Walker garrison — a clean harvest for corpses.
+      5. If corpses are at or above the army cost and the fortress holds any
+         troops, raise a new undead unit.
+      6. No-op fallback (corpse stream keeps flowing via the passive tick).
+    """
+
+    def decide(self, game_state):
+        self.my_territories, self.enemy_territories = self.memory.update(
+            game_state, self.faction
+        )
+        self.total_army = sum(
+            data.get('army', 0) for loc, data in game_state.items()
+            if data.get('faction') == self.faction
+        )
+        self.phase = PhaseDetector.detect(
+            self.my_territories, self.enemy_territories, self.total_army
+        )
+
+        span = trace.get_current_span()
+        span.set_attribute("ai.variant", "white_walkers")
+        span.set_attribute("game.map.id", self.map_id)
+
+        corpses = fetch_faction_corpses(self.faction)
+        span.set_attribute("ai.corpse_pool", corpses)
+
+        evaluated = []
+
+        action = self._defend_fortress(game_state)
+        if action:
+            evaluated.append(f"defend_fortress: TRIGGERED ({action.get('reason', '')})")
+            self._last_evaluated = evaluated
+            return action
+        evaluated.append("defend_fortress: skipped")
+
+        action = self._capture_unowned_wall(game_state)
+        if action:
+            evaluated.append(f"capture_wall: TRIGGERED ({action.get('reason', '')})")
+            self._last_evaluated = evaluated
+            return action
+        evaluated.append("capture_wall: skipped")
+
+        action = self._reinforce_weakest_wall(game_state)
+        if action:
+            evaluated.append(f"reinforce_wall: TRIGGERED ({action.get('reason', '')})")
+            self._last_evaluated = evaluated
+            return action
+        evaluated.append("reinforce_wall: skipped")
+
+        action = self._raid_barbarian(game_state)
+        if action:
+            evaluated.append(f"raid_barbarian: TRIGGERED ({action.get('reason', '')})")
+            self._last_evaluated = evaluated
+            return action
+        evaluated.append("raid_barbarian: skipped")
+
+        action = self._raise_army_from_corpses(game_state, corpses)
+        if action:
+            evaluated.append(f"raise_army: TRIGGERED ({action.get('reason', '')})")
+            self._last_evaluated = evaluated
+            return action
+        evaluated.append("raise_army: skipped")
+
+        self._last_evaluated = evaluated
+        return self._passive_fallback()
+
+    # ── Cascade helpers ───────────────────────────────────────────────────────
+
+    def _defend_fortress(self, game_state):
+        cap_data = game_state.get(self.my_capital, {})
+        if not cap_data or cap_data.get('faction') != self.faction:
+            return None
+
+        garrison = cap_data.get('army', 0)
+        max_threat = 0
+        threat_loc = None
+        for n in self.map.neighbors(self.my_capital):
+            n_data = game_state.get(n, {})
+            n_faction = n_data.get('faction')
+            if n_faction and n_faction != self.faction and n_faction != 'barbarian':
+                if n_data.get('army', 0) > max_threat:
+                    max_threat = n_data['army']
+                    threat_loc = n
+        if max_threat == 0 or max_threat <= garrison:
+            return None
+
+        # Pull back from the strongest adjacent wall we own (if any).
+        best_source = None
+        best_army = 0
+        for wall in self._walls():
+            w_data = game_state.get(wall, {})
+            if w_data.get('faction') == self.faction and w_data.get('army', 0) > best_army:
+                best_source = wall
+                best_army = w_data['army']
+        if best_source:
+            return {
+                "action": "move_army",
+                "from": best_source,
+                "to": self.my_capital,
+                "reason": f"defend fortress vs {threat_loc} ({max_threat} army)",
+            }
+        return None
+
+    def _capture_unowned_wall(self, game_state):
+        best = None
+        best_cost = float("inf")
+        for wall in self._walls():
+            w_data = game_state.get(wall, {})
+            if w_data.get('faction') == self.faction:
+                continue
+            defender = w_data.get('army', 0)
+            # Wall multiplier = 2 — must exceed 2 * defender to take it.
+            needed = 2 * defender + 1
+            source, source_army = self._nearest_source_with_army(game_state, wall, needed)
+            if source is None:
+                continue
+            total_cost = needed
+            if total_cost < best_cost:
+                best_cost = total_cost
+                best = (source, wall, defender)
+        if best is None:
+            return None
+        source, wall, defender = best
+        return {
+            "action": "move_army",
+            "from": source,
+            "to": self._step_toward(source, wall),
+            "reason": f"capture {wall} (defender {defender}, needed {best_cost})",
+        }
+
+    def _reinforce_weakest_wall(self, game_state):
+        mine = [
+            (w, game_state.get(w, {}).get('army', 0))
+            for w in self._walls()
+            if game_state.get(w, {}).get('faction') == self.faction
+        ]
+        if not mine:
+            return None
+        weakest, _ = min(mine, key=lambda item: item[1])
+        # Look for a friendly neighbour with spare army to send.
+        for n in self.map.neighbors(weakest):
+            n_data = game_state.get(n, {})
+            if n_data.get('faction') == self.faction and n_data.get('army', 0) > 1 and n != self.my_capital:
+                return {
+                    "action": "move_army",
+                    "from": n,
+                    "to": weakest,
+                    "reason": f"reinforce {weakest} from {n}",
+                }
+        return None
+
+    def _raid_barbarian(self, game_state):
+        targets = [
+            loc for loc, t in get_location_types(self.map_id).items()
+            if t == "village"
+            and get_initial_factions(self.map_id).get(loc) == "barbarian"
+            and game_state.get(loc, {}).get('faction') == "barbarian"
+        ]
+        if not targets:
+            return None
+
+        best = None
+        best_margin = -1
+        for target in targets:
+            defender = game_state.get(target, {}).get('army', 0)
+            source, source_army = self._nearest_source_with_army(
+                game_state, target, defender + 1
+            )
+            if source is None:
+                continue
+            margin = source_army - defender
+            if margin > best_margin:
+                best_margin = margin
+                best = (source, target, defender)
+        if best is None:
+            return None
+        source, target, defender = best
+        return {
+            "action": "move_army",
+            "from": source,
+            "to": self._step_toward(source, target),
+            "reason": f"raid {target} (defender {defender}) for corpses",
+        }
+
+    def _raise_army_from_corpses(self, game_state, corpses):
+        # Only raise when the fortress has at least 1 garrison to wrap the
+        # new unit around, so the fresh army is defensible.
+        cap_data = game_state.get(self.my_capital, {})
+        if cap_data.get('faction') != self.faction or cap_data.get('army', 0) < 1:
+            return None
+        if corpses < self.army_cost:
+            return None
+        return {
+            "action": "create_army",
+            "location": self.my_capital,
+            "count": 1,
+            "reason": f"raise undead ({corpses} corpses, cost {self.army_cost})",
+        }
+
+    def _passive_fallback(self):
+        # No-op for White Walkers: the passive corpse tick handles "idle".
+        return {
+            "action": "noop",
+            "reason": "passive: corpses accumulate at fortress",
+        }
+
+    # ── Utility ───────────────────────────────────────────────────────────────
+
+    def _walls(self):
+        types = get_location_types(self.map_id)
+        return [loc for loc, t in types.items() if t == "wall"]
+
+    def _nearest_source_with_army(self, game_state, target, needed):
+        """Return the (location_id, army) of the closest friendly node with
+        at least ``needed`` troops, or ``(None, 0)`` if nothing qualifies.
+        """
+        best = (None, 0)
+        best_dist = float("inf")
+        for loc, data in game_state.items():
+            if data.get('faction') != self.faction:
+                continue
+            if data.get('army', 0) < needed:
+                continue
+            dist = self.map.distance(loc, target)
+            if dist < best_dist:
+                best = (loc, data.get('army', 0))
+                best_dist = dist
+        return best
+
+
 # ─── AI State ──────────────────────────────────────────────────────────────────
 
 class AIState:
     def __init__(self):
         self.faction = None
+        self.map_id = "war_of_kingdoms"
         self.active = False
         self.last_action_time = None
         self.game_start_time = None
@@ -797,14 +1202,37 @@ ai_state = AIState()
 # ─── Preserved Helpers ─────────────────────────────────────────────────────────
 
 def get_location_url(location_id):
-    """Get the URL for a location's API"""
+    """Get the URL for a location's API.
+
+    Container hostnames in docker-compose are the stable WoK names
+    (``southern-capital``, ``village-1`` …). On WWA the *logical* location id
+    differs (``wall_west`` → still lives on container ``village-1``), so we
+    look up the container via ``CONTAINER_FOR_LOCATION_ID`` rather than
+    naively hyphenating the location id.
+    """
     if os.environ.get('IN_DOCKER'):
-        host = location_id.replace('_', '-')
+        host = CONTAINER_FOR_LOCATION_ID.get(location_id, location_id.replace('_', '-'))
     else:
         host = 'localhost'
 
     port = LOCATION_PORTS[location_id]
     return f"http://{host}:{port}"
+
+
+def fetch_faction_corpses(faction):
+    """Query any location service for the faction's corpse pool. Returns 0 on error."""
+    # Use slot_1 (southern-capital container); any container is fine since
+    # the DB is shared.
+    try:
+        if os.environ.get('IN_DOCKER'):
+            base = "http://southern-capital:5001"
+        else:
+            base = "http://localhost:5001"
+        resp = requests.get(f"{base}/faction_economy", params={"faction": faction}, timeout=2)
+        resp.raise_for_status()
+        return int(resp.json().get("corpses", 0))
+    except Exception:
+        return 0
 
 def make_api_request(location_id, endpoint, method='GET', data=None):
     """Make an API request to a location server with trace context"""
@@ -843,17 +1271,24 @@ def make_api_request(location_id, endpoint, method='GET', data=None):
             return {"error": str(e)}
 
 def get_game_state(parent_ctx):
-    """Get the current state of all locations"""
+    """Get the current state of every location on the currently active map."""
+    # Which set of location ids belongs to this AI's map? Fall back to
+    # WoK's 8 ids if AI isn't initialised yet.
+    if ai_state.strategic_ai is not None:
+        location_ids = list(get_map_graph(ai_state.strategic_ai.map_id).keys())
+    else:
+        location_ids = list(MAP_GRAPH.keys())
+
     with tracer.start_as_current_span(
         "get_game_state",
         kind=SpanKind.INTERNAL,
         context=parent_ctx,
-        attributes={"location_count": len(LOCATION_PORTS)}
+        attributes={"location_count": len(location_ids)}
     ) as span:
         game_state = {}
         error_count = 0
 
-        for location_id in LOCATION_PORTS.keys():
+        for location_id in location_ids:
             data = make_api_request(location_id, '')
             if 'error' not in data:
                 game_state[location_id] = data
@@ -951,6 +1386,14 @@ def execute_strategic_action(action, game_state, parent_ctx, decision_link=None)
                     result = make_api_request(loc, 'send_resources_to_capital', method='POST')
                     logger.info("AI transferred resources", extra={"from_location": loc})
                 span.set_attribute("transfers_count", len(locations))
+
+            elif action_type == "noop":
+                # WhiteWalkerAI uses ``noop`` as a quiet-tick fallback when
+                # corpses are accruing but no actionable move exists. Still
+                # emit a span so replay shows the AI was awake but chose not
+                # to act.
+                span.set_attribute("ai.cycle.idle", True)
+                logger.debug("AI idle cycle", extra={"reason": reason})
 
         except Exception as e:
             span.record_exception(e)
@@ -1059,21 +1502,45 @@ def ai_decision_loop():
 
 @app.route('/activate', methods=['POST'])
 def activate_ai():
-    """Activate the AI for a specific faction"""
-    data = request.get_json()
-    faction = data.get('faction')
+    """Activate the AI for a specific faction on a specific map.
 
-    if faction not in ['southern', 'northern']:
+    Accepts ``{"faction": ..., "map_id": ...}``. Defaults to
+    War of Kingdoms when ``map_id`` is omitted (backward compat).
+    Dispatches to ``WhiteWalkerAI`` when the requested faction is
+    ``white_walkers``; otherwise uses the classic ``StrategicAI``.
+    """
+    data = request.get_json() or {}
+    faction = data.get('faction')
+    map_id = data.get('map_id', 'war_of_kingdoms')
+
+    valid_factions = set()
+    for m in CAPITALS_BY_MAP.values():
+        valid_factions.update(m.keys())
+    if faction not in valid_factions:
         return jsonify({"success": False, "message": "Invalid faction"}), 400
+
+    if map_id not in MAP_GRAPHS_BY_MAP:
+        return jsonify({"success": False, "message": f"Unknown map_id: {map_id}"}), 400
+
+    if faction not in get_capitals(map_id):
+        return jsonify({
+            "success": False,
+            "message": f"Faction {faction} is not valid on map {map_id}"
+        }), 400
 
     if ai_state.active:
         return jsonify({"success": False, "message": "AI already active"}), 400
 
     ai_state.faction = faction
+    ai_state.map_id = map_id
     ai_state.active = True
     ai_state.game_start_time = datetime.now()
     ai_state.stop_flag.clear()
-    ai_state.strategic_ai = StrategicAI(faction)
+
+    if faction == "white_walkers":
+        ai_state.strategic_ai = WhiteWalkerAI(faction, map_id=map_id)
+    else:
+        ai_state.strategic_ai = StrategicAI(faction, map_id=map_id)
 
     # Register state callback for observable gauges
     telemetry.set_state_callback(lambda: {
@@ -1082,12 +1549,28 @@ def activate_ai():
         "faction": ai_state.faction or "unknown",
     } if ai_state.strategic_ai else None)
 
+    # Corpse-pool gauge: only meaningful for White Walkers. For other AIs
+    # the callback returns None so the gauge stays unobserved.
+    def _corpse_cb():
+        if ai_state.faction == "white_walkers":
+            return ("white_walkers", fetch_faction_corpses("white_walkers"))
+        return None
+    telemetry.set_corpse_callback(_corpse_cb)
+
     # Start AI decision thread
     ai_state.decision_thread = threading.Thread(target=ai_decision_loop, daemon=True)
     ai_state.decision_thread.start()
 
-    logger.info("AI activated", extra={"faction": faction})
-    return jsonify({"success": True, "message": f"AI activated for {faction} faction"})
+    logger.info(
+        "AI activated",
+        extra={"faction": faction, "map_id": map_id, "variant": type(ai_state.strategic_ai).__name__},
+    )
+    return jsonify({
+        "success": True,
+        "message": f"AI activated for {faction} faction on {map_id}",
+        "map_id": map_id,
+        "variant": type(ai_state.strategic_ai).__name__,
+    })
 
 @app.route('/deactivate', methods=['POST'])
 def deactivate_ai():
