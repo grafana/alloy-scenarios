@@ -53,8 +53,10 @@ helm install --values grafana-values.yml grafana grafana/grafana -n meta
 
 ## Install the K8s Monitoring Helm Chart
 
+This scenario requires `grafana/k8s-monitoring` chart v4 or later.
+
 ```bash
-helm install --values k8s-monitoring-values.yml k8s grafana/k8s-monitoring -n meta
+helm install --values k8s-monitoring-values.yml k8s grafana/k8s-monitoring --version "^4.0.0" -n meta
 ```
 
 ## Accessing the Grafana UI
