@@ -5,7 +5,9 @@
     {
       "customType": "regex",
       "description": "Bump every VERSION variable in image-versions.env. Each line is preceded by a `# renovate: datasource=… depName=…` comment that tells the bot what the variable refers to.",
-      "fileMatch": ["^image-versions\\.env$"],
+      "managerFilePatterns": [
+        "/^image-versions\\.env$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>.+?) depName=(?<depName>.+?)\\s+\\w+_VERSION=(?<currentValue>.+)"
       ]
@@ -13,7 +15,9 @@
     {
       "customType": "regex",
       "description": "Bump grafana/k8s-monitoring chart version pinned in k8s/*/README.md install commands. The other two charts in each scenario (backend + grafana) are intentionally unpinned (`helm install` resolves latest at run time), so only k8s-monitoring needs tracking.",
-      "fileMatch": ["^k8s/.+/README\\.md$"],
+      "managerFilePatterns": [
+        "/^k8s/.+/README\\.md$/"
+      ],
       "matchStrings": [
         "grafana/k8s-monitoring --version \"(?<currentValue>[^\"]+)\""
       ],
