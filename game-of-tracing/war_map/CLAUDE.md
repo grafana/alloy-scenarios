@@ -20,7 +20,7 @@
 | File | Size | Purpose |
 |---|---|---|
 | `app.py` | ~64 KB | Flask app, session/player management, span-link broker, Tempo proxy for replay, AI activation control. |
-| `telemetry.py` | ~3 KB | `GameTelemetry` — traces + logs only (no custom metrics). |
+| `telemetry.py` | ~3 KB | `GameTelemetry` — traces + logs (no custom metrics), plus Pyroscope profiling with OTel span-profile linkage. |
 | `templates/index.html` | ~7 KB | Faction selection screen. |
 | `templates/map.html` | ~50 KB | Main SVG-based game map with real-time updates. |
 | `templates/layout.html` | ~4 KB | Shared layout chrome. |
@@ -28,7 +28,7 @@
 | `templates/replay_session.html` | ~28 KB | Per-session trace-replay UI — the consumer of the span-link chain. |
 | `static/css/style.css` | — | UI styling. |
 | `Dockerfile` | small | `python:3.11-slim`, runs `python app.py`. |
-| `requirements.txt` | small | Flask 3.1.3, requests 2.33.0, python-dotenv 1.2.2, OpenTelemetry SDK/API + exporters. |
+| `requirements.txt` | small | Flask 3.1.3, requests 2.33.1, python-dotenv 1.2.2, OpenTelemetry SDK/API + exporters, `pyroscope-io` + `pyroscope-otel` for profiling. |
 
 ## The span-link broker (the critical bit)
 

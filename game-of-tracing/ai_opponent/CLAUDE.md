@@ -26,10 +26,10 @@ Common to both: the AI:
 | File | Size | Purpose |
 |---|---|---|
 | `ai_server.py` | ~46 KB | Main decision engine: `StrategicAI`, `PhaseDetector`, `Planner`, `MapAnalyzer`, Flask routes, decision loop. |
-| `telemetry.py` | ~7.7 KB | `GameTelemetry` class for `ai-opponent` with AI-specific metrics. |
+| `telemetry.py` | ~7.7 KB | `AITelemetry` class for `ai-opponent` — traces, logs, AI-specific metrics, plus Pyroscope profiling with OTel span-profile linkage. |
 | `README.md` | ~2.6 KB | Feature doc. |
 | `Dockerfile` | small | `python:3.11-slim`, `pip install -r requirements.txt`, runs `python ai_server.py`. |
-| `requirements.txt` | small | Flask 3.1.3, requests 2.33.0, OpenTelemetry SDK/API + exporters. |
+| `requirements.txt` | small | Flask 3.1.3, requests 2.33.1, OpenTelemetry SDK/API + exporters, `pyroscope-io` + `pyroscope-otel` for profiling. |
 
 ## Decision model
 
