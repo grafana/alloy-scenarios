@@ -285,13 +285,21 @@ jobs:
             echo "::notice::No third-party images to scan in this scenario (all services build locally)."
           fi
 
-      - name: Trivy scan each image
+      - name: Trivy scan each image (advisory)
         # Run trivy via its own docker image (digest-pinned). No
         # docker.sock mount: trivy pulls the target image itself rather
         # than reaching into the host's docker — keeps the trivy
         # container from gaining root-equivalent access on the runner.
-        # The TRIVY_DB env vars are read by trivy to know where to fetch
-        # vuln DBs; the defaults are fine and resolve to ghcr.io.
+        #
+        # Advisory mode: HIGH/CRITICAL findings are reported via the job
+        # log + step summary table + ::warning:: annotations, but the
+        # step always exits 0. These are demo scenarios; upstream LGMT
+        # images regularly carry HIGH-with-fix findings between releases
+        # and blocking every PR until they catch up isn't useful. Treat
+        # the report as a signal to bump base images, not a merge gate.
+        env:
+          # Suppress ANSI escapes so the log + summary parse cleanly
+          NO_COLOR: '1'
         run: |
           set -euo pipefail
           TRIVY_IMAGE='aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e'
@@ -300,24 +308,63 @@ jobs:
           docker pull "$TRIVY_IMAGE"
 
           mkdir -p /tmp/trivy-cache
-          fail=0
+          report_log=/tmp/trivy-output.log
+          : > "$report_log"
+
           while IFS= read -r img; do
             [ -z "$img" ] && continue
             echo "::group::Scanning $img"
-            if ! docker run --rm \
+            echo "=== $img ===" >> "$report_log"
+            # `|| true` so a non-zero trivy exit (had findings) doesn't
+            # abort the loop — we want to scan every image.
+            docker run --rm \
+                -e NO_COLOR=1 \
                 -v /tmp/trivy-cache:/root/.cache/trivy \
                 "$TRIVY_IMAGE" image \
                 --severity HIGH,CRITICAL \
                 --ignore-unfixed \
-                --exit-code 1 \
                 --no-progress \
                 --timeout 5m \
-                "$img"; then
-              fail=1
-            fi
+                "$img" 2>&1 | tee -a "$report_log" || true
             echo "::endgroup::"
           done < /tmp/images.txt
-          exit $fail
+
+          # Per-image summary table for the PR's step summary.
+          {
+            echo "## CVE scan: ${{ matrix.scenario }}"
+            echo
+            if [ ! -s /tmp/images.txt ]; then
+              echo "_No third-party images to scan (all services build locally)._"
+            else
+              echo "| Image | HIGH | CRITICAL |"
+              echo "|---|---:|---:|"
+              current=""
+              h=0; c=0
+              while IFS= read -r line; do
+                if [[ "$line" =~ ^===\ (.+)\ ===$ ]]; then
+                  if [ -n "$current" ]; then
+                    echo "| \`$current\` | $h | $c |"
+                  fi
+                  current="${BASH_REMATCH[1]}"
+                  h=0; c=0
+                elif [[ "$line" =~ Total:\ [0-9]+\ \(HIGH:\ ([0-9]+),\ CRITICAL:\ ([0-9]+)\) ]]; then
+                  h=$((h + ${BASH_REMATCH[1]}))
+                  c=$((c + ${BASH_REMATCH[2]}))
+                fi
+              done < "$report_log"
+              if [ -n "$current" ]; then
+                echo "| \`$current\` | $h | $c |"
+              fi
+              echo
+              echo "_HIGH+CRITICAL counts are unfixed CVEs with patches available upstream. Findings here don't block merge — see the job log for the full per-CVE table. Upgrade base images via the relevant renovate PR when fixes appear in a published release._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Emit a single ::warning:: if anything was found, so the PR
+          # gets an inline annotation pointing at the job summary.
+          if grep -qE 'Total:\ [^0]' "$report_log"; then
+            echo "::warning::trivy found HIGH/CRITICAL unfixed CVEs in scanned images for ${{ matrix.scenario }}. See job summary for per-image counts and the log for details."
+          fi
 
   # ──────────────────────────────────────────────────────────────────
   # smoke: For each affected scenario, boot it via run-example.sh,
