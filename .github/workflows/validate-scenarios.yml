@@ -263,11 +263,27 @@ jobs:
             echo "No docker-compose found for ${{ matrix.scenario }}" >&2
             exit 1
           fi
+
+          # `docker compose config --images` returns service-name defaults
+          # like `game-of-tracing-ai-opponent` for `build:`-only services
+          # — those don't exist in any registry, so trivy fails with
+          # UNAUTHORIZED. Filter to services with an explicit `image:`
+          # field (third-party registry artifacts only). Locally-built
+          # images aren't directly scanned; their FROM base image (e.g.
+          # python:3.11-slim) lives in the Dockerfile and is tracked
+          # separately by renovate's docker manager.
           docker compose -f "$compose_file" \
             --env-file image-versions.env \
-            config --images | sort -u > /tmp/images.txt
+            config --format json \
+            | jq -r '.services | to_entries[]
+                     | select(.value.image != null)
+                     | .value.image' \
+            | sort -u > /tmp/images.txt
           echo "Images to scan:"
           cat /tmp/images.txt
+          if [ ! -s /tmp/images.txt ]; then
+            echo "::notice::No third-party images to scan in this scenario (all services build locally)."
+          fi
 
       - name: Trivy scan each image
         # Run trivy via its own docker image (digest-pinned). No
