@@ -60,6 +60,26 @@
             <!-- Location Markers (added dynamically) -->
             <div id="mapMarkers"></div>
 
+            {% if wall_hold %}
+            <!-- Wall-hold HUD (WWA win-condition tracker) -->
+            <div class="wall-hold-hud" id="wallHoldHud">
+                <h6><i class="fas fa-gavel me-1"></i>Wall Hold</h6>
+                <div class="small mb-1">Hold every keep for {{ wall_hold.threshold }} ticks to win.</div>
+                <div class="hold-row nights_watch">
+                    <span>Night's Watch</span>
+                    <span class="ticks" id="hudHoldNightsWatch">
+                        {{ wall_hold.holds.get('nights_watch', 0) }}/{{ wall_hold.threshold }}
+                    </span>
+                </div>
+                <div class="hold-row white_walkers">
+                    <span>White Walkers</span>
+                    <span class="ticks" id="hudHoldWhiteWalkers">
+                        {{ wall_hold.holds.get('white_walkers', 0) }}/{{ wall_hold.threshold }}
+                    </span>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Alert messages -->
             <div id="mapAlert" class="position-absolute top-0 start-0 end-0 alert alert-danger m-3 d-none">
                 An error occurred
@@ -382,20 +402,21 @@
                 const f1 = loc1.faction;
                 const f2 = loc2.faction;
 
+                const factionLineColors = {
+                    southern: 'rgba(255, 215, 0, 0.35)',
+                    northern: 'rgba(79, 195, 247, 0.35)',
+                    nights_watch: 'rgba(215, 228, 241, 0.45)',
+                    white_walkers: 'rgba(136, 196, 230, 0.45)',
+                    barbarian: 'rgba(193, 68, 46, 0.35)'
+                };
                 if (f1 !== 'neutral' && f1 === f2) {
-                    // Both same faction — faction color
-                    if (f1 === 'southern') {
-                        ctx.strokeStyle = 'rgba(255, 215, 0, 0.35)';
-                    } else {
-                        ctx.strokeStyle = 'rgba(79, 195, 247, 0.35)';
-                    }
+                    ctx.strokeStyle = factionLineColors[f1] || 'rgba(120, 144, 156, 0.2)';
                     ctx.setLineDash([]);
                 } else if (f1 !== 'neutral' && f2 !== 'neutral' && f1 !== f2) {
-                    // Enemy territories — red dashed
+                    // Any two non-neutral, non-identical factions = contested.
                     ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
                     ctx.setLineDash([8, 6]);
                 } else {
-                    // Neutral connections
                     ctx.strokeStyle = 'rgba(120, 144, 156, 0.2)';
                     ctx.setLineDash([]);
                 }
@@ -419,12 +440,24 @@
             marker.style.left = `${locationData.x}%`;
             marker.style.top = `${locationData.y}%`;
 
-            // Icon
+            // Icon — chosen by (type, faction).
             let icon = document.createElement('i');
-            if (locationData.type === 'capital') {
-                icon.className = locationData.faction === 'southern' ? 'fas fa-sun' :
-                                 locationData.faction === 'northern' ? 'fas fa-snowflake' :
-                                 'fas fa-chess-rook';
+            const factionIcons = {
+                southern: 'fas fa-sun',
+                northern: 'fas fa-snowflake',
+                nights_watch: 'fas fa-shield-halved',
+                white_walkers: 'fas fa-icicles',
+                barbarian: 'fas fa-campground',
+                neutral: 'fas fa-chess-rook'
+            };
+            if (locationData.type === 'wall') {
+                // Wall keeps always render as a gate/tower regardless of holder;
+                // the colour on the marker conveys the faction.
+                icon.className = 'fas fa-tower-cell';
+            } else if (locationData.type === 'capital') {
+                icon.className = factionIcons[locationData.faction] || 'fas fa-chess-rook';
+            } else if (locationData.faction === 'barbarian') {
+                icon.className = 'fas fa-campground';
             } else {
                 icon.className = 'fas fa-map-marker-alt';
             }
@@ -724,6 +757,16 @@
             gameState.winner = data.winner;
             gameState.victoryMessage = data.victory_message;
 
+            // Update the Wall Hold HUD if present (White Walkers Attack).
+            if (data.wall_hold) {
+                const nw = document.getElementById('hudHoldNightsWatch');
+                const ww = document.getElementById('hudHoldWhiteWalkers');
+                const threshold = data.wall_hold.threshold || 5;
+                const holds = data.wall_hold.holds || {};
+                if (nw) nw.textContent = `${holds.nights_watch || 0}/${threshold}`;
+                if (ww) ww.textContent = `${holds.white_walkers || 0}/${threshold}`;
+            }
+
             // Defer visual rebuild while animations are playing
             if (activeAnimations > 0) {
                 pendingRefresh = true;
@@ -771,7 +814,10 @@
 
         document.getElementById('refreshMapBtn').addEventListener('click', refreshMapData);
 
-        setInterval(refreshMapData, 30000);
+        // Poll every 5 s so the wall-hold counter and resource HUD reflect
+        // the wall-tick thread (30 s cadence) and AI moves within seconds
+        // rather than up to a minute later.
+        setInterval(refreshMapData, 5000);
         setInterval(checkGameStatus, 5000);
 
         document.getElementById('sendResourcesBtn').addEventListener('click', () => {

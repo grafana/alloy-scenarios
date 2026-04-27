@@ -4,12 +4,13 @@
 
 ## Purpose
 
-All 8 locations (2 capitals + 6 villages) run the same codebase — they differ only by `LOCATION_ID` and port. Each location:
+All 8 locations run the same codebase. A container's **slot** (set via `SLOT_ID` env var, `slot_1` … `slot_8`) is fixed at build time; the **logical identity** it serves (`southern_capital`, `wall_west`, `barbarian_village_east`, …) is resolved at boot and on `/reload` from the active map in `game_state.db`. Each location:
 
 - Owns a row in the shared `game_state.db` (resources, army, faction).
 - Exposes an HTTP API for collecting resources, creating armies, moving armies, and launching attacks.
 - Instruments every route with OpenTelemetry traces, logs, and five custom game metrics.
 - Runs passive resource generation for villages (every 15 s) and handles cooldowns for capitals.
+- On the White Walkers Attack map, also runs: passive barbarian army growth (every 30 s at barbarian villages), passive corpse generation (every 15 s at the White Walker fortress), passive resource generation at the Night's Watch capital (+5 every 10 s — WWA has no friendly villages, so this replaces the click-only economy), and the wall multiplier (defenders count 2× at `wall`-type locations).
 
 Ports 5001-5008:
 
@@ -50,6 +51,8 @@ Service names (hyphenated) match the `SERVICE_NAME` resource attribute used in t
 | `POST` | `/receive_resources` | `receive_resources` | Target of `_transfer_resources_along_path` |
 | `GET` | `/health` | — | Docker health check; returns `{"status":"ok"}` |
 | `POST` | `/send_resources_to_capital` | — | Village → friendly capital resource forwarding (used by AI) |
+| `POST` | `/reload` | — | Re-read `active_map_id` + rebind slot identity in place (war_map calls this after `/select_map`) |
+| `GET` | `/faction_economy?faction=...` | — | Read a faction's corpse pool (AI uses it) |
 
 ## Key algorithms
 
@@ -132,11 +135,28 @@ See `AGENTS.md` for the full cross-service metrics table. `app/`-specific:
 
 The gauge callbacks read from live server state via `_get_location_state()`, which the `LocationServer` registers on the telemetry instance at construction time.
 
+## New mechanics (White Walkers Attack)
+
+All defined in `app/game_config.py`'s `MAPS["white_walkers_attack"]["rules"]`. All behave as no-ops on `war_of_kingdoms`.
+
+- **Wall defender multiplier** — `_handle_battle` accepts a `location_type` argument and scales `defending_army` by `rules["wall_multiplier"]` (2.0 on WWA, 1.0 on WoK) when the location type is `wall`. Remaining defender count is converted back to physical units after the fight.
+- **Corpse economy** — when the battle winner is `white_walkers`, the post-battle hook in `receive_army` calls `self._add_corpses(attacking + defending - remaining, "white_walkers")`. `create_army` reads `get_army_currency(map_id, faction)` and, for `currency == "corpses"`, atomically decrements via `_spend_corpses` instead of touching `resources`. The corpse pool lives in `faction_economy` (persistent) so a `/reload` doesn't wipe it.
+- **Barbarian passive growth** — `_start_barbarian_growth(interval_s)` runs when `faction == "barbarian"`; adds +1 army every `rules["barbarian_army_growth_interval_s"]` (30 s). Guards each iteration against identity changes via `/reload`.
+- **Captured-camp resource generation** — `_start_passive_generation()` is launched for *every* `type == "village"` slot at boot (including barbarian Free Folk camps). The per-iteration `faction != "barbarian"` guard keeps it a no-op while the camp is still barbarian, then it starts producing the standard village amount the moment the player captures it. Without this fallthrough, captured camps stayed unproductive because the thread was never started on barbarian slots.
+- **White Walker passive corpses** — `_start_white_walker_corpse_tick(interval_s)` runs at the WW fortress, +1 corpse every `rules["white_walker_passive_corpse_interval_s"]` (15 s).
+- **Night's Watch passive resources** — `_start_nights_watch_capital_resource_tick(interval_s, amount)` runs at Castle Black on WWA (`faction == "nights_watch"`, `loc_type == "capital"`), adding `rules["nights_watch_capital_passive_amount"]` resources every `rules["nights_watch_capital_passive_interval_s"]` (5 per 10 s). Manual `/collect_resources` (+20, 5 s cooldown) still works alongside.
+
+## DB additions (live in `game_state.db`)
+
+- **`game_config`** — `(key, value)` key/value store. The `active_map_id` row is authoritative; containers re-read it on boot and on `/reload`.
+- **`faction_economy`** — `(faction, corpses)`. Updated by `_add_corpses` / `_spend_corpses`. Read by the AI via `/faction_economy?faction=white_walkers`.
+
 ## Environment
 
 | Var | Default | Purpose |
 |---|---|---|
-| `LOCATION_ID` | — (required) | Which row in `LOCATIONS` this service is |
+| `SLOT_ID` | — (required, `slot_1` … `slot_8`) | Fixed physical slot this container occupies |
+| `LOCATION_ID` | — (legacy; no longer authoritative) | Kept for backward-compat with `run_game.py` local dev |
 | `PORT` | derived from `LOCATION_ID` | HTTP listen port |
 | `IN_DOCKER` | unset | When set, location URLs resolve via container DNS (`village-2:5004`) instead of `localhost:5004` |
 | `DATABASE_FILE` | `/data/game_state.db` (Docker) / `./game_state.db` (local) | SQLite WAL-mode DB |

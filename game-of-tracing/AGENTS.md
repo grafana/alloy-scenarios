@@ -60,6 +60,39 @@ One Docker volume, `game-data`, mounted at `/data`. **Two SQLite databases live 
 
 Overriding `DATABASE_FILE` (game_state) or `GAME_SESSIONS_DB` (game_sessions) env vars on `war_map` is supported.
 
+### Extra tables added for multi-map support
+
+`game_state.db` also holds:
+
+- **`game_config`** — key/value store; the `active_map_id` row is authoritative at runtime. `war_map`'s `/select_map` route writes this; every location service reads it on boot and `/reload`.
+- **`faction_economy`** — `(faction, corpses)`. Holds the White Walkers' corpse pool on the WWA map. Populated by the post-battle hook in `LocationServer.receive_army` and by the passive corpse tick at the WW fortress. Consumed by `LocationServer.create_army` when the faction's currency is `corpses`.
+- **`wall_hold`** — `(map_id, faction, ticks, last_update)`. Written by `war_map`'s `_wall_tick_thread`. Non-zero rows mean that faction currently holds every wall keep on that map.
+
+`game_sessions.db` has a `map_id` column added to the `game_actions` table so replay queries can filter by map. Fresh installs seed `map_id=NULL` for any legacy rows; an additive `ALTER TABLE` migration runs on first boot after the upgrade.
+
+## Maps
+
+`app/game_config.py` defines a `MAPS` dict with two entries:
+
+| Map id | Players | Factions | Win | Notable rules |
+|---|---|---|---|---|
+| `war_of_kingdoms` (default) | 2 | `southern`, `northern`, `neutral` | Capture enemy capital | Classic — 30 resources per army, 20 resource/collect at capitals, village passive +10/15 s |
+| `white_walkers_attack` | 1 (player is `nights_watch`) | `nights_watch`, `white_walkers`, `barbarian`, `neutral` | Hold every `wall` keep for 5 × 30 s ticks | `wall` settlement type doubles defenders; WW spends 5 corpses per army (no resources); barbarian villages grow +1 army every 30 s; WW fortress passively +1 corpse every 15 s |
+
+Each map also defines a **slot assignments** dict (`slot_1` → logical location id) so the 8 physical containers can serve either map. See "Slot identity" below.
+
+### Slot identity
+
+Each location container has a fixed `SLOT_ID` env var (`slot_1` … `slot_8`). On boot, the container:
+
+1. Reads the shared `active_map_id` from `game_state.db`'s `game_config` table.
+2. Looks up `MAPS[active_map_id]["slot_assignments"][SLOT_ID]` → its logical `location_id`.
+3. Loads config from `MAPS[active_map_id]["locations"][location_id]`.
+
+The container's **SERVICE_NAME** (used by Grafana dashboards) stays stable (`southern-capital`, `village-1`, etc.) regardless of the map — the *logical* location id is published as the `location.id` span attribute, not the service name.
+
+Runtime map switching: `war_map/select_map` writes a new `active_map_id`, POSTs `/reset` to any one container to wipe the `locations` table, then POSTs `/reload` to every container so they rebind in place without a restart.
+
 ## Two Alloy configurations
 
 ### Default — River (HCL)

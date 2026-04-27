@@ -1,0 +1,74 @@
+{% extends "layout.html" %}
+
+{% block title %}Pick a Map{% endblock %}
+
+{% block content %}
+<div class="faction-hero">
+    <div class="col-lg-9 col-xl-8">
+        <div class="text-center mb-5">
+            <h1 class="faction-hero-title">A Game of Traces</h1>
+            <p class="faction-hero-subtitle">Pick a battlefield. Each map has its own factions, economy, and win conditions.</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('select_map') }}" id="mapPickerForm">
+            <input type="hidden" name="map_id" id="mapIdInput" value="" required>
+
+            <div class="row g-4 justify-content-center mb-4">
+                {% for map_id, meta in maps.items() %}
+                <div class="col-md-6">
+                    <div class="card faction-card map-card" data-map-id="{{ map_id }}">
+                        <div class="card-body">
+                            <span class="faction-icon">
+                                <i class="fas {{ meta.icon }}"></i>
+                            </span>
+                            <h4>{{ meta.display_name }}</h4>
+                            <p class="faction-motto">
+                                {% if meta.single_player %}Single-player · Hold to win
+                                {% else %}Two-player · Capture to win
+                                {% endif %}
+                            </p>
+                            <p class="faction-start">{{ meta.description }}</p>
+                            <p class="small mt-2 mb-0">
+                                <strong>Factions:</strong>
+                                {{ meta.factions | join(', ') | replace('_', ' ') | title }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="text-center">
+                <button type="submit" id="enterMapBtn" class="btn btn-primary btn-lg px-5 py-2" disabled>
+                    <i class="fas fa-play me-2"></i>Enter The Realm
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        const mapInput = $('#mapIdInput');
+        const enterBtn = $('#enterMapBtn');
+
+        $('.map-card').click(function() {
+            const mapId = $(this).data('map-id');
+            mapInput.val(mapId);
+            $('.map-card').removeClass('faction-selected');
+            $(this).addClass('faction-selected');
+            enterBtn.prop('disabled', false);
+        });
+
+        $('#mapPickerForm').on('submit', function(e) {
+            if (!mapInput.val()) {
+                e.preventDefault();
+                $('.map-card').addClass('border-warning');
+                setTimeout(() => $('.map-card').removeClass('border-warning'), 900);
+            }
+        });
+    });
+</script>
+{% endblock %}
