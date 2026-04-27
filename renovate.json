@@ -24,6 +24,91 @@
       "datasourceTemplate": "helm",
       "depNameTemplate": "k8s-monitoring",
       "registryUrlTemplate": "https://grafana.github.io/helm-charts"
+    },
+
+    {
+      "customType": "regex",
+      "description": "Sync ${GRAFANA_VERSION:-default} fallbacks in compose files alongside image-versions.env updates. Renovate's docker-compose manager treats `${VAR}` substitution as a templated reference and won't update inline fallback defaults — without this customManager, the env file moves but the fallbacks drift, breaking `docker compose up` for users who don't pass --env-file.",
+      "managerFilePatterns": [
+        "/docker-compose(\\.coda)?\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "\\$\\{GRAFANA_VERSION:-(?<currentValue>[^}]+)\\}"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "grafana/grafana"
+    },
+    {
+      "customType": "regex",
+      "description": "Sync ${GRAFANA_LOKI_VERSION:-default} fallbacks in compose files (see GRAFANA_VERSION rule).",
+      "managerFilePatterns": [
+        "/docker-compose(\\.coda)?\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "\\$\\{GRAFANA_LOKI_VERSION:-(?<currentValue>[^}]+)\\}"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "grafana/loki"
+    },
+    {
+      "customType": "regex",
+      "description": "Sync ${GRAFANA_ALLOY_VERSION:-default} fallbacks in compose files (see GRAFANA_VERSION rule).",
+      "managerFilePatterns": [
+        "/docker-compose(\\.coda)?\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "\\$\\{GRAFANA_ALLOY_VERSION:-(?<currentValue>[^}]+)\\}"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "grafana/alloy"
+    },
+    {
+      "customType": "regex",
+      "description": "Sync ${GRAFANA_TEMPO_VERSION:-default} fallbacks in compose files (see GRAFANA_VERSION rule).",
+      "managerFilePatterns": [
+        "/docker-compose(\\.coda)?\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "\\$\\{GRAFANA_TEMPO_VERSION:-(?<currentValue>[^}]+)\\}"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "grafana/tempo"
+    },
+    {
+      "customType": "regex",
+      "description": "Sync ${GRAFANA_PYROSCOPE_VERSION:-default} fallbacks in compose files (see GRAFANA_VERSION rule).",
+      "managerFilePatterns": [
+        "/docker-compose(\\.coda)?\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "\\$\\{GRAFANA_PYROSCOPE_VERSION:-(?<currentValue>[^}]+)\\}"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "grafana/pyroscope"
+    },
+    {
+      "customType": "regex",
+      "description": "Sync ${PROMETHEUS_VERSION:-default} fallbacks in compose files (see GRAFANA_VERSION rule).",
+      "managerFilePatterns": [
+        "/docker-compose(\\.coda)?\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "\\$\\{PROMETHEUS_VERSION:-(?<currentValue>[^}]+)\\}"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "prom/prometheus"
+    },
+    {
+      "customType": "regex",
+      "description": "Sync ${PYTHON_VERSION:-default} fallbacks in compose files (see GRAFANA_VERSION rule).",
+      "managerFilePatterns": [
+        "/docker-compose(\\.coda)?\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "\\$\\{PYTHON_VERSION:-(?<currentValue>[^}]+)\\}"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "python"
     }
   ]
 }
