@@ -1,0 +1,89 @@
+name: check-image-versions
+
+# Drift guard: every ${VAR:-default} fallback in a docker-compose file
+# must match the value of VAR in image-versions.env.
+#
+# Without this check, renovate's docker manager (which updates fallbacks
+# in compose files) and the customManager in renovate.json (which
+# updates image-versions.env) can fall out of lockstep — leaving anyone
+# who runs `docker compose up` without `--env-file image-versions.env`
+# on stale versions.
+
+on:
+  pull_request:
+    paths:
+      - '**/docker-compose.yml'
+      - '**/docker-compose.yaml'
+      - '**/docker-compose.coda.yml'
+      - '**/docker-compose.coda.yaml'
+      - 'image-versions.env'
+      - '.github/workflows/check-image-versions.yml'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Compose fallbacks vs image-versions.env
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Compare fallbacks against image-versions.env
+        run: |
+          set -euo pipefail
+
+          # Build a map of VAR=value from image-versions.env
+          declare -A want
+          while IFS='=' read -r k v; do
+            [[ "$k" =~ ^[A-Z_]+_VERSION$ ]] || continue
+            want[$k]="$v"
+          done < <(grep -E '^[A-Z_]+_VERSION=' image-versions.env)
+
+          echo "Tracking ${#want[@]} version variables:"
+          for k in "${!want[@]}"; do
+            echo "  $k=${want[$k]}"
+          done
+          echo
+
+          # Scan every fallback. Pattern: ${VAR:-default}
+          mismatches=0
+          while IFS= read -r -d '' f; do
+            while IFS= read -r line; do
+              if [[ "$line" =~ \$\{([A-Z_]+_VERSION):-([^}]+)\} ]]; then
+                var="${BASH_REMATCH[1]}"
+                fallback="${BASH_REMATCH[2]}"
+                expected="${want[$var]:-}"
+                if [ -z "$expected" ]; then
+                  echo "::warning file=$f::unknown variable $var (not in image-versions.env)"
+                  continue
+                fi
+                if [ "$fallback" != "$expected" ]; then
+                  echo "::error file=$f::\${$var:-$fallback} should be \${$var:-$expected}"
+                  mismatches=$((mismatches+1))
+                fi
+              fi
+            done < "$f"
+          done < <(find . -type f \
+                    \( -name 'docker-compose.yml' -o -name 'docker-compose.yaml' \
+                       -o -name 'docker-compose.coda.yml' -o -name 'docker-compose.coda.yaml' \) \
+                    -not -path '*/k8s/*' -not -path '*/.git/*' -print0)
+
+          if [ "$mismatches" -gt 0 ]; then
+            echo
+            echo "::error::Found $mismatches drift(s). Update either the fallback in the compose file or image-versions.env."
+            exit 1
+          fi
+          echo "OK — all fallbacks match image-versions.env"
