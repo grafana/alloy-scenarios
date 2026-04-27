@@ -305,6 +305,7 @@ services:
       - "8080:8080"
     environment:
       - DATABASE_FILE=/data/game_state.db
+      - GAME_SESSIONS_DB=/data/game_sessions.db
       - LOCATION_NAME=war-map
       - SECRET_KEY=war_of_westeros_secret_key
       - IN_DOCKER=1

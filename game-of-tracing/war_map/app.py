@@ -215,34 +215,78 @@ init_game_session_tracking()
 # initialized lazily on first call to _ensure_game_config_tables() — see
 # the in-process startup path later in this module.
 
-def store_game_action(game_session_id, action_type, player_name, faction, 
-                     trace_id, span_id, location_id=None, target_location_id=None, 
-                     game_state=None):
-    """Store a game action with its trace information"""
+def store_game_action(game_session_id, action_type, player_name, faction,
+                     trace_id, span_id, location_id=None, target_location_id=None,
+                     game_state=None, map_id=None):
+    """Store a game action with its trace information.
+
+    ``map_id`` is recorded so the replay page can render the correct map
+    layout (positions/connections) for sessions played on non-default maps.
+    Defaults to the currently active map when not supplied.
+    """
+    if map_id is None:
+        try:
+            map_id = get_active_map_id()
+        except Exception:
+            map_id = DEFAULT_MAP_ID
+
     conn = sqlite3.connect(GAME_SESSIONS_DB)
     cursor = conn.cursor()
-    
+
     # Get next sequence number
-    cursor.execute("SELECT MAX(action_sequence) FROM game_actions WHERE game_session_id = ?", 
+    cursor.execute("SELECT MAX(action_sequence) FROM game_actions WHERE game_session_id = ?",
                    (game_session_id,))
     result = cursor.fetchone()
     next_sequence = (result[0] or 0) + 1
-    
+
     # Debug logging
-    logger.info(f"Storing action: session={game_session_id}, sequence={next_sequence}, action={action_type}, trace_id={trace_id}, span_id={span_id}")
-    
+    logger.info(f"Storing action: session={game_session_id}, sequence={next_sequence}, action={action_type}, trace_id={trace_id}, span_id={span_id}, map_id={map_id}")
+
     cursor.execute('''
-    INSERT INTO game_actions 
-    (game_session_id, action_sequence, action_type, player_name, faction, 
-     trace_id, span_id, location_id, target_location_id, timestamp, game_state_after)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO game_actions
+    (game_session_id, action_sequence, action_type, player_name, faction,
+     trace_id, span_id, location_id, target_location_id, timestamp, game_state_after, map_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (game_session_id, next_sequence, action_type, player_name, faction,
-          trace_id, span_id, location_id, target_location_id, 
-          int(time.time()), json.dumps(game_state) if game_state else None))
-    
+          trace_id, span_id, location_id, target_location_id,
+          int(time.time()), json.dumps(game_state) if game_state else None, map_id))
+
     conn.commit()
     conn.close()
     return next_sequence
+
+
+def get_session_map_id(session_id):
+    """Resolve the map a session was played on.
+
+    Looks at any non-NULL ``map_id`` in the session's actions; falls back to
+    the currently active map for sessions stored before the column was
+    populated. Returns ``DEFAULT_MAP_ID`` as a last resort so the replay
+    template always has a layout to render.
+    """
+    try:
+        conn = sqlite3.connect(GAME_SESSIONS_DB)
+        try:
+            row = conn.execute(
+                "SELECT map_id FROM game_actions "
+                "WHERE game_session_id = ? AND map_id IS NOT NULL "
+                "ORDER BY action_sequence LIMIT 1",
+                (session_id,),
+            ).fetchone()
+            if row and row[0] in LOCATION_POSITIONS_BY_MAP:
+                return row[0]
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning(f"get_session_map_id failed for {session_id}: {e}")
+
+    try:
+        active = get_active_map_id()
+        if active in LOCATION_POSITIONS_BY_MAP:
+            return active
+    except Exception:
+        pass
+    return DEFAULT_MAP_ID
 
 def get_previous_action_context(game_session_id, target_sequence):
     """Get the action's span context for linking by target sequence number"""
@@ -335,6 +379,30 @@ LOCATION_PORTS = {
     "wall_east": 5006,
     "barbarian_village_west": 5007,
     "barbarian_village_east": 5008,
+}
+
+# Container hostname per logical location id. WWA reuses the same 8 slot
+# containers, so its location ids resolve to the WoK container names. Without
+# this aliasing, ``location_id.replace('_', '-')`` produces hostnames like
+# ``nights-watch-fortress`` that don't exist in the docker network and the
+# /map render returns an empty locations dict (blank map).
+CONTAINER_FOR_LOCATION_ID = {
+    "southern_capital": "southern-capital",
+    "northern_capital": "northern-capital",
+    "village_1": "village-1",
+    "village_2": "village-2",
+    "village_3": "village-3",
+    "village_4": "village-4",
+    "village_5": "village-5",
+    "village_6": "village-6",
+    "nights_watch_fortress": "southern-capital",
+    "white_walker_fortress": "northern-capital",
+    "wall_west": "village-1",
+    "wall_center_west": "village-2",
+    "wall_center_east": "village-3",
+    "wall_east": "village-4",
+    "barbarian_village_west": "village-5",
+    "barbarian_village_east": "village-6",
 }
 
 # Container hostname (in docker-compose) per slot. Stable across maps.
@@ -637,12 +705,15 @@ def release_all_factions():
 
 def get_location_url(location_id):
     """Get the URL for a location's API"""
-    # In Docker, use container names instead of localhost
+    # In Docker, use container names instead of localhost. WWA location ids
+    # alias the WoK slot containers — see CONTAINER_FOR_LOCATION_ID.
     if os.environ.get('IN_DOCKER'):
-        host = location_id.replace('_', '-')
+        host = CONTAINER_FOR_LOCATION_ID.get(
+            location_id, location_id.replace('_', '-')
+        )
     else:
         host = 'localhost'
-    
+
     port = LOCATION_PORTS[location_id]
     return f"http://{host}:{port}"
 
@@ -1675,8 +1746,16 @@ def replay_page():
 
 @app.route('/replay/<session_id>')
 def replay_session_page(session_id):
-    """Page to replay a specific game session"""
-    return render_template('replay_session.html', session_id=session_id)
+    """Page to replay a specific game session — renders with the layout of
+    whichever map the session was played on (not the active map)."""
+    map_id = get_session_map_id(session_id)
+    return render_template(
+        'replay_session.html',
+        session_id=session_id,
+        map_id=map_id,
+        location_positions=LOCATION_POSITIONS_BY_MAP[map_id],
+        location_connections=LOCATION_CONNECTIONS_BY_MAP[map_id],
+    )
     """Debug endpoint to verify restart cleared all data properly"""
     verification_results = {
         'game_state_reset': False,

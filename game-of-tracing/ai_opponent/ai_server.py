@@ -598,9 +598,13 @@ class StrategicAI:
 
     def _step_toward(self, from_loc, toward_loc):
         """Return the neighbor of from_loc that is closest to toward_loc."""
+        # Must consult the *active map's* adjacency, not the global
+        # ``MAP_GRAPH`` (which is hard-coded to WoK). On WWA the from_loc is
+        # e.g. ``white_walker_fortress`` — absent from the WoK graph and
+        # raises ``KeyError`` mid-cascade, leaving the AI stuck.
         best = None
         best_dist = 99
-        for n in MAP_GRAPH[from_loc]:
+        for n in self.map.graph[from_loc]:
             d = self.map.distance(n, toward_loc)
             if d < best_dist:
                 best_dist = d
@@ -1092,16 +1096,44 @@ class WhiteWalkerAI(StrategicAI):
         ]
         if not mine:
             return None
-        weakest, _ = min(mine, key=lambda item: item[1])
-        # Look for a friendly neighbour with spare army to send.
+        weakest, weakest_army = min(mine, key=lambda item: item[1])
+
+        # Prefer non-capital neighbours so corpse-driven army production at
+        # the capital isn't drained on every tick. Capital is a fallback
+        # below — without it the AI gets stuck post-capture, since
+        # ``move_army`` moves *all* army, leaving walls at 0 and capital as
+        # the only source.
+        capital_neighbour = None
         for n in self.map.neighbors(weakest):
             n_data = game_state.get(n, {})
-            if n_data.get('faction') == self.faction and n_data.get('army', 0) > 1 and n != self.my_capital:
+            if n_data.get('faction') != self.faction:
+                continue
+            n_army = n_data.get('army', 0)
+            if n_army <= 1:
+                continue
+            if n == self.my_capital:
+                capital_neighbour = (n, n_army)
+                continue
+            return {
+                "action": "move_army",
+                "from": n,
+                "to": weakest,
+                "reason": f"reinforce {weakest} from {n}",
+            }
+
+        # Capital fallback. Only fire if (a) the capital has more than the
+        # weakest wall (otherwise it's not really reinforcing) and (b) the
+        # capital has enough to spare — leaving 0 garrison is fine because
+        # ``_raise_army_from_corpses`` no longer requires a non-zero
+        # garrison to wrap a fresh unit around.
+        if capital_neighbour is not None:
+            cap_loc, cap_army = capital_neighbour
+            if cap_army > weakest_army + 1:
                 return {
                     "action": "move_army",
-                    "from": n,
+                    "from": cap_loc,
                     "to": weakest,
-                    "reason": f"reinforce {weakest} from {n}",
+                    "reason": f"reinforce {weakest} from capital ({cap_army} → wall {weakest_army})",
                 }
         return None
 
@@ -1139,10 +1171,13 @@ class WhiteWalkerAI(StrategicAI):
         }
 
     def _raise_army_from_corpses(self, game_state, corpses):
-        # Only raise when the fortress has at least 1 garrison to wrap the
-        # new unit around, so the fresh army is defensible.
+        # Capital must still belong to us — if NW captured it the AI has
+        # soft-lost. The earlier `army >= 1` gate has been dropped: it
+        # blocked the AI's primary economic loop after every capital→wall
+        # reinforcement (move_army drains the source to 0), leaving the AI
+        # idle until corpses overflowed.
         cap_data = game_state.get(self.my_capital, {})
-        if cap_data.get('faction') != self.faction or cap_data.get('army', 0) < 1:
+        if cap_data.get('faction') != self.faction:
             return None
         if corpses < self.army_cost:
             return None

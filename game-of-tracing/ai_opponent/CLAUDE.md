@@ -9,7 +9,7 @@
 Two AI variants dispatch off the `faction` field at activation time:
 
 - **`StrategicAI`** — classic WoK opponent (southern / northern). 6-step priority cascade: capital defense → zero-risk captures → resource transfers → plan execution → plan creation → fallback.
-- **`WhiteWalkerAI(StrategicAI)`** — single-player WWA opponent. Different cascade: defend fortress → capture unowned wall → reinforce weakest wall → raid barbarian village (for corpses) → raise army from corpses (at fortress) → idle. Reads its corpse pool via `GET /faction_economy?faction=white_walkers` on any location service; spends 5 corpses per army unit instead of 30 resources.
+- **`WhiteWalkerAI(StrategicAI)`** — single-player WWA opponent. Different cascade: defend fortress → capture unowned wall → reinforce weakest wall (non-capital neighbours preferred; capital is a fallback when no other source has spare army, since `move_army` empties the source) → raid barbarian village (for corpses) → raise army from corpses at the fortress (only requires the capital to still belong to the AI; no minimum garrison) → idle. Reads its corpse pool via `GET /faction_economy?faction=white_walkers` on any location service; spends 5 corpses per army unit instead of 30 resources.
 
 Common to both: the AI:
 

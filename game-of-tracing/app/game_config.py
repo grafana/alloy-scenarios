@@ -278,6 +278,13 @@ MAPS = {
             "wall_multiplier": 2.0,
             "barbarian_army_growth_interval_s": 30,
             "white_walker_passive_corpse_interval_s": 15,
+            # WWA gives the Night's Watch no friendly villages, so its only
+            # income source is /collect_resources at Castle Black. Add a slow
+            # passive trickle so the resource HUD ticks up without click-spam.
+            # Keep it well below the click rate (+20 per 5 s) — passive should
+            # supplement, not replace, active play.
+            "nights_watch_capital_passive_amount": 5,
+            "nights_watch_capital_passive_interval_s": 10,
             "tick_interval_s": 30,
             "win_hold_ticks": 5,
         },

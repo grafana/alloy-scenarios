@@ -87,6 +87,7 @@ class LocationServer:
         self._passive_thread_started = False
         self._barbarian_thread_started = False
         self._corpse_thread_started = False
+        self._nw_capital_thread_started = False
 
         self._initialize_database()
         self._load_identity()
@@ -164,7 +165,13 @@ class LocationServer:
         faction = self.location_info["faction"]
         rules = self._current_rules()
 
-        if loc_type == "village" and faction != "barbarian" and not self._passive_thread_started:
+        # Launch the village resource thread for *every* village, including
+        # barbarian-faction slots (Free Folk camps). The thread guards each
+        # iteration on ``faction != "barbarian"``, so it stays a no-op while
+        # the camp is still barbarian and starts producing for the player
+        # the moment they capture it. Without this fallthrough, captured
+        # camps stay unproductive because the thread was never started.
+        if loc_type == "village" and not self._passive_thread_started:
             self._start_passive_generation()
             self._passive_thread_started = True
 
@@ -183,6 +190,17 @@ class LocationServer:
             if interval > 0:
                 self._start_white_walker_corpse_tick(interval)
                 self._corpse_thread_started = True
+
+        if (
+            loc_type == "capital"
+            and faction == "nights_watch"
+            and not self._nw_capital_thread_started
+        ):
+            interval = rules.get("nights_watch_capital_passive_interval_s", 0) or 0
+            amount = rules.get("nights_watch_capital_passive_amount", 0) or 0
+            if interval > 0 and amount > 0:
+                self._start_nights_watch_capital_resource_tick(interval, amount)
+                self._nw_capital_thread_started = True
 
     # ----------------------------------------------------------------
     # Corpse economy (faction-scoped; lives in faction_economy table)
@@ -241,9 +259,12 @@ class LocationServer:
         return None
 
     def _get_db_connection(self):
-        conn = sqlite3.connect(self.db_path)
-        conn.execute("PRAGMA journal_mode=WAL")
+        # ``timeout`` applies before the first PRAGMA runs, so concurrent
+        # boot of all 8 containers doesn't race on ``PRAGMA journal_mode=WAL``
+        # (which briefly acquires an exclusive lock to switch modes).
+        conn = sqlite3.connect(self.db_path, timeout=15)
         conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -660,9 +681,19 @@ class LocationServer:
         def generate_resources():
             while True:
                 time.sleep(15)
-                # Guard against identity changes: if /reload flipped this slot
-                # to a non-village identity, stop producing resources silently.
-                if self.location_info["type"] != "village" or self.location_info["faction"] == "barbarian":
+                # Static identity guards against /reload moving this slot off
+                # of a village type entirely.
+                if self.location_info["type"] != "village":
+                    continue
+                # Live-DB guard: gate on the *current* faction, not the
+                # boot-time identity, so a captured Free Folk camp starts
+                # producing for the new owner the moment its row flips. The
+                # static ``self.location_info["faction"]`` is set at boot
+                # from MAPS config and never updates on battle.
+                location_state = self._get_location_state(self.location_id)
+                if location_state is None:
+                    continue
+                if location_state["faction"] == "barbarian":
                     continue
                 amount = self._current_rules()["resource_generation"]["village"]
                 with self.tracer.start_as_current_span(
@@ -671,13 +702,10 @@ class LocationServer:
                         "location.id": self.location_id,
                         "resources_gained": amount,
                         "game.map.id": self.map_id,
+                        "owner.faction": location_state["faction"],
                     }
                 ):
-                    location_state = self._get_location_state(self.location_id)
-                    if location_state is None:
-                        continue
-                    current_resources = location_state["resources"]
-                    new_resources = current_resources + amount
+                    new_resources = location_state["resources"] + amount
                     self._update_location_state(self.location_id, resources=new_resources)
                     self.telemetry.collect_metrics()
 
@@ -714,6 +742,41 @@ class LocationServer:
                     self.telemetry.collect_metrics()
 
         Thread(target=grow, daemon=True).start()
+
+    def _start_nights_watch_capital_resource_tick(self, interval_s: int, amount: int):
+        """Passive resource generation at the Night's Watch capital (WWA only).
+
+        WWA gives the player no friendly villages, so /collect_resources at
+        Castle Black is the only income source — leading to click-spam UX. A
+        slow passive tick supplements that without removing the incentive to
+        actively collect (manual is +20 per 5 s; passive is +amount per
+        interval_s, configured well below that).
+        """
+        def tick():
+            while True:
+                time.sleep(interval_s)
+                if (self.location_info["faction"] != "nights_watch"
+                    or self.location_info["type"] != "capital"):
+                    continue
+                with self.tracer.start_as_current_span(
+                    "nights_watch_passive_resource",
+                    attributes={
+                        "location.id": self.location_id,
+                        "game.map.id": self.map_id,
+                        "resources_gained": amount,
+                    }
+                ):
+                    state = self._get_location_state(self.location_id)
+                    if state is None:
+                        continue
+                    if state["faction"] != "nights_watch":
+                        continue
+                    self._update_location_state(
+                        self.location_id, resources=state["resources"] + amount
+                    )
+                    self.telemetry.collect_metrics()
+
+        Thread(target=tick, daemon=True).start()
 
     def _start_white_walker_corpse_tick(self, interval_s: int):
         """Passive corpse generation at the White Walker fortress.

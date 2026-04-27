@@ -10,7 +10,7 @@ All 8 locations run the same codebase. A container's **slot** (set via `SLOT_ID`
 - Exposes an HTTP API for collecting resources, creating armies, moving armies, and launching attacks.
 - Instruments every route with OpenTelemetry traces, logs, and five custom game metrics.
 - Runs passive resource generation for villages (every 15 s) and handles cooldowns for capitals.
-- On the White Walkers Attack map, also runs: passive barbarian army growth (every 30 s at barbarian villages), passive corpse generation (every 15 s at the White Walker fortress), and the wall multiplier (defenders count 2× at `wall`-type locations).
+- On the White Walkers Attack map, also runs: passive barbarian army growth (every 30 s at barbarian villages), passive corpse generation (every 15 s at the White Walker fortress), passive resource generation at the Night's Watch capital (+5 every 10 s — WWA has no friendly villages, so this replaces the click-only economy), and the wall multiplier (defenders count 2× at `wall`-type locations).
 
 Ports 5001-5008:
 
@@ -142,7 +142,9 @@ All defined in `app/game_config.py`'s `MAPS["white_walkers_attack"]["rules"]`. A
 - **Wall defender multiplier** — `_handle_battle` accepts a `location_type` argument and scales `defending_army` by `rules["wall_multiplier"]` (2.0 on WWA, 1.0 on WoK) when the location type is `wall`. Remaining defender count is converted back to physical units after the fight.
 - **Corpse economy** — when the battle winner is `white_walkers`, the post-battle hook in `receive_army` calls `self._add_corpses(attacking + defending - remaining, "white_walkers")`. `create_army` reads `get_army_currency(map_id, faction)` and, for `currency == "corpses"`, atomically decrements via `_spend_corpses` instead of touching `resources`. The corpse pool lives in `faction_economy` (persistent) so a `/reload` doesn't wipe it.
 - **Barbarian passive growth** — `_start_barbarian_growth(interval_s)` runs when `faction == "barbarian"`; adds +1 army every `rules["barbarian_army_growth_interval_s"]` (30 s). Guards each iteration against identity changes via `/reload`.
+- **Captured-camp resource generation** — `_start_passive_generation()` is launched for *every* `type == "village"` slot at boot (including barbarian Free Folk camps). The per-iteration `faction != "barbarian"` guard keeps it a no-op while the camp is still barbarian, then it starts producing the standard village amount the moment the player captures it. Without this fallthrough, captured camps stayed unproductive because the thread was never started on barbarian slots.
 - **White Walker passive corpses** — `_start_white_walker_corpse_tick(interval_s)` runs at the WW fortress, +1 corpse every `rules["white_walker_passive_corpse_interval_s"]` (15 s).
+- **Night's Watch passive resources** — `_start_nights_watch_capital_resource_tick(interval_s, amount)` runs at Castle Black on WWA (`faction == "nights_watch"`, `loc_type == "capital"`), adding `rules["nights_watch_capital_passive_amount"]` resources every `rules["nights_watch_capital_passive_interval_s"]` (5 per 10 s). Manual `/collect_resources` (+20, 5 s cooldown) still works alongside.
 
 ## DB additions (live in `game_state.db`)
 

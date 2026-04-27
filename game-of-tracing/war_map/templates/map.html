@@ -814,7 +814,10 @@
 
         document.getElementById('refreshMapBtn').addEventListener('click', refreshMapData);
 
-        setInterval(refreshMapData, 30000);
+        // Poll every 5 s so the wall-hold counter and resource HUD reflect
+        // the wall-tick thread (30 s cadence) and AI moves within seconds
+        // rather than up to a minute later.
+        setInterval(refreshMapData, 5000);
         setInterval(checkGameStatus, 5000);
 
         document.getElementById('sendResourcesBtn').addEventListener('click', () => {

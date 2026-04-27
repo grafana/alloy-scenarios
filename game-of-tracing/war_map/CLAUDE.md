@@ -37,13 +37,17 @@
 | File | Owner | Purpose |
 |---|---|---|
 | `game_state.db` | All 8 location services (WAL mode, shared) | Canonical game state |
-| `game_sessions.db` | `war_map` **only** | `game_actions` table: `(game_session_id, action_sequence, action_type, player_name, faction, trace_id, span_id, location_id, target_location_id, timestamp, game_state_after)` |
+| `game_sessions.db` | `war_map` **only** | `game_actions` table: `(game_session_id, action_sequence, action_type, player_name, faction, trace_id, span_id, location_id, target_location_id, timestamp, game_state_after, map_id)` |
 
 `game_actions` schema is defined in `init_game_session_tracking()` at `app.py:60-96`. It carries a `UNIQUE(game_session_id, action_sequence)` constraint — the sequence is what lets "next action" look up "previous action" deterministically.
 
 ### Storing an action — `store_game_action()` at `app.py:101-128`
 
-Called at the tail of every action handler. Reads the current max `action_sequence` for the session, inserts a new row with `next_sequence = max + 1`, returns the sequence number.
+Called at the tail of every action handler. Reads the current max `action_sequence` for the session, inserts a new row with `next_sequence = max + 1`, returns the sequence number. Persists the active `map_id` (defaults to `get_active_map_id()` when callers don't pass one) so the replay UI can render the correct map layout for each session.
+
+### Resolving a session's map — `get_session_map_id()`
+
+Used by `replay_session_page` to pick the right layout. Reads the first non-NULL `map_id` from the session's actions (cheap — sessions don't switch maps mid-play), falls back to the active map, then to `DEFAULT_MAP_ID`. Without this, the replay template renders the WoK layout regardless of which map was actually played.
 
 ### Reconstructing a previous span context — `get_previous_action_context()` at `app.py:130-170`
 
