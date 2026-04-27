@@ -1,0 +1,25 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Local additive config — extends whatever org-level renovate config the bot is configured with. Tracks the centralized version pins in image-versions.env so they stay current alongside the docker-compose fallback defaults.",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Bump every VERSION variable in image-versions.env. Each line is preceded by a `# renovate: datasource=… depName=…` comment that tells the bot what the variable refers to.",
+      "fileMatch": ["^image-versions\\.env$"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>.+?) depName=(?<depName>.+?)\\s+\\w+_VERSION=(?<currentValue>.+)"
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "Bump grafana/k8s-monitoring chart version pinned in k8s/*/README.md install commands. The other two charts in each scenario (backend + grafana) are intentionally unpinned (`helm install` resolves latest at run time), so only k8s-monitoring needs tracking.",
+      "fileMatch": ["^k8s/.+/README\\.md$"],
+      "matchStrings": [
+        "grafana/k8s-monitoring --version \"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "helm",
+      "depNameTemplate": "k8s-monitoring",
+      "registryUrlTemplate": "https://grafana.github.io/helm-charts"
+    }
+  ]
+}
