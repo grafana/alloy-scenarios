@@ -31,12 +31,26 @@ on:
       - 'image-versions.env'
       - '.github/scenario-list.txt'
       - '.github/workflows/validate-scenarios.yml'
+  # Manual trigger — runs the full matrix without the sampling cap, so a
+  # maintainer can validate a cross-cutting change (e.g. an LGMT bump
+  # that touches every scenario) before merging. PRs auto-sample when
+  # affected count exceeds MATRIX_CAP; workflow_dispatch always runs all.
+  workflow_dispatch: {}
+
+env:
+  # Maximum scenarios to validate on a PR before sampling kicks in.
+  # Picked so a typical big update finishes within ~30 min wall-clock
+  # at the configured max-parallel; bypassed by workflow_dispatch.
+  MATRIX_CAP: '8'
 
 permissions:
   contents: read
 
 concurrency:
-  group: validate-scenarios-${{ github.event.pull_request.number }}
+  # `pull_request.number || run_id` keeps PR runs grouped (and superseded
+  # by force-pushes) while still giving every workflow_dispatch run its
+  # own slot — manual full-matrix runs shouldn't cancel each other.
+  group: validate-scenarios-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -52,6 +66,8 @@ jobs:
     outputs:
       scenarios: ${{ steps.filter.outputs.scenarios }}
       count: ${{ steps.filter.outputs.count }}
+      count_full: ${{ steps.filter.outputs.count_full }}
+      sampled: ${{ steps.filter.outputs.sampled }}
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
@@ -65,46 +81,106 @@ jobs:
 
       - name: Compute affected scenarios
         id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          base="${{ github.event.pull_request.base.sha }}"
-          head="${{ github.event.pull_request.head.sha }}"
 
-          # The base sha may not be in the local clone with a shallow checkout;
-          # fetch-depth: 0 avoids that, but be belt-and-braces.
-          git fetch origin "$base" "$head" --depth=200 2>/dev/null || true
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            # Manual run: validate every scenario in the canonical list.
+            # No diff to compute; sampling cap is bypassed.
+            cp .github/scenario-list.txt /tmp/affected.txt
+          else
+            # The base sha may not be in the local clone with a shallow
+            # checkout; fetch-depth: 0 avoids that, but be belt-and-braces.
+            git fetch origin "$BASE_SHA" "$HEAD_SHA" --depth=200 2>/dev/null || true
 
-          # Map every changed file to its first path segment. Empty lines
-          # come from root-level files (no segment); awk drops those.
-          git diff --name-only "$base" "$head" \
-            | awk -F/ 'NF>1 {print $1}' \
-            | sort -u > /tmp/segments.txt
+            # Map every changed file to its first path segment. Empty lines
+            # come from root-level files (no segment); awk drops those.
+            git diff --name-only "$BASE_SHA" "$HEAD_SHA" \
+              | awk -F/ 'NF>1 {print $1}' \
+              | sort -u > /tmp/segments.txt
 
-          # Intersect with the canonical scenario list. `|| true` keeps
-          # the pipeline alive when there's no overlap (e.g. a PR that
-          # only touches docs/CI).
-          grep -Fxf /tmp/segments.txt .github/scenario-list.txt \
-            | sort -u > /tmp/affected.txt || true
+            # Intersect with the canonical scenario list. `|| true` keeps
+            # the pipeline alive when there's no overlap (e.g. a PR that
+            # only touches docs/CI).
+            grep -Fxf /tmp/segments.txt .github/scenario-list.txt \
+              | sort -u > /tmp/affected.txt || true
+          fi
 
-          scenarios=$(jq -Rsc 'split("\n") | map(select(length>0))' /tmp/affected.txt)
-          count=$(wc -l < /tmp/affected.txt | tr -d ' ')
+          count_full=$(wc -l < /tmp/affected.txt | tr -d ' ')
+          sampled=false
 
-          echo "scenarios=$scenarios" >> "$GITHUB_OUTPUT"
-          echo "count=$count" >> "$GITHUB_OUTPUT"
+          # Sampling cap: when a single PR touches more than MATRIX_CAP
+          # scenarios (typical for image-versions.env / shared-base
+          # changes), validate a deterministic representative subset
+          # rather than the full matrix. Maintainers can run the full
+          # matrix via workflow_dispatch before merging if signal on
+          # every scenario is wanted.
+          #
+          # Determinism: sort by the SHA-256 of "<scenario><commit>".
+          # Same commit → same subset, so re-runs are stable. Different
+          # commits get different subsets, so coverage rotates over
+          # time across many big-update PRs.
+          if [ "$EVENT_NAME" != "workflow_dispatch" ] \
+             && [ "$count_full" -gt "$MATRIX_CAP" ]; then
+            sampled=true
+            commit_hash="${HEAD_SHA:-$GITHUB_SHA}"
+            while read -r line; do
+              [ -z "$line" ] && continue
+              key=$(printf "%s%s" "$line" "$commit_hash" \
+                    | sha256sum | head -c 16)
+              printf "%s\t%s\n" "$key" "$line"
+            done < /tmp/affected.txt \
+              | sort | head -n "$MATRIX_CAP" | cut -f2 > /tmp/active.txt
+          else
+            cp /tmp/affected.txt /tmp/active.txt
+          fi
+
+          count=$(wc -l < /tmp/active.txt | tr -d ' ')
+          scenarios=$(jq -Rsc 'split("\n") | map(select(length>0))' /tmp/active.txt)
+
+          echo "scenarios=$scenarios"     >> "$GITHUB_OUTPUT"
+          echo "count=$count"             >> "$GITHUB_OUTPUT"
+          echo "count_full=$count_full"   >> "$GITHUB_OUTPUT"
+          echo "sampled=$sampled"         >> "$GITHUB_OUTPUT"
 
           {
             echo "## Affected scenarios"
             echo
-            if [ "$count" = "0" ]; then
+            if [ "$count_full" = "0" ]; then
               echo "_None — PR does not touch any scenario directory._"
-            else
-              echo "Count: \`$count\`"
+            elif [ "$sampled" = "true" ]; then
+              echo "**$count_full** scenarios affected; sampled **$count** for validation (cap is \`$MATRIX_CAP\`)."
+              echo
+              echo "Trigger \`workflow_dispatch\` on this branch to validate the full matrix."
+              echo
+              echo "Sampled subset:"
+              echo '```'
+              cat /tmp/active.txt
+              echo '```'
+              echo
+              echo "<details><summary>Full affected list ($count_full)</summary>"
               echo
               echo '```'
               cat /tmp/affected.txt
               echo '```'
+              echo
+              echo "</details>"
+            else
+              echo "Count: \`$count\`"
+              echo
+              echo '```'
+              cat /tmp/active.txt
+              echo '```'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$sampled" = "true" ]; then
+            echo "::warning::Sampled $count of $count_full affected scenarios. Run workflow_dispatch on this branch to validate them all."
+          fi
 
   # ──────────────────────────────────────────────────────────────────
   # scan: For each affected scenario, resolve every image reference
@@ -148,6 +224,24 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Compute today's UTC date for cache key
+        id: date
+        run: echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore trivy DB cache
+        # Trivy fetches a fresh vulnerability DB on every cold scan
+        # (~30 MB, ~5-10 s per scenario from mirror.gcr.io). Caching
+        # the DB shaves the cold-pull off every matrix entry after the
+        # first one of the day. Key rotates daily so the DB stays
+        # fresh; the restore-keys fallback is intentional — even a
+        # stale-by-hours DB is far better than a cold fetch.
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: /tmp/trivy-cache
+          key: trivy-db-${{ steps.date.outputs.today }}
+          restore-keys: |
+            trivy-db-
 
       - name: Resolve images for ${{ matrix.scenario }}
         id: images
