@@ -1,5 +1,5 @@
 services:
   memcached:
-    image: memcached:1.6
+    image: memcached:1.6@sha256:277e0c4f249b118e95ab10e535bae2fa1af772271d9152f3468e58d59348db56
     ports:
       - "11211:11211"
