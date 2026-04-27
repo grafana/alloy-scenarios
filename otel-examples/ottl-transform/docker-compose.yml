@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   loki:
-    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.7}
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.10}
     ports:
       - "3100:3100"
     volumes:
@@ -10,7 +10,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
 
   tempo:
-    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.1}
+    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.4}
     command: ["-config.file=/etc/tempo.yaml"]
     ports:
       - 3200:3200
@@ -18,7 +18,7 @@ services:
       - ./tempo-config.yaml:/etc/tempo.yaml
 
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.14.0}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.16.0}
     ports:
       - 8888:8888
       - 4317:4317
@@ -42,7 +42,7 @@ services:
       - alloy
 
   grafana:
-    image: grafana/grafana:${GRAFANA_VERSION:-12.4.0}
+    image: grafana/grafana:${GRAFANA_VERSION:-13.0.1}
     environment:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_ANONYMOUS_ENABLED=true

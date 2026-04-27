@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17
+    image: postgres:17@sha256:5b96f1a16bd9768b060dd2ffe55cb6225c4d9ef4d214a8b21eb08134869a97e4
     environment:
       POSTGRES_USER: alloy
       POSTGRES_PASSWORD: alloy
@@ -14,7 +14,7 @@ services:
       retries: 5
 
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.10.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.2}
     command:
       - --web.enable-remote-write-receiver
       - --config.file=/etc/prometheus/prometheus.yml
@@ -24,7 +24,7 @@ services:
       - "9090:9090"
 
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.14.0}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.16.0}
     ports:
       - 12345:12345
     volumes:
@@ -35,7 +35,7 @@ services:
         condition: service_healthy
 
   grafana:
-    image: grafana/grafana:${GRAFANA_VERSION:-12.4.0}
+    image: grafana/grafana:${GRAFANA_VERSION:-13.0.1}
     environment:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_ANONYMOUS_ENABLED=true

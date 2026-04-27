@@ -6,12 +6,14 @@
 
 `war-map` is the human-facing surface of the game and the coordination point for everything the player touches:
 
-- Renders the interactive SVG game map (territory ownership, army sizes, supply routes).
+- Hosts the **map picker** (`/map_picker` + `/select_map`) that lets the user choose between `war_of_kingdoms` and `white_walkers_attack`, then renders the faction selection (or single-player auto-start) for the chosen map.
+- Renders the interactive game map (territory ownership, army sizes, supply routes, wall-hold HUD for WWA).
 - Manages faction selection, sessions, and the human player's identity.
-- Is the **sole writer** of the `game_actions` SQLite table — the record of every action's trace/span IDs that makes span-link replay possible.
-- Activates / deactivates the AI opponent on behalf of the player.
+- Is the **sole writer** of the `game_actions` SQLite table — the record of every action's trace/span IDs that makes span-link replay possible (rows carry a `map_id` column).
+- Activates / deactivates the AI opponent on behalf of the player (auto-activates as `white_walkers` when the chosen map is WWA).
 - Proxies trace-replay queries to Tempo and falls back to local SQLite when Tempo is unavailable.
 - Instruments player actions as `SERVER` spans with `trace.Link`s chaining each action to the previous one in the session.
+- Runs the **wall-hold tick thread** (`_wall_tick_thread`, 30 s cadence) that increments `wall_hold` when one faction owns every wall keep, and declares the WWA winner at 5 consecutive ticks.
 
 ## File map
 
@@ -26,7 +28,7 @@
 | `templates/replay_session.html` | ~28 KB | Per-session trace-replay UI — the consumer of the span-link chain. |
 | `static/css/style.css` | — | UI styling. |
 | `Dockerfile` | small | `python:3.11-slim`, runs `python app.py`. |
-| `requirements.txt` | small | Flask 3.1.3, requests 2.33.0, python-dotenv 1.2.2, OpenTelemetry SDK/API + exporters, `pyroscope-io` + `pyroscope-otel` for profiling. |
+| `requirements.txt` | small | Flask 3.1.3, requests 2.33.1, python-dotenv 1.2.2, OpenTelemetry SDK/API + exporters, `pyroscope-io` + `pyroscope-otel` for profiling. |
 
 ## The span-link broker (the critical bit)
 
@@ -35,13 +37,17 @@
 | File | Owner | Purpose |
 |---|---|---|
 | `game_state.db` | All 8 location services (WAL mode, shared) | Canonical game state |
-| `game_sessions.db` | `war_map` **only** | `game_actions` table: `(game_session_id, action_sequence, action_type, player_name, faction, trace_id, span_id, location_id, target_location_id, timestamp, game_state_after)` |
+| `game_sessions.db` | `war_map` **only** | `game_actions` table: `(game_session_id, action_sequence, action_type, player_name, faction, trace_id, span_id, location_id, target_location_id, timestamp, game_state_after, map_id)` |
 
 `game_actions` schema is defined in `init_game_session_tracking()` at `app.py:60-96`. It carries a `UNIQUE(game_session_id, action_sequence)` constraint — the sequence is what lets "next action" look up "previous action" deterministically.
 
 ### Storing an action — `store_game_action()` at `app.py:101-128`
 
-Called at the tail of every action handler. Reads the current max `action_sequence` for the session, inserts a new row with `next_sequence = max + 1`, returns the sequence number.
+Called at the tail of every action handler. Reads the current max `action_sequence` for the session, inserts a new row with `next_sequence = max + 1`, returns the sequence number. Persists the active `map_id` (defaults to `get_active_map_id()` when callers don't pass one) so the replay UI can render the correct map layout for each session.
+
+### Resolving a session's map — `get_session_map_id()`
+
+Used by `replay_session_page` to pick the right layout. Reads the first non-NULL `map_id` from the session's actions (cheap — sessions don't switch maps mid-play), falls back to the active map, then to `DEFAULT_MAP_ID`. Without this, the replay template renders the WoK layout regardless of which map was actually played.
 
 ### Reconstructing a previous span context — `get_previous_action_context()` at `app.py:130-170`
 

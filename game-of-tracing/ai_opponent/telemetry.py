@@ -157,6 +157,21 @@ class AITelemetry:
             unit="1"
         )
 
+        # White Walkers Attack metrics (additive; only populate when the
+        # relevant callback is wired).
+        self._walls_captured_counter = self.meter.create_counter(
+            name="ai.walls_captured",
+            description="Number of wall keeps captured by this AI variant",
+            unit="1",
+        )
+        self._corpse_callback = None
+        self.meter.create_observable_gauge(
+            name="ai.corpse_pool",
+            description="White Walker corpse pool (cost pool for raising armies)",
+            callbacks=[self._observe_corpse_pool],
+            unit="1",
+        )
+
     def _observe_territory_count(self, options: CallbackOptions) -> Iterable[Observation]:
         """Callback for territory count observable gauge"""
         if self._state_callback:
@@ -186,6 +201,31 @@ class AITelemetry:
     def set_state_callback(self, fn):
         """Register a callback that returns current AI state for observable gauges"""
         self._state_callback = fn
+
+    def set_corpse_callback(self, fn):
+        """Register a callback that returns ``(faction, corpses)`` for the
+        ``ai.corpse_pool`` gauge. ``fn`` should return ``None`` when the
+        current AI variant does not use the corpse economy.
+        """
+        self._corpse_callback = fn
+
+    def _observe_corpse_pool(self, options: CallbackOptions) -> Iterable[Observation]:
+        if not self._corpse_callback:
+            return
+        try:
+            result = self._corpse_callback()
+            if not result:
+                return
+            faction, corpses = result
+            yield Observation(value=int(corpses), attributes={"faction": faction})
+        except Exception:
+            pass
+
+    def record_wall_captured(self, wall_id, source):
+        """Increment the walls-captured counter. ``source`` is the AI variant name."""
+        self._walls_captured_counter.add(
+            1, {"wall_id": wall_id, "variant": source}
+        )
 
     def record_decision(self, action_type, phase):
         """Record an AI decision metric"""

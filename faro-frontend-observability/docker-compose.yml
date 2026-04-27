@@ -1,7 +1,7 @@
 services:
   # Nginx web server serving the demo frontend page
   web:
-    image: nginx:latest
+    image: nginx:latest@sha256:6e23479198b998e5e25921dff8455837c7636a67111a04a635cf1bb363d199dc
     ports:
       - 8080:80
     volumes:
@@ -9,7 +9,7 @@ services:
 
   # Alloy telemetry pipeline — receives Faro Web SDK telemetry and forwards logs to Loki
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.14.0}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.16.0}
     ports:
       - 12345:12345
       - 12347:12347
@@ -21,7 +21,7 @@ services:
 
   # Loki for log aggregation
   loki:
-    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.7}
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.10}
     ports:
       - 3100:3100/tcp
     volumes:
@@ -30,7 +30,7 @@ services:
 
   # Grafana for visualization
   grafana:
-    image: grafana/grafana:${GRAFANA_VERSION:-12.4.0}
+    image: grafana/grafana:${GRAFANA_VERSION:-13.0.1}
     environment:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_ANONYMOUS_ENABLED=true

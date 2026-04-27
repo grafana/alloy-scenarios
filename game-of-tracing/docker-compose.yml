@@ -88,14 +88,16 @@ services:
     ports:
       - "5001:5001"
     environment:
+      - SLOT_ID=slot_1
       - LOCATION_ID=southern_capital
       - FLASK_APP=location_server.py
       - LOCATION_NAME=southern-capital
       - DATABASE_FILE=/data/game_state.db
       - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
+      - IN_DOCKER=1
     volumes:
       - game-data:/data
-    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('southern_capital'); server.run()"]
+    command: ["python", "location_server.py"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
       interval: 5s
@@ -113,14 +115,16 @@ services:
     ports:
       - "5002:5002"
     environment:
+      - SLOT_ID=slot_2
       - LOCATION_ID=northern_capital
       - FLASK_APP=location_server.py
       - LOCATION_NAME=northern-capital
       - DATABASE_FILE=/data/game_state.db
       - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
+      - IN_DOCKER=1
     volumes:
       - game-data:/data
-    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('northern_capital'); server.run()"]
+    command: ["python", "location_server.py"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5002/health')"]
       interval: 5s
@@ -138,14 +142,16 @@ services:
     ports:
       - "5003:5003"
     environment:
+      - SLOT_ID=slot_3
       - LOCATION_ID=village_1
       - FLASK_APP=location_server.py
       - LOCATION_NAME=village-1
       - DATABASE_FILE=/data/game_state.db
       - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
+      - IN_DOCKER=1
     volumes:
       - game-data:/data
-    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_1'); server.run()"]
+    command: ["python", "location_server.py"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5003/health')"]
       interval: 5s
@@ -163,14 +169,16 @@ services:
     ports:
       - "5004:5004"
     environment:
+      - SLOT_ID=slot_4
       - LOCATION_ID=village_2
       - FLASK_APP=location_server.py
       - LOCATION_NAME=village-2
       - DATABASE_FILE=/data/game_state.db
       - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
+      - IN_DOCKER=1
     volumes:
       - game-data:/data
-    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_2'); server.run()"]
+    command: ["python", "location_server.py"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5004/health')"]
       interval: 5s
@@ -188,14 +196,16 @@ services:
     ports:
       - "5005:5005"
     environment:
+      - SLOT_ID=slot_5
       - LOCATION_ID=village_3
       - FLASK_APP=location_server.py
       - LOCATION_NAME=village-3
       - DATABASE_FILE=/data/game_state.db
       - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
+      - IN_DOCKER=1
     volumes:
       - game-data:/data
-    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_3'); server.run()"]
+    command: ["python", "location_server.py"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5005/health')"]
       interval: 5s
@@ -213,14 +223,16 @@ services:
     ports:
       - "5006:5006"
     environment:
+      - SLOT_ID=slot_6
       - LOCATION_ID=village_4
       - FLASK_APP=location_server.py
       - LOCATION_NAME=village-4
       - DATABASE_FILE=/data/game_state.db
       - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
+      - IN_DOCKER=1
     volumes:
       - game-data:/data
-    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_4'); server.run()"]
+    command: ["python", "location_server.py"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5006/health')"]
       interval: 5s
@@ -238,14 +250,16 @@ services:
     ports:
       - "5007:5007"
     environment:
+      - SLOT_ID=slot_7
       - LOCATION_ID=village_5
       - FLASK_APP=location_server.py
       - LOCATION_NAME=village-5
       - DATABASE_FILE=/data/game_state.db
       - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
+      - IN_DOCKER=1
     volumes:
       - game-data:/data
-    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_5'); server.run()"]
+    command: ["python", "location_server.py"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5007/health')"]
       interval: 5s
@@ -263,14 +277,16 @@ services:
     ports:
       - "5008:5008"
     environment:
+      - SLOT_ID=slot_8
       - LOCATION_ID=village_6
       - FLASK_APP=location_server.py
       - LOCATION_NAME=village-6
       - DATABASE_FILE=/data/game_state.db
       - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
+      - IN_DOCKER=1
     volumes:
       - game-data:/data
-    command: ["python", "-c", "from location_server import LocationServer; server = LocationServer('village_6'); server.run()"]
+    command: ["python", "location_server.py"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5008/health')"]
       interval: 5s
@@ -289,6 +305,7 @@ services:
       - "8080:8080"
     environment:
       - DATABASE_FILE=/data/game_state.db
+      - GAME_SESSIONS_DB=/data/game_sessions.db
       - LOCATION_NAME=war-map
       - SECRET_KEY=war_of_westeros_secret_key
       - IN_DOCKER=1

@@ -1,0 +1,313 @@
+name: validate-scenarios
+
+# Boots every scenario whose files were touched by the PR, after a CVE
+# scan of every image the scenario will run. Designed to make renovate
+# dependency PRs reviewable on signal rather than diff-eyeballing alone.
+#
+# Defense-in-depth (intentional, not paranoia):
+#   - permissions: contents: read       — no token write, no secrets
+#   - harden-runner egress allowlist    — compromised image can't phone home
+#   - third-party actions SHA-pinned    — tag pushes can't sneak in
+#   - trivy gate before any image runs  — known-bad images never execute
+#   - github-hosted ephemeral runners   — runner state is not persisted
+#
+# Triggered on pull_request (NOT pull_request_target): fork PRs run
+# without secrets, which is the safe default. Updating this file
+# requires the same scrutiny as updating any third-party action SHA.
+
+on:
+  pull_request:
+    paths:
+      - '*/docker-compose.yml'
+      - '*/docker-compose.yaml'
+      - '*/docker-compose.coda.yml'
+      - '*/Dockerfile'
+      - '*/config.alloy'
+      - '*/app/**'
+      - '*/*/Dockerfile'
+      - '*/*/requirements.txt'
+      - '*/*/package.json'
+      - '*/*/*.csproj'
+      - 'image-versions.env'
+      - '.github/scenario-list.txt'
+      - '.github/workflows/validate-scenarios.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-scenarios-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────
+  # detect: Map changed files to top-level scenario directories.
+  # Pure shell — no third-party action — to keep the supply-chain
+  # surface minimal.
+  # ──────────────────────────────────────────────────────────────────
+  detect:
+    name: Detect affected scenarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      scenarios: ${{ steps.filter.outputs.scenarios }}
+      count: ${{ steps.filter.outputs.count }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Compute affected scenarios
+        id: filter
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+
+          # The base sha may not be in the local clone with a shallow checkout;
+          # fetch-depth: 0 avoids that, but be belt-and-braces.
+          git fetch origin "$base" "$head" --depth=200 2>/dev/null || true
+
+          # Map every changed file to its first path segment. Empty lines
+          # come from root-level files (no segment); awk drops those.
+          git diff --name-only "$base" "$head" \
+            | awk -F/ 'NF>1 {print $1}' \
+            | sort -u > /tmp/segments.txt
+
+          # Intersect with the canonical scenario list. `|| true` keeps
+          # the pipeline alive when there's no overlap (e.g. a PR that
+          # only touches docs/CI).
+          grep -Fxf /tmp/segments.txt .github/scenario-list.txt \
+            | sort -u > /tmp/affected.txt || true
+
+          scenarios=$(jq -Rsc 'split("\n") | map(select(length>0))' /tmp/affected.txt)
+          count=$(wc -l < /tmp/affected.txt | tr -d ' ')
+
+          echo "scenarios=$scenarios" >> "$GITHUB_OUTPUT"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Affected scenarios"
+            echo
+            if [ "$count" = "0" ]; then
+              echo "_None — PR does not touch any scenario directory._"
+            else
+              echo "Count: \`$count\`"
+              echo
+              echo '```'
+              cat /tmp/affected.txt
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ──────────────────────────────────────────────────────────────────
+  # scan: For each affected scenario, resolve every image reference
+  # via `docker compose config --images`, then trivy-scan each one.
+  # Hard-fails on HIGH/CRITICAL CVEs that have a fix available.
+  # ──────────────────────────────────────────────────────────────────
+  scan:
+    name: Scan images
+    needs: detect
+    if: needs.detect.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        scenario: ${{ fromJSON(needs.detect.outputs.scenarios) }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        with:
+          egress-policy: block
+          # mirror.gcr.io is where trivy v0.50+ fetches its vulnerability
+          # DB by default (TRIVY_DB_REPOSITORY). Without it, every scan
+          # fails with "connect: connection refused".
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            ghcr.io:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            quay.io:443
+            cdn.quay.io:443
+            mirror.gcr.io:443
+            grafana.com:443
+            mcr.microsoft.com:443
+            public.ecr.aws:443
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Resolve images for ${{ matrix.scenario }}
+        id: images
+        run: |
+          set -euo pipefail
+          # Try .yml first, fall back to .yaml (some scenarios use either).
+          compose_file=""
+          for ext in yml yaml; do
+            f="${{ matrix.scenario }}/docker-compose.$ext"
+            if [ -f "$f" ]; then compose_file="$f"; break; fi
+          done
+          if [ -z "$compose_file" ]; then
+            echo "No docker-compose found for ${{ matrix.scenario }}" >&2
+            exit 1
+          fi
+          docker compose -f "$compose_file" \
+            --env-file image-versions.env \
+            config --images | sort -u > /tmp/images.txt
+          echo "Images to scan:"
+          cat /tmp/images.txt
+
+      - name: Trivy scan each image
+        # Run trivy via its own docker image (digest-pinned). No
+        # docker.sock mount: trivy pulls the target image itself rather
+        # than reaching into the host's docker — keeps the trivy
+        # container from gaining root-equivalent access on the runner.
+        # The TRIVY_DB env vars are read by trivy to know where to fetch
+        # vuln DBs; the defaults are fine and resolve to ghcr.io.
+        run: |
+          set -euo pipefail
+          TRIVY_IMAGE='aquasec/trivy:0.66.0@sha256:086971aaf400beebd94e8300fd8ea623774419597169156cec56eec5b00dfb1e'
+
+          # Pre-pull once so loop iterations don't re-resolve.
+          docker pull "$TRIVY_IMAGE"
+
+          mkdir -p /tmp/trivy-cache
+          fail=0
+          while IFS= read -r img; do
+            [ -z "$img" ] && continue
+            echo "::group::Scanning $img"
+            if ! docker run --rm \
+                -v /tmp/trivy-cache:/root/.cache/trivy \
+                "$TRIVY_IMAGE" image \
+                --severity HIGH,CRITICAL \
+                --ignore-unfixed \
+                --exit-code 1 \
+                --no-progress \
+                --timeout 5m \
+                "$img"; then
+              fail=1
+            fi
+            echo "::endgroup::"
+          done < /tmp/images.txt
+          exit $fail
+
+  # ──────────────────────────────────────────────────────────────────
+  # smoke: For each affected scenario, boot it via run-example.sh,
+  # wait until something healthy answers (Grafana, then Alloy, then
+  # Prometheus), then tear down.
+  # ──────────────────────────────────────────────────────────────────
+  smoke:
+    name: Smoke test
+    needs: scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        scenario: ${{ fromJSON(needs.detect.outputs.scenarios) }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        with:
+          egress-policy: block
+          # Smoke jobs build images for scenarios with custom app/ dirs
+          # (game-of-tracing, otel-*, trace-delivery) — those builds
+          # fetch from PyPI/npm/Go module proxy/NuGet during pip install,
+          # npm install, go build, dotnet restore. The allowlist below
+          # covers the registries plus those package indices.
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            ghcr.io:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            quay.io:443
+            cdn.quay.io:443
+            grafana.com:443
+            mcr.microsoft.com:443
+            public.ecr.aws:443
+            pypi.org:443
+            files.pythonhosted.org:443
+            registry.npmjs.org:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            api.nuget.org:443
+            dist.nuget.org:443
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Boot ${{ matrix.scenario }}
+        run: |
+          set -euo pipefail
+          chmod +x ./run-example.sh
+          ./run-example.sh "${{ matrix.scenario }}"
+
+      - name: Wait for a healthy endpoint (Grafana, Alloy, or Prometheus)
+        run: |
+          set -euo pipefail
+          # Probe in priority order. Most scenarios expose Grafana on
+          # :3000; self-monitoring exposes Alloy on :12345 instead;
+          # routing remaps Alloy. Grafana wins when present, else any
+          # ready endpoint counts as bring-up success.
+          probes=(
+            "http://localhost:3000/api/health"
+            "http://localhost:12345/-/ready"
+            "http://localhost:9090/-/ready"
+          )
+
+          deadline=$(( $(date +%s) + 300 ))   # 5 min total
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            for url in "${probes[@]}"; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$url" 2>/dev/null || true)
+              if [ "$code" = "200" ]; then
+                echo "Healthy: $url"
+                exit 0
+              fi
+            done
+            sleep 5
+          done
+
+          echo "::error::No probe endpoint became healthy within 5 min"
+          exit 1
+
+      - name: Verify no exited containers
+        run: |
+          set -euo pipefail
+          cd "${{ matrix.scenario }}"
+          # `docker compose ps --status exited` lists any container that
+          # crashed during bring-up. An empty list is the pass case.
+          exited=$(docker compose ps --status exited --format '{{.Name}}' || true)
+          if [ -n "$exited" ]; then
+            echo "::error::Exited containers detected:"
+            echo "$exited"
+            exit 1
+          fi
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          cd "${{ matrix.scenario }}"
+          docker compose logs --no-color || true
+
+      - name: Tear down
+        if: always()
+        run: |
+          cd "${{ matrix.scenario }}"
+          docker compose down --volumes --remove-orphans || true

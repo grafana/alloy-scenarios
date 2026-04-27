@@ -16,9 +16,10 @@ if [ ! -d "$EXAMPLE_DIR" ]; then
     exit 1
 fi
 
-# Check if docker-compose.yml exists in the example directory
-if [ ! -f "$EXAMPLE_DIR/docker-compose.yml" ]; then
-    echo "Error: No docker-compose.yml found in '$EXAMPLE_DIR'."
+# Check if a docker-compose file exists in the example directory.
+# Some scenarios use .yaml instead of .yml; accept either.
+if [ ! -f "$EXAMPLE_DIR/docker-compose.yml" ] && [ ! -f "$EXAMPLE_DIR/docker-compose.yaml" ]; then
+    echo "Error: No docker-compose.yml or docker-compose.yaml found in '$EXAMPLE_DIR'."
     exit 1
 fi
 

@@ -3,7 +3,7 @@ version: '3.8'
 services:
 
   loki:
-    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.7}
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.10}
     ports:
       - 3100:3100/tcp
     volumes:
@@ -12,7 +12,7 @@ services:
 
 
   prometheus:
-     image: prom/prometheus:${PROMETHEUS_VERSION:-v3.10.0}
+     image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.2}
      command:
        - --web.enable-remote-write-receiver
        - --config.file=/etc/prometheus/prometheus.yml
@@ -23,7 +23,7 @@ services:
 
 
   grafana:
-    image: grafana/grafana:${GRAFANA_VERSION:-12.4.0}
+    image: grafana/grafana:${GRAFANA_VERSION:-13.0.1}
     environment:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_ANONYMOUS_ENABLED=true

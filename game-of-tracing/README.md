@@ -52,15 +52,33 @@ This game teaches several key concepts in distributed tracing:
 
 ## Game Overview
 
-The game simulates a war between two kingdoms, each starting from their capital city. Players must:
+Open the scenario at `http://localhost:8080` and you land on a **map picker**. Two maps ship today:
+
+### War of Kingdoms (default, 2-player)
+
+Two rival kingdoms — Southern and Northern — race to capture the enemy capital. Players:
 
 - Collect resources from their territories
-- Build armies to expand their influence
-- Capture neutral villages
+- Build armies (30 resources per unit) to expand their influence
+- Capture neutral villages (6 of them)
 - Send resources back to their capital
 - Launch strategic attacks on enemy territories
 
-The game supports both single-player (with AI opponent) and two-player modes.
+**Win condition:** capture the enemy capital.
+
+### White Walkers Attack (single-player)
+
+The Long Night has come. The human plays the **Night's Watch** (player faction); the AI opponent plays the **White Walkers**. A new **Barbarian** faction controls two villages on the flanks — passive, slowly accruing army units, good raid targets.
+
+New mechanics:
+
+- **Wall settlements** run across the middle of the map. Defenders count **2×** when a wall is attacked, making them hard to dislodge.
+- **Corpse economy.** White Walkers spend **corpses** (not resources) to raise new armies at their fortress. Corpses come from winning battles (every unit killed on either side becomes a corpse) plus a slow passive tick at the fortress itself. Cost: 5 corpses per unit.
+- **Barbarians** never attack. They accrue +1 army every 30 s — easy farm for White Walkers, but they also harass unguarded Night's Watch supply lines.
+
+**Win condition:** hold *every* wall settlement continuously for **5 ticks** (150 s, since the tick is 30 s). Any wall changing hands resets the counter.
+
+Both maps share the same 8 location containers — the active map lives in `game_state.db`, and the `/reload` endpoint on each service rebinds the slot's identity when the player switches maps via the picker.
 
 Each action in the game generates traces that can be analyzed in Grafana Tempo, demonstrating how distributed tracing works in a real application.
 

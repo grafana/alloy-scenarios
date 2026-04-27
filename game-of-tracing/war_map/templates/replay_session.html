@@ -177,30 +177,12 @@ let replayInterval = null;
 let gameLocations = {};
 let replaySpeed = 2000;
 
-const LOCATION_POSITIONS = {
-    "southern_capital": {"x": 20, "y": 70, "type": "capital", "name": "Southern Capital"},
-    "northern_capital": {"x": 80, "y": 20, "type": "capital", "name": "Northern Capital"},
-    "village_1": {"x": 35, "y": 55, "type": "village", "name": "Village 1"},
-    "village_2": {"x": 65, "y": 35, "type": "village", "name": "Village 2"},
-    "village_3": {"x": 30, "y": 40, "type": "village", "name": "Village 3"},
-    "village_4": {"x": 45, "y": 65, "type": "village", "name": "Village 4"},
-    "village_5": {"x": 50, "y": 50, "type": "village", "name": "Village 5"},
-    "village_6": {"x": 70, "y": 45, "type": "village", "name": "Village 6"}
-};
-
-const LOCATION_CONNECTIONS = [
-    ["southern_capital", "village_1"],
-    ["southern_capital", "village_3"],
-    ["northern_capital", "village_2"],
-    ["northern_capital", "village_6"],
-    ["village_1", "village_2"],
-    ["village_1", "village_4"],
-    ["village_2", "village_5"],
-    ["village_3", "village_5"],
-    ["village_3", "village_6"],
-    ["village_4", "village_5"],
-    ["village_5", "village_6"]
-];
+// Layout for the map this session was played on — provided server-side
+// from ``LOCATION_POSITIONS_BY_MAP[map_id]`` so the replay matches WWA or
+// any future map, not just the WoK default.
+const REPLAY_MAP_ID = {{ map_id | tojson }};
+const LOCATION_POSITIONS = {{ location_positions | tojson }};
+const LOCATION_CONNECTIONS = {{ location_connections | tojson }};
 
 document.addEventListener('DOMContentLoaded', function() {
     loadSessionData();

@@ -1,0 +1,295 @@
+name: validate-k8s-scenarios
+
+# Lightweight validation for k8s scenarios under k8s/. Mirrors the
+# defense-in-depth posture of validate-scenarios.yml (docker), but
+# without paying the cost of a real cluster on every PR:
+#
+#   validate (every PR):  helm template + kubeconform per chart per scenario.
+#                         Renders offline, validates against k8s API schemas.
+#   kind-integration:     opt-in via workflow_dispatch only. Boots kind,
+#                         helm-installs all charts, waits for pods Ready.
+#
+# Defense-in-depth (same as the docker workflow):
+#   - permissions: contents: read       (no token write, no secrets)
+#   - harden-runner egress allowlist    (compromised tool can't phone home)
+#   - third-party actions SHA-pinned    (tag pushes can't sneak in)
+#   - direct binary downloads, version-pinned (helm, kubeconform)
+#   - github-hosted ephemeral runners
+#   - pull_request, not pull_request_target
+
+on:
+  pull_request:
+    paths:
+      - 'k8s/**'
+      - '.github/k8s-scenarios.json'
+      - '.github/workflows/validate-k8s-scenarios.yml'
+  workflow_dispatch:
+    inputs:
+      kind_integration:
+        description: 'Run the kind-cluster integration job after validation'
+        type: boolean
+        default: false
+      scenario:
+        description: 'Which scenario(s) to run kind-integration for ("all" or comma-separated subset, e.g. "metrics,logs")'
+        type: string
+        default: 'all'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-k8s-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  HELM_VERSION: 'v4.1.4'
+  KUBECONFORM_VERSION: 'v0.6.7'
+  KUBERNETES_VERSION: '1.31.0'
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────
+  # validate: helm template + kubeconform per chart for each of the
+  # 4 scenarios. Pure offline — no API server, no real cluster.
+  # ──────────────────────────────────────────────────────────────────
+  validate:
+    name: Validate ${{ matrix.scenario }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [metrics, logs, tracing, profiling]
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            get.helm.sh:443
+            grafana.github.io:443
+            prometheus-community.github.io:443
+            charts.bitnami.com:443
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install helm + kubeconform + yamllint
+        run: |
+          set -euo pipefail
+          # Helm — pinned by version. Upstream tarball, verify by sha would
+          # be ideal but Helm doesn't publish stable per-tag checksums in a
+          # consumable way; pinning the version + restricting egress is the
+          # workable compromise.
+          curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
+            | tar -xz -C /tmp
+          sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+
+          # kubeconform — pinned. The release archive contains just the
+          # binary; we extract it directly.
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin/ kubeconform
+
+          # yamllint — preinstalled python3 + pip on ubuntu-latest.
+          sudo pip install --quiet yamllint
+
+          helm version --short
+          kubeconform -v
+          yamllint --version
+
+      - name: Helm repo bootstrap
+        run: |
+          set -euo pipefail
+          helm repo add grafana https://grafana.github.io/helm-charts
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+
+      - name: yamllint values files
+        # Loose ruleset — values files commonly use long datasource URLs and
+        # don't need a leading `---`. Run as advisory: don't fail the job on
+        # style; we want it for hygiene signal, not blocking.
+        continue-on-error: true
+        run: |
+          yamllint -d "{extends: relaxed, rules: {line-length: disable, document-start: disable}}" \
+            k8s/${{ matrix.scenario }}/
+
+      - name: Helm template + kubeconform per chart
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/rendered
+          fail=0
+
+          # Iterate the scenario's chart list. helm template against the
+          # remote chart triggers values.schema.json validation upstream
+          # (most grafana charts ship a schema), then kubeconform validates
+          # the rendered Kubernetes API objects against the target version.
+          while IFS= read -r entry; do
+            release=$(jq -r '.release' <<<"$entry")
+            chart=$(jq -r '.chart'    <<<"$entry")
+            values=$(jq -r '.values'  <<<"$entry")
+            version=$(jq -r '.version // ""' <<<"$entry")
+            values_path="k8s/${{ matrix.scenario }}/$values"
+
+            ver_arg=()
+            [ -n "$version" ] && ver_arg=(--version "$version")
+
+            echo "::group::helm template $release ($chart${version:+ @$version})"
+            out="/tmp/rendered/${{ matrix.scenario }}-$release.yaml"
+            if ! helm template "$release" "$chart" "${ver_arg[@]}" \
+                  -f "$values_path" > "$out" 2> "/tmp/rendered/${{ matrix.scenario }}-$release.err"; then
+              echo "::error::helm template failed for $release"
+              cat "/tmp/rendered/${{ matrix.scenario }}-$release.err"
+              fail=1
+              echo "::endgroup::"
+              continue
+            fi
+            lines=$(wc -l < "$out")
+            echo "Rendered $lines lines to $out"
+            echo "::endgroup::"
+
+            echo "::group::kubeconform $release"
+            # -ignore-missing-schemas: skip CRDs whose schemas aren't in the
+            # datree catalog (catching built-in K8s API drift is the real
+            # signal; CRD validation is the chart maintainer's responsibility).
+            if ! kubeconform -strict -summary \
+                  -kubernetes-version "$KUBERNETES_VERSION" \
+                  -schema-location default \
+                  -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+                  -ignore-missing-schemas \
+                  "$out"; then
+              echo "::error::kubeconform failed for $release"
+              fail=1
+            fi
+            echo "::endgroup::"
+          done < <(jq -c --arg s "${{ matrix.scenario }}" '.[$s][]' .github/k8s-scenarios.json)
+
+          exit $fail
+
+      - name: Upload rendered manifests
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rendered-${{ matrix.scenario }}
+          path: /tmp/rendered/
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────
+  # kind-integration: Boots a real kind cluster and helm-installs all
+  # charts for the scenario. Heavy — only on workflow_dispatch.
+  # ──────────────────────────────────────────────────────────────────
+  kind-integration:
+    name: Kind integration ${{ matrix.scenario }}
+    if: github.event_name == 'workflow_dispatch' && inputs.kind_integration == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [metrics, logs, tracing, profiling]
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        with:
+          egress-policy: block
+          # Adds image registries on top of the validate allowlist —
+          # helm install actually pulls images for kind to schedule.
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            get.helm.sh:443
+            grafana.github.io:443
+            prometheus-community.github.io:443
+            charts.bitnami.com:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            ghcr.io:443
+            quay.io:443
+            cdn.quay.io:443
+            grafana.com:443
+            mcr.microsoft.com:443
+            public.ecr.aws:443
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Filter by scenario input
+        id: filter
+        # User-supplied workflow_dispatch input is passed via env, NOT
+        # interpolated directly into the run block, to prevent
+        # template-injection (zizmor: template-injection rule).
+        # matrix.scenario IS safe to interpolate directly because it's
+        # constrained to the static list above.
+        env:
+          USER_SCENARIO: ${{ inputs.scenario }}
+          MATRIX_SCENARIO: ${{ matrix.scenario }}
+        run: |
+          set -euo pipefail
+          if [ "$USER_SCENARIO" = "all" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if grep -qx "$MATRIX_SCENARIO" <(tr ',' '\n' <<<"$USER_SCENARIO"); then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping $MATRIX_SCENARIO (not in user-selected subset '$USER_SCENARIO')"
+          fi
+
+      - name: Install helm
+        if: steps.filter.outputs.run == 'true'
+        run: |
+          curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
+            | tar -xz -C /tmp
+          sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+
+      - name: Create kind cluster
+        if: steps.filter.outputs.run == 'true'
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+        with:
+          config: k8s/${{ matrix.scenario }}/kind.yml
+          cluster_name: ${{ matrix.scenario }}
+
+      - name: Helm bootstrap + install all charts
+        if: steps.filter.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          helm repo add grafana https://grafana.github.io/helm-charts
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+          kubectl create namespace meta || true
+
+          while IFS= read -r entry; do
+            release=$(jq -r '.release' <<<"$entry")
+            chart=$(jq -r '.chart'    <<<"$entry")
+            values=$(jq -r '.values'  <<<"$entry")
+            version=$(jq -r '.version // ""' <<<"$entry")
+            values_path="k8s/${{ matrix.scenario }}/$values"
+
+            ver_arg=()
+            [ -n "$version" ] && ver_arg=(--version "$version")
+
+            echo "::group::helm install $release ($chart)"
+            helm install "$release" "$chart" "${ver_arg[@]}" \
+              -f "$values_path" -n meta --create-namespace \
+              --wait --timeout 5m
+            echo "::endgroup::"
+          done < <(jq -c --arg s "${{ matrix.scenario }}" '.[$s][]' .github/k8s-scenarios.json)
+
+      - name: Wait for pods Ready in meta namespace
+        if: steps.filter.outputs.run == 'true'
+        run: |
+          if ! kubectl wait --for=condition=Ready pods --all -n meta --timeout=10m; then
+            echo "::error::Pods did not become Ready"
+            kubectl get pods -n meta -o wide
+            kubectl describe pods -n meta
+            exit 1
+          fi
+          kubectl get pods -n meta -o wide
