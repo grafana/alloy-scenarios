@@ -68,6 +68,7 @@ jobs:
             api.github.com:443
             github.com:443
             objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
             raw.githubusercontent.com:443
             get.helm.sh:443
             grafana.github.io:443
@@ -200,6 +201,7 @@ jobs:
             api.github.com:443
             github.com:443
             objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
             raw.githubusercontent.com:443
             get.helm.sh:443
             grafana.github.io:443
@@ -220,18 +222,25 @@ jobs:
 
       - name: Filter by scenario input
         id: filter
+        # User-supplied workflow_dispatch input is passed via env, NOT
+        # interpolated directly into the run block, to prevent
+        # template-injection (zizmor: template-injection rule).
+        # matrix.scenario IS safe to interpolate directly because it's
+        # constrained to the static list above.
+        env:
+          USER_SCENARIO: ${{ inputs.scenario }}
+          MATRIX_SCENARIO: ${{ matrix.scenario }}
         run: |
           set -euo pipefail
-          want="${{ inputs.scenario }}"
-          if [ "$want" = "all" ]; then
+          if [ "$USER_SCENARIO" = "all" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if grep -qx '${{ matrix.scenario }}' <(tr ',' '\n' <<<"$want"); then
+          if grep -qx "$MATRIX_SCENARIO" <(tr ',' '\n' <<<"$USER_SCENARIO"); then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping ${{ matrix.scenario }} (not in user-selected subset '$want')"
+            echo "::notice::Skipping $MATRIX_SCENARIO (not in user-selected subset '$USER_SCENARIO')"
           fi
 
       - name: Install helm
