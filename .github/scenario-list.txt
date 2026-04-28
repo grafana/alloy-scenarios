@@ -26,6 +26,7 @@ routing
 self-monitoring
 snmp
 syslog
+systemd-journal
 trace-delivery
 windows
 windows-events
