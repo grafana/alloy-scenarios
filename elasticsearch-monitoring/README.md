@@ -36,6 +36,9 @@ Once running, you can query Elasticsearch metrics in Grafana or Prometheus. Some
 - `elasticsearch_indices_store_size_bytes` - Total store size
 - `elasticsearch_jvm_memory_used_bytes` - JVM memory usage
 - `elasticsearch_process_cpu_percent` - CPU usage
+- `elasticsearch_breakers_tripped` - Circuit breaker trip count
+
+Metrics are scraped every 30s by default — adjust `scrape_interval` in `config.alloy` if you need finer or coarser resolution.
 
 ## Stopping
 
