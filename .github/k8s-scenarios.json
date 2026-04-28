@@ -18,5 +18,9 @@
     { "release": "pyroscope",  "chart": "grafana/pyroscope",               "values": "pyroscope-values.yml" },
     { "release": "grafana",    "chart": "grafana/grafana",                 "values": "grafana-values.yml" },
     { "release": "k8s",        "chart": "grafana/k8s-monitoring",          "values": "k8s-monitoring-values.yml", "version": "^4.0.0" }
+  ],
+  "events": [
+    { "release": "loki",       "chart": "grafana/loki",                    "values": "loki-values.yml" },
+    { "release": "grafana",    "chart": "grafana/grafana",                 "values": "grafana-values.yml" }
   ]
 }
