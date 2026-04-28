@@ -1,6 +1,6 @@
 services:
   redis:
-    image: redis:7@sha256:3e0669e42d4fe421c9dea0ba5fbc04d336b80b4f32a6c7d25bee3a1d089288a1
+    image: redis:8@sha256:832d7785830f3f4b559300e6191fc914b15642c1935252338825cf4332200148
     ports:
       - "6379:6379"
 
