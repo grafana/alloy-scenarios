@@ -1,0 +1,68 @@
+// systemd journal → Loki, with filtering recipes.
+//
+// Demonstrates three patterns the broader `linux/` scenario doesn't:
+//   1. Promoting useful journal fields (`unit`, `priority`, `hostname`)
+//      to Loki labels via `loki.relabel`.
+//   2. Dropping noisy systemd units that flood the journal but rarely
+//      carry useful signal.
+//   3. Dropping low-priority entries (info/debug) at ingestion time
+//      to keep Loki cardinality and storage low.
+//
+// Linux-host only — `loki.source.journal` reads /var/log/journal,
+// which doesn't exist on macOS or Windows. See README for details.
+
+livedebugging { enabled = true }
+
+// Translate the journal's underscore-prefixed metadata into clean
+// Loki label names. The journal exposes a lot of fields; we promote
+// only a few useful ones.
+loki.relabel "journal" {
+	forward_to = []
+
+	rule {
+		source_labels = ["__journal__systemd_unit"]
+		target_label  = "unit"
+	}
+
+	rule {
+		source_labels = ["__journal_priority_keyword"]
+		target_label  = "priority"
+	}
+
+	rule {
+		source_labels = ["__journal__hostname"]
+		target_label  = "hostname"
+	}
+}
+
+loki.source.journal "host" {
+	path          = "/var/log/journal"
+	max_age       = "12h"
+	relabel_rules = loki.relabel.journal.rules
+	labels        = { job = "systemd-journal" }
+	forward_to    = [loki.process.journal.receiver]
+}
+
+loki.process "journal" {
+	// Drop high-volume units that rarely carry actionable signal in a
+	// generic dev/ops dashboard. Tune this list to your environment.
+	stage.match {
+		selector = `{unit=~"systemd-logind.service|systemd-tmpfiles-clean.service|cron.service"}`
+		action   = "drop"
+	}
+
+	// Drop low-priority entries (info / debug). Keep notice and above.
+	// Adjust if you want to keep info messages.
+	stage.match {
+		selector = `{priority=~"info|debug"}`
+		action   = "drop"
+	}
+
+	forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}
