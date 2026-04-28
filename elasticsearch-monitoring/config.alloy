@@ -11,8 +11,9 @@ prometheus.exporter.elasticsearch "default" {
 }
 
 prometheus.scrape "elasticsearch" {
-	targets    = prometheus.exporter.elasticsearch.default.targets
-	forward_to = [prometheus.remote_write.default.receiver]
+	targets         = prometheus.exporter.elasticsearch.default.targets
+	forward_to      = [prometheus.remote_write.default.receiver]
+	scrape_interval = "30s"
 }
 
 prometheus.remote_write "default" {
