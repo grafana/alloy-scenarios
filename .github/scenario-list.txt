@@ -27,3 +27,4 @@ snmp
 syslog
 trace-delivery
 windows
+windows-events
