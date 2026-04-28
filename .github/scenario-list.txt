@@ -1,3 +1,4 @@
+aws-firehose-logs
 blackbox-probing
 continuous-profiling
 docker-monitoring
