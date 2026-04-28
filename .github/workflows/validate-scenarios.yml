@@ -373,7 +373,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────
   smoke:
     name: Smoke test
-    needs: scan
+    needs: [detect, scan]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
