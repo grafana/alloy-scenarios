@@ -1,0 +1,47 @@
+// AWS Kinesis Data Firehose → Loki, no AWS account required.
+//
+// `loki.source.awsfirehose` is just an HTTP endpoint that accepts
+// Firehose's documented delivery format (a `records` array of base64
+// blobs). A small Python sender container in this scenario fakes the
+// producer side, posting CloudWatch-style log batches every few
+// seconds. The component auto-detects the CloudWatch envelope and
+// attaches the `__aws_cw_*` discovery labels we relabel below.
+
+livedebugging { enabled = true }
+
+// CloudWatch envelope discovery labels are exposed by
+// `loki.source.awsfirehose` only via its `relabel_rules` argument
+// (same pattern as `loki.source.journal`). They are NOT attached to
+// outgoing entries by default — running them through a standalone
+// `loki.relabel` after the source would see no `__aws_cw_*` labels.
+loki.relabel "firehose" {
+	forward_to = []
+
+	rule {
+		source_labels = ["__aws_cw_log_group"]
+		target_label  = "log_group"
+	}
+	rule {
+		source_labels = ["__aws_cw_log_stream"]
+		target_label  = "log_stream"
+	}
+	rule {
+		source_labels = ["__aws_cw_msg_type"]
+		target_label  = "msg_type"
+	}
+}
+
+loki.source.awsfirehose "fake" {
+	http {
+		listen_address = "0.0.0.0"
+		listen_port    = 9999
+	}
+	relabel_rules = loki.relabel.firehose.rules
+	forward_to    = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}
