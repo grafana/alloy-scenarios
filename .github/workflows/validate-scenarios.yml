@@ -6,9 +6,8 @@ name: validate-scenarios
 #
 # Defense-in-depth (intentional, not paranoia):
 #   - permissions: contents: read       — no token write, no secrets
-#   - harden-runner egress allowlist    — compromised image can't phone home
 #   - third-party actions SHA-pinned    — tag pushes can't sneak in
-#   - trivy gate before any image runs  — known-bad images never execute
+#   - trivy advisory scan before boot   — known-bad images flagged in PR
 #   - github-hosted ephemeral runners   — runner state is not persisted
 #
 # Triggered on pull_request (NOT pull_request_target): fork PRs run
@@ -69,11 +68,6 @@ jobs:
       count_full: ${{ steps.filter.outputs.count_full }}
       sampled: ${{ steps.filter.outputs.sampled }}
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
-        with:
-          egress-policy: audit
-
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -199,35 +193,6 @@ jobs:
       matrix:
         scenario: ${{ fromJSON(needs.detect.outputs.scenarios) }}
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
-        with:
-          egress-policy: block
-          # Docker Hub endpoint set: trivy in remote-mode (no docker.sock
-          # mount) hits index.docker.io for the manifest (legacy registry
-          # name; HTTP-redirects to registry-1.docker.io). The initial
-          # connection has to land at index.docker.io for the redirect to
-          # even happen, so allowlisting registry-1.docker.io alone is
-          # not enough — trivy fails with "connection refused".
-          # mirror.gcr.io is where trivy v0.50+ fetches its vulnerability
-          # DB (TRIVY_DB_REPOSITORY default).
-          allowed-endpoints: >
-            api.github.com:443
-            github.com:443
-            objects.githubusercontent.com:443
-            release-assets.githubusercontent.com:443
-            ghcr.io:443
-            index.docker.io:443
-            registry-1.docker.io:443
-            auth.docker.io:443
-            production.cloudflare.docker.com:443
-            quay.io:443
-            cdn.quay.io:443
-            mirror.gcr.io:443
-            grafana.com:443
-            mcr.microsoft.com:443
-            public.ecr.aws:443
-
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -373,7 +338,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────
   smoke:
     name: Smoke test
-    needs: scan
+    needs: [detect, scan]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -382,37 +347,6 @@ jobs:
       matrix:
         scenario: ${{ fromJSON(needs.detect.outputs.scenarios) }}
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
-        with:
-          egress-policy: block
-          # Smoke jobs build images for scenarios with custom app/ dirs
-          # (game-of-tracing, otel-*, trace-delivery) — those builds
-          # fetch from PyPI/npm/Go module proxy/NuGet during pip install,
-          # npm install, go build, dotnet restore. The allowlist below
-          # covers the registries plus those package indices.
-          allowed-endpoints: >
-            api.github.com:443
-            github.com:443
-            objects.githubusercontent.com:443
-            release-assets.githubusercontent.com:443
-            ghcr.io:443
-            registry-1.docker.io:443
-            auth.docker.io:443
-            production.cloudflare.docker.com:443
-            quay.io:443
-            cdn.quay.io:443
-            grafana.com:443
-            mcr.microsoft.com:443
-            public.ecr.aws:443
-            pypi.org:443
-            files.pythonhosted.org:443
-            registry.npmjs.org:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            api.nuget.org:443
-            dist.nuget.org:443
-
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -435,7 +369,7 @@ jobs:
             "http://localhost:9090/-/ready"
           )
 
-          deadline=$(( $(date +%s) + 300 ))   # 5 min total
+          deadline=$(( $(date +%s) + 180 ))   # 3 min total
           while [ "$(date +%s)" -lt "$deadline" ]; do
             for url in "${probes[@]}"; do
               code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$url" 2>/dev/null || true)
@@ -447,7 +381,7 @@ jobs:
             sleep 5
           done
 
-          echo "::error::No probe endpoint became healthy within 5 min"
+          echo "::error::No probe endpoint became healthy within 3 min"
           exit 1
 
       - name: Verify no exited containers

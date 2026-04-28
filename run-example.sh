@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Usage check
 if [ $# -lt 1 ]; then
