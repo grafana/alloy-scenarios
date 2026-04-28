@@ -1,0 +1,84 @@
+// ###################################################################
+// Windows Security Event Log → Loki, with filtering and field labels
+// ###################################################################
+//
+// Differs from the broader `windows/` scenario in three ways:
+//   1. Security channel only (Application + System are covered there)
+//   2. Drops high-volume audit-noise event IDs that bury real signal
+//   3. Promotes security-specific fields (subject_user_name,
+//      target_user_name, logon_type) to labels for SOC-style queries
+//
+// Run target: a Windows host with Alloy installed natively. The
+// docker-compose.yml in this directory only runs Loki + Grafana;
+// Alloy itself is a Windows service.
+
+livedebugging {}
+
+// Ingest the Security channel. `use_incoming_timestamp = true` keeps
+// the original event time rather than the time Alloy received it,
+// which matters when replaying historical logs after an Alloy restart.
+loki.source.windowsevent "security" {
+	eventlog_name          = "Security"
+	use_incoming_timestamp = true
+	forward_to             = [loki.process.security.receiver]
+}
+
+loki.process "security" {
+	// Step 1: parse the windowsevent JSON wrapper.
+	stage.json {
+		expressions = {
+			message       = "",
+			eventRecordID = "",
+			channel       = "",
+			computer      = "",
+		}
+	}
+
+	// Step 2: parse the event message (XML/EventData) into top-level
+	// fields. The exact keys depend on event type — `eventlogmessage`
+	// pulls every named field from the XML/EventData payload.
+	stage.eventlogmessage {
+		source             = "message"
+		overwrite_existing = true
+	}
+
+	// Step 3: drop high-noise event IDs that are rarely useful in a
+	// SOC dashboard but consume most of the Security log volume:
+	//   4658 — handle to an object closed
+	//   4690 — attempt to duplicate a handle to an object
+	//   4674 — operation attempted on a privileged object
+	//   5379 — Credential Manager credentials read
+	stage.match {
+		selector = `{event_id=~"4658|4690|4674|5379"}`
+		action   = "drop"
+	}
+
+	// Step 4: promote useful fields to labels. Indexed labels make
+	// "show me all failed logons by username" queries cheap.
+	stage.labels {
+		values = {
+			event_id          = "",
+			subject_user_name = "",
+			target_user_name  = "",
+			logon_type        = "",
+		}
+	}
+
+	// Step 5: keep heavyweight fields out of labels but searchable
+	// via structured metadata.
+	stage.structured_metadata {
+		values = {
+			eventRecordID = "",
+			channel       = "",
+			computer      = "",
+		}
+	}
+
+	forward_to = [loki.write.endpoint.receiver]
+}
+
+loki.write "endpoint" {
+	endpoint {
+		url = "http://localhost:3100/loki/api/v1/push"
+	}
+}
