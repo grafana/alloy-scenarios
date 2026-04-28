@@ -1,0 +1,62 @@
+# Alloy pipeline as a ConfigMap. Mounted into the alloy Deployment at
+# /etc/alloy/config.alloy.
+#
+# Pipeline:
+#   loki.source.kubernetes_events  (cluster-wide events feed)
+#     → loki.process               (parse JSON, promote labels)
+#     → loki.write                 (push to Loki in this cluster)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-config
+  namespace: meta
+data:
+  config.alloy: |
+    livedebugging {}
+
+    loki.source.kubernetes_events "cluster" {
+      job_name   = "kubernetes-events"
+      log_format = "json"
+      forward_to = [loki.process.events.receiver]
+    }
+
+    loki.process "events" {
+      // The component emits a flat JSON envelope (top-level fields:
+      // type, reason, kind, name, count, msg, sourcecomponent, etc).
+      // The `namespace` label is already attached by the source component
+      // itself, so we don't need to extract it here.
+      stage.json {
+        expressions = {
+          type   = "type",
+          reason = "reason",
+          kind   = "kind",
+          name   = "name",
+        }
+      }
+
+      // Indexed labels — fast filtering for "show all Warnings in
+      // namespace X with reason Y on a Pod".
+      stage.labels {
+        values = {
+          type   = "",
+          reason = "",
+          kind   = "",
+        }
+      }
+
+      // High-cardinality fields kept out of the label index but still
+      // queryable via `| json` filters.
+      stage.structured_metadata {
+        values = {
+          name = "",
+        }
+      }
+
+      forward_to = [loki.write.loki.receiver]
+    }
+
+    loki.write "loki" {
+      endpoint {
+        url = "http://loki-gateway.meta.svc.cluster.local/loki/api/v1/push"
+      }
+    }

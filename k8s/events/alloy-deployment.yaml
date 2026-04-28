@@ -1,0 +1,59 @@
+# A single-replica Deployment is the right shape for this scenario:
+# `loki.source.kubernetes_events` watches a cluster-scoped resource, so
+# more than one replica would just produce duplicate log lines for every
+# event. (A DaemonSet would be wrong for the same reason.)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alloy
+  namespace: meta
+  labels:
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/part-of: alloy-events
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alloy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alloy
+    spec:
+      serviceAccountName: alloy
+      containers:
+        - name: alloy
+          image: grafana/alloy:v1.16.0
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --server.http.listen-addr=0.0.0.0:12345
+            - --storage.path=/var/lib/alloy/data
+          ports:
+            - name: http
+              containerPort: 12345
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+            - name: storage
+              mountPath: /var/lib/alloy/data
+      volumes:
+        - name: config
+          configMap:
+            name: alloy-config
+        - name: storage
+          emptyDir: {}
+---
+# Lightweight Service so the Alloy UI can be port-forwarded easily.
+apiVersion: v1
+kind: Service
+metadata:
+  name: alloy
+  namespace: meta
+spec:
+  selector:
+    app.kubernetes.io/name: alloy
+  ports:
+    - name: http
+      port: 12345
+      targetPort: 12345
