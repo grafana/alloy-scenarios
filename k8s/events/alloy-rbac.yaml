@@ -1,0 +1,32 @@
+# Minimal RBAC for `loki.source.kubernetes_events`.
+# It needs cluster-wide read/list/watch on events. Nothing else.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy
+  namespace: meta
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: alloy-events-reader
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: alloy-events-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: alloy-events-reader
+subjects:
+  - kind: ServiceAccount
+    name: alloy
+    namespace: meta
