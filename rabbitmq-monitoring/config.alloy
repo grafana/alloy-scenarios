@@ -1,0 +1,60 @@
+// RabbitMQ Monitoring with Grafana Alloy.
+// Metrics: scrape RabbitMQ's built-in Prometheus endpoint.
+// Logs: collect RabbitMQ container logs from Docker and ship them to Loki.
+
+livedebugging {
+	enabled = true
+}
+
+prometheus.scrape "rabbitmq" {
+	targets = [{
+		__address__ = "rabbitmq:15692",
+		job         = "rabbitmq",
+	}]
+	forward_to      = [prometheus.remote_write.local.receiver]
+	scrape_interval = "15s"
+}
+
+prometheus.remote_write "local" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}
+
+discovery.docker "linux" {
+	host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "rabbitmq_logs" {
+	targets = discovery.docker.linux.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/rabbitmq-monitoring-rabbitmq"
+		action        = "keep"
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "rabbitmq"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "container_name"
+	}
+}
+
+loki.source.docker "rabbitmq" {
+	host          = "unix:///var/run/docker.sock"
+	targets       = discovery.docker.linux.targets
+	relabel_rules = discovery.relabel.rabbitmq_logs.rules
+	forward_to    = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}
