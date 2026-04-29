@@ -1,6 +1,6 @@
 services:
   nginx:
-    image: nginx:${NGINX_VERSION:-1.27-alpine}
+    image: nginx:${NGINX_VERSION:-1.30-alpine}
     container_name: nginx-monitoring-nginx
     ports:
       - "8080:80"
