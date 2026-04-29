@@ -1,0 +1,45 @@
+services:
+  rabbitmq:
+    image: rabbitmq:${RABBITMQ_VERSION:-4.3.0-management}
+    container_name: rabbitmq-monitoring-rabbitmq
+    hostname: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+      - "15692:15692"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - ./enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  loadgen:
+    image: pivotalrabbitmq/perf-test:${RABBITMQ_PERF_TEST_VERSION:-2.24.0}
+    container_name: rabbitmq-monitoring-loadgen
+    command:
+      - --uri
+      - amqp://guest:guest@rabbitmq:5672
+      - --queue
+      - alloy-sample
+      - --producers
+      - "1"
+      - --consumers
+      - "0"
+      - --rate
+      - "1"
+      - --size
+      - "256"
+      - --flag
+      - persistent
+      - --id
+      - alloy-rabbitmq-demo
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
