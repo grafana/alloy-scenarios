@@ -9,7 +9,7 @@ services:
       - nginx-logs:/var/log/nginx-data
 
   nginx-exporter:
-    image: nginx/nginx-prometheus-exporter:${NGINX_EXPORTER_VERSION:-1.4.2}
+    image: nginx/nginx-prometheus-exporter:${NGINX_EXPORTER_VERSION:-1.5.1}
     container_name: nginx-monitoring-exporter
     command:
       - --nginx.scrape-uri=http://nginx:80/nginx_status
