@@ -19,7 +19,7 @@ services:
       - nginx
 
   loadgen:
-    image: curlimages/curl:${CURL_VERSION:-8.10.1}
+    image: curlimages/curl:${CURL_VERSION:-8.19.0}
     container_name: nginx-monitoring-loadgen
     entrypoint:
       - sh
