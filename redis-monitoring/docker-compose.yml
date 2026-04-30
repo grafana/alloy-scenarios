@@ -5,7 +5,7 @@ services:
       - "6379:6379"
 
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.2}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.3}
     command:
       - --web.enable-remote-write-receiver
       - --config.file=/etc/prometheus/prometheus.yml
