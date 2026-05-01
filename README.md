@@ -99,6 +99,12 @@ cd <scenario-dir> && docker compose down
 | -------- | ----------- |
 | [Continuous profiling](continuous-profiling/) | Collect and visualize CPU, memory, and goroutine profiles from Go applications using Grafana Pyroscope. |
 
+### Secrets and configuration
+
+| Scenario | Description |
+| -------- | ----------- |
+| [Vault secrets](vault-secrets/) | Pull `prometheus.remote_write` basic_auth credentials from HashiCorp Vault at runtime using `remote.vault`, with hot-reload on rotation. |
+
 ### Frontend
 
 | Scenario | Description |
