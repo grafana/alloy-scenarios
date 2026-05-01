@@ -18,7 +18,7 @@ services:
       - ./tempo-config.yaml:/etc/tempo.yaml
 
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.2}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.3}
     command:
       - --web.enable-remote-write-receiver
       - --enable-feature=native-histograms
