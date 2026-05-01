@@ -6,8 +6,7 @@ Demonstrates Alloy's [`remote.vault`](https://grafana.com/docs/alloy/latest/refe
 
 | Service       | Role                                                                |
 | ------------- | ------------------------------------------------------------------- |
-| `vault`       | HashiCorp Vault in dev mode. Stores credentials at `secret/alloy/remote-write`. |
-| `vault-init`  | One-shot seeder that writes the initial secret then exits 0.        |
+| `vault`       | HashiCorp Vault in dev mode. Boots, then seeds `secret/alloy/remote-write` from its entrypoint before unsealing the healthcheck. |
 | `nginx-auth`  | Basic-auth reverse proxy in front of Prometheus's remote-write API. |
 | `prometheus`  | Receives remote-writes from Alloy.                                  |
 | `grafana`     | Pre-provisioned with Prometheus as the default datasource.          |
