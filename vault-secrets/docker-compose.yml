@@ -1,0 +1,98 @@
+services:
+  vault:
+    image: hashicorp/vault:${VAULT_VERSION:-1.21.4}
+    container_name: vault-secrets-vault
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+      VAULT_TOKEN: root-token-for-demo
+    # Start dev-mode in the background, wait for readiness, then seed
+    # secret/alloy/remote-write. The wait keeps Vault as PID 1.
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        vault server -dev \
+          -dev-listen-address=0.0.0.0:8200 \
+          -dev-root-token-id=root-token-for-demo &
+        VAULT_PID=$$!
+        until vault status >/dev/null 2>&1; do sleep 1; done
+        vault kv put secret/alloy/remote-write \
+          username=alloy \
+          password=initial-password
+        echo "seeded secret/alloy/remote-write"
+        wait $$VAULT_PID
+    healthcheck:
+      # Pass only once the secret has been seeded — otherwise Alloy may
+      # start before the KV write lands and fail its first reread.
+      test: ["CMD", "sh", "-c", "vault kv get secret/alloy/remote-write >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  nginx-auth:
+    image: nginx:${NGINX_VERSION:-1.30-alpine}
+    container_name: vault-secrets-nginx-auth
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./auth/htpasswd:/etc/nginx/htpasswd:ro
+    depends_on:
+      - prometheus
+
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.3}
+    container_name: vault-secrets-prometheus
+    command:
+      - --web.enable-remote-write-receiver
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./prom-config.yaml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-13.0.1}
+    container_name: vault-secrets-grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+    ports:
+      - "3000:3000/tcp"
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /etc/grafana/provisioning/datasources
+        cat <<EOF > /etc/grafana/provisioning/datasources/ds.yaml
+        apiVersion: 1
+        datasources:
+        - name: Prometheus
+          type: prometheus
+          orgId: 1
+          url: http://prometheus:9090
+          basicAuth: false
+          isDefault: true
+          version: 1
+          editable: false
+        EOF
+        /run.sh
+
+  alloy:
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.16.0}
+    container_name: vault-secrets-alloy
+    ports:
+      - "12345:12345"
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    depends_on:
+      vault:
+        condition: service_healthy
+      nginx-auth:
+        condition: service_started
+      prometheus:
+        condition: service_started
