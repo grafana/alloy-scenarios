@@ -1,6 +1,6 @@
 services:
   vault:
-    image: hashicorp/vault:${VAULT_VERSION:-1.21.4}
+    image: hashicorp/vault:${VAULT_VERSION:-2.0.0}
     container_name: vault-secrets-vault
     ports:
       - "8200:8200"
