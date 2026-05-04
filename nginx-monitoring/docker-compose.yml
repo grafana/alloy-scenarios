@@ -60,7 +60,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
 
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.2}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.3}
     container_name: nginx-monitoring-prometheus
     command:
       - --web.enable-remote-write-receiver

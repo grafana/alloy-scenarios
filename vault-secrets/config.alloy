@@ -1,0 +1,42 @@
+// vault-secrets scenario
+//
+// remote.vault pulls remote_write basic_auth credentials from HashiCorp
+// Vault at runtime. reread_frequency makes Alloy pick up rotated values
+// without a restart — see README for the rotation demo.
+
+livedebugging {
+	enabled = true
+}
+
+remote.vault "creds" {
+	server = "http://vault:8200"
+	// path = the KV mount; key = the secret path within that mount.
+	// Alloy handles the KV v2 /data/ prefix internally.
+	path = "secret"
+	key  = "alloy/remote-write"
+
+	reread_frequency = "30s"
+
+	auth.token {
+		token = "root-token-for-demo"
+	}
+}
+
+prometheus.exporter.self "self" {}
+
+prometheus.scrape "self" {
+	targets         = prometheus.exporter.self.self.targets
+	forward_to      = [prometheus.remote_write.via_nginx.receiver]
+	scrape_interval = "10s"
+}
+
+prometheus.remote_write "via_nginx" {
+	endpoint {
+		url = "http://nginx-auth/api/v1/write"
+
+		basic_auth {
+			username = convert.nonsensitive(remote.vault.creds.data.username)
+			password = remote.vault.creds.data.password
+		}
+	}
+}

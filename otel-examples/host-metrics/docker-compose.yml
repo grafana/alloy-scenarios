@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.2}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.3}
     command:
       - --web.enable-otlp-receiver
       - --enable-feature=native-histograms

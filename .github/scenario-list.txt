@@ -29,5 +29,6 @@ snmp
 syslog
 systemd-journal
 trace-delivery
+vault-secrets
 windows
 windows-events
