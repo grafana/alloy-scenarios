@@ -129,6 +129,7 @@ cd <scenario-dir> && docker compose down
 | [Memcached monitoring](memcached-monitoring/) | Monitor Memcached instance metrics including connections, memory usage, and command performance. |
 | [MySQL monitoring](mysql-monitoring/) | Monitor MySQL database server metrics and performance indicators. |
 | [PostgreSQL monitoring](postgres-monitoring/) | Monitor PostgreSQL transaction statistics, connections, and server configuration. |
+| [RabbitMQ monitoring](rabbitmq-monitoring/) | Monitor RabbitMQ queue, connection, and channel metrics plus broker container logs. |
 | [Redis monitoring](redis-monitoring/) | Monitor Redis instance metrics including connections, memory usage, and command throughput. |
 
 ### Kubernetes
