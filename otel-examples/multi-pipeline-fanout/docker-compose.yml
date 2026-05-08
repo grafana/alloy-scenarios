@@ -29,7 +29,7 @@ services:
       - ./prom-config.yaml:/etc/prometheus/prometheus.yml
 
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.16.0}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.16.1}
     ports:
       - 8888:8888
       - 4317:4317
