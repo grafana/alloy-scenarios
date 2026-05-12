@@ -111,6 +111,12 @@ cd <scenario-dir> && docker compose down
 | -------- | ----------- |
 | [Faro frontend observability](faro-frontend-observability/) | Collect frontend web telemetry (logs, errors, web vitals) from browser applications using the Faro Web SDK. |
 
+### Cloud Monitoring
+
+| Scenario | Description |
+| -------- | ----------- |
+| [CloudWatch metrics](cloudwatch-metrics/) | Pull AWS CloudWatch metrics into Prometheus via `prometheus.exporter.cloudwatch`. Uses LocalStack for offline reproducibility — no AWS account required. |
+
 ### Infrastructure Monitoring
 
 | Scenario | Description |
