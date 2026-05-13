@@ -1,0 +1,46 @@
+// AWS CloudWatch metrics → Prometheus — no AWS account required.
+//
+// Uses LocalStack to emulate CloudWatch locally. A companion `metric-seeder`
+// container pushes synthetic EC2/CPUUtilization data points every 30 s so
+// Alloy has real data to scrape immediately on start-up.
+//
+// `prometheus.exporter.cloudwatch` wraps YACE and honours AWS SDK v2 endpoint
+// overrides; we point it at LocalStack via AWS_ENDPOINT_URL in docker-compose.
+
+livedebugging { enabled = true }
+
+// Static job: no live EC2 discovery needed — we target the exact InstanceId
+// that the metric-seeder plants in LocalStack CloudWatch.
+prometheus.exporter.cloudwatch "localstack" {
+	sts_region = "us-east-1"
+
+	static "ec2_cpu" {
+		regions   = ["us-east-1"]
+		namespace = "AWS/EC2"
+
+		dimensions = {
+			"InstanceId" = "i-1234567890abcdef0",
+		}
+
+		metric {
+			name       = "CPUUtilization"
+			statistics = ["Average", "Maximum"]
+			period     = "1m"
+		}
+	}
+}
+
+// Scrape the exporter every 60 s — CloudWatch data points are coarse-grained
+// so there is no benefit in scraping more frequently.
+prometheus.scrape "cloudwatch" {
+	targets         = prometheus.exporter.cloudwatch.localstack.targets
+	forward_to      = [prometheus.remote_write.local.receiver]
+	scrape_interval = "60s"
+}
+
+// Remote-write to the local Prometheus instance.
+prometheus.remote_write "local" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}
