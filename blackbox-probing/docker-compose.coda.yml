@@ -1,5 +1,5 @@
 services:
   nginx:
-    image: nginx:latest@sha256:1881968aff6f7cdcc4b888c00a11f4ce241ad7ec957e0cb4a9e19e93a3ff87ea
+    image: nginx:latest@sha256:06aa3d7be10bc6307990c81bdca075793132e9163391abc370c015e344e23128
     ports:
       - 8080:80/tcp
