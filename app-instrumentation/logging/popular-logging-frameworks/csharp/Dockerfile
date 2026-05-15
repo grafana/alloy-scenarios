@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:0300d42309afd86168fa57d62db79020a34ee396d39c9634844b9c0ab285ea55 AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:087fc98e5c6ffcea6c3e276c135c4a6717c589d9509a09cc22e7c634830a4db8 AS build
 WORKDIR /app
 
 COPY *.csproj .
@@ -7,7 +7,7 @@ RUN dotnet restore
 COPY . .
 RUN dotnet publish -c Release -o out
 
-FROM mcr.microsoft.com/dotnet/runtime:9.0@sha256:7590f1b7e124fe7a4b7cffa5f6f9958f2c02a22bf5bd7a0387a84b88cddf4057
+FROM mcr.microsoft.com/dotnet/runtime:9.0@sha256:d955f883a9e648f0ff80b8bfe01e6b79874c296ef3bbcb5637c6981b64981a9a
 WORKDIR /app
 COPY --from=build /app/out .
 
