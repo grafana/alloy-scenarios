@@ -2,7 +2,7 @@
 services:
   # Python Flask app that generates traces
   app:
-    image: python:${PYTHON_VERSION:-3.11-slim}
+    image: python:${PYTHON_VERSION:-3.13-slim}
     ports:
       - 5000:5000/tcp
     volumes:
@@ -16,7 +16,7 @@ services:
 
   # Load generator to continuously hit the app endpoints
   load:
-    image: python:${PYTHON_VERSION:-3.11-slim}
+    image: python:${PYTHON_VERSION:-3.13-slim}
     volumes:
       - ./app:/app
     working_dir: /app

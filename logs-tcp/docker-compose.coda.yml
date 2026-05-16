@@ -1,6 +1,6 @@
 services:
   simulator:
-    image: python:${PYTHON_VERSION:-3.11-slim}
+    image: python:${PYTHON_VERSION:-3.13-slim}
     container_name: simulator
     volumes:
       - ./simulator.py:/simulator.py

@@ -17,7 +17,7 @@ services:
 
   # Pushes synthetic EC2/CPUUtilization data into LocalStack every 30 s.
   metric-seeder:
-    image: python:${PYTHON_VERSION:-3.11-slim}
+    image: python:${PYTHON_VERSION:-3.13-slim}
     volumes:
       - ./seed-metrics.py:/seed-metrics.py:ro
     environment:

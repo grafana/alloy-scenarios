@@ -2,7 +2,7 @@
 services:
   # Python app that generates OTLP metrics
   app:
-    image: python:${PYTHON_VERSION:-3.11-slim}
+    image: python:${PYTHON_VERSION:-3.13-slim}
     volumes:
       - ./app:/app
     working_dir: /app

@@ -24,7 +24,7 @@ services:
       - loki
 
   log-generator:
-    image: python:${PYTHON_VERSION:-3.11-slim}
+    image: python:${PYTHON_VERSION:-3.13-slim}
     volumes:
       - ./app/generate_logs.py:/app/generate_logs.py
       - ./app/requirements.txt:/app/requirements.txt

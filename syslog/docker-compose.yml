@@ -15,7 +15,7 @@ services:
 
   # Syslog simulator using a Python script
   syslog-simulator:
-    image: python:${PYTHON_VERSION:-3.11-slim}
+    image: python:${PYTHON_VERSION:-3.13-slim}
     container_name: syslog-simulator
     volumes:
       - ./syslog_simulator.py:/syslog_simulator.py  # Syslog simulator script

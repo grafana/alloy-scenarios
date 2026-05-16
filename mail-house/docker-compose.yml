@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   mail-house-01:
-    image: python:${PYTHON_VERSION:-3.11-slim}
+    image: python:${PYTHON_VERSION:-3.13-slim}
     volumes:
       - ./main.py:/main.py
     depends_on:
@@ -13,7 +13,7 @@ services:
     restart: unless-stopped
   
   mail-house-02:
-    image: python:${PYTHON_VERSION:-3.11-slim}
+    image: python:${PYTHON_VERSION:-3.13-slim}
     volumes:
       - ./main.py:/main.py
     depends_on:
@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
     
   mail-house-03:
-    image: python:${PYTHON_VERSION:-3.11-slim}
+    image: python:${PYTHON_VERSION:-3.13-slim}
     volumes:
       - ./main.py:/main.py
     depends_on:

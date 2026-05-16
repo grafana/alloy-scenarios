@@ -1,6 +1,6 @@
 services:
   logs-file:
-    image: python:${PYTHON_VERSION:-3.11-slim}
+    image: python:${PYTHON_VERSION:-3.13-slim}
     container_name: logs-file
     volumes:
       - ./main.py:/main.py

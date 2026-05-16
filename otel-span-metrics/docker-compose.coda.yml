@@ -1,6 +1,6 @@
 services:
   app:
-    image: python:${PYTHON_VERSION:-3.11-slim}
+    image: python:${PYTHON_VERSION:-3.13-slim}
     network_mode: host
     restart: unless-stopped
     volumes:
@@ -11,7 +11,7 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 
   load:
-    image: python:${PYTHON_VERSION:-3.11-slim}
+    image: python:${PYTHON_VERSION:-3.13-slim}
     network_mode: host
     restart: unless-stopped
     volumes:

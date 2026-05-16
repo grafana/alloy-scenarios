@@ -48,7 +48,7 @@ services:
       - loki
 
   firehose-sender:
-    image: python:${PYTHON_VERSION:-3.11-slim}
+    image: python:${PYTHON_VERSION:-3.13-slim}
     volumes:
       - ./firehose_sender.py:/firehose_sender.py:ro
     environment:
