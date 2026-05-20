@@ -48,14 +48,14 @@ Ensure you have the following:
 
    - Navigate to this scenario: `cd alloy-scenarios/linux`
    - Deploy the scenario: `docker compose up -d`
-   - Confirm all containers are up: `docker compose ps`
 
    **Option 2: From the repository root**
 
    Use pinned image versions from `image-versions.env` for Grafana, Loki, Prometheus, and Alloy.
 
    - Deploy the scenario: `./run-example.sh linux`
-   - Confirm all containers are up: `cd linux && docker compose ps`
+
+3. Confirm all containers are up: `cd alloy-scenarios/linux && docker compose ps`
 
 ## Explore the services
 

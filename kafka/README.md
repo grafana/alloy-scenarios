@@ -2,7 +2,7 @@
 
 This scenario shows how to use Grafana Alloy to consume logs from a Kafka topic and forward them to Loki.
 A `kafka-producer` container runs `gen_log.sh`, which creates random JSON log entries every two seconds and publishes them to the `alloy-logs` topic.
-Alloy reads from that topic, parses, restructures, and pushes the processed JSON payload to Loki for visualization in Grafana.
+Alloy reads from that topic, parses, restructures, and forwards the processed JSON payload to Loki for visualization in Grafana.
 
 ## Before you begin
 
@@ -25,49 +25,37 @@ Ensure you have the following:
 - **Kafka producer**: The `kafka-producer` service runs `gen_log.sh` and publishes JSON log entries to the `alloy-logs` topic every two seconds.
 - **Kafka**: A single-node KRaft broker that runs the `bitnami/kafka:3.8` image and stores messages in the `alloy-logs` topic.
 - **Alloy**: Consumes messages from the Kafka topic, parses and restructures the JSON payload, and forwards processed entries to Loki.
-- **Loki**: Stores the processed log entries and serves them to Grafana.
+- **Loki**: Stores the processed log entries.
 - **Grafana**: Visualizes the logs.
-  Loki is pre-provisioned as a data source, and you don't need to log in.
 
 ## Run the scenario
 
-1. Clone the repository if you haven't already:
+1. Clone the repository if you haven't already: `git clone https://github.com/grafana/alloy-scenarios.git`
 
-   ```sh
-   git clone https://github.com/grafana/alloy-scenarios.git
-   cd alloy-scenarios
-   ```
+2. Install the scenario with one of these options:
 
-2. Navigate to this scenario:
+   **Option 1: From the scenario directory**
 
-   ```sh
-   cd kafka
-   ```
+   Use the default image tags in `docker-compose.yml`.
 
-3. Deploy the stack:
+   - Navigate to this scenario: `cd alloy-scenarios/kafka`
+   - Deploy the scenario: `docker compose up -d`
 
-   ```sh
-   docker compose up -d
-   ```
+   **Option 2: From the repository root**
 
-   Or use centralized image versions from the repository root:
+   Use pinned image versions from `image-versions.env` for Grafana, Loki, and Alloy.
 
-   ```sh
-   ./run-example.sh kafka
-   ```
+   - Deploy the scenario: `./run-example.sh kafka`
 
-4. Confirm all containers are up:
+   This scenario also includes `docker-compose.coda.yml` for the Kafka broker and producer.
+   For Coda overlays and the `coda` CLI, refer to Getting started in the repository root README.
 
-   ```sh
-   docker compose ps
-   ```
-
-   The `kafka` service defines a Docker health check with a 10 second interval and 5 retries.
-   Wait until the `kafka` container reports a healthy status before the producer and Alloy consume messages from the broker.
+3. Confirm all containers are up: `cd alloy-scenarios/kafka && docker compose ps`
+   Wait until the `kafka` container is healthy before you query logs in Grafana.
 
 ## Explore the services
 
-- **Grafana** at http://localhost:3000: **Explore** with a pre-provisioned Loki data source, with no login required.
+- **Grafana** at http://localhost:3000: Dashboards and **Explore**, with no login required.
 - **Alloy UI** at http://localhost:12345: Pipeline graph, component health, and live debug views.
 - **Loki** at http://localhost:3100: Log storage backend.
 - **Kafka** at localhost:9092: Broker endpoint mapped from the `kafka` service.
@@ -84,7 +72,7 @@ The `config.alloy` pipeline has three components: `loki.source.kafka`, `loki.pro
    - `stage.output` sends the `new_json` value as the final log line to `loki.write.local`.
 3. **`loki.write`**: Pushes the processed entries to Loki at `http://loki:3100/loki/api/v1/push`.
 
-`livedebugging` is enabled in `config.alloy` so you can inspect the pipeline in the Alloy UI.
+`livedebugging{}` uses default settings so you can inspect the pipeline in the Alloy UI without extra configuration.
 
 The two-pass JSON extraction is the key design decision here.
 The raw payload nests `app` as an object inside the top-level JSON, so a single `stage.json` pass can't extract both the top-level fields and the nested fields in one step.
@@ -94,26 +82,15 @@ A second `stage.json` with `source = "app"` targets only the previously extracte
 
 1. Open Grafana at http://localhost:3000 and navigate to **Explore**.
 
-2. Select the **Loki** data source and run this query:
-
-   ```logql
-   {source="kafka"}
-   ```
-
+2. Select the **Loki** data source and run `{source="kafka"}`.
    You should see a stream of JSON log entries arrive every two seconds.
    Each entry contains `level`, `msg`, `app_name`, and `app_version` fields.
 
-3. Filter by log level to explore the structured data:
-
-   ```logql
-   {source="kafka"} | json | level="error"
-   ```
-
+3. Filter by log level with `{source="kafka"} | json | level="error"`.
    This query parses the JSON log line and filters to error-level entries only.
 
 4. To inspect the pipeline in real time, open the Alloy UI at http://localhost:12345.
    Select `loki.source.kafka.kafka` or `loki.process.log_data` from the component graph to use live debug.
-   You can watch individual messages arrive from the broker and pass through the process stage.
 
 ## Customize the scenario
 
@@ -147,18 +124,11 @@ If another service uses one of these ports, edit the port mapping in `docker-com
 
 ## Stop the scenario
 
-```sh
-docker compose down
-```
-
-To remove the Kafka data volume as well:
-
-```sh
-docker compose down -v
-```
+Run `docker compose down` from the `kafka` directory.
+Run `docker compose down -v` from the `kafka` directory to remove the Kafka data volume as well.
 
 ## Next steps
 
-- Learn more about Grafana Alloy components at https://grafana.com/docs/alloy/latest/reference/components/.
-- Read the `loki.source.kafka` reference at https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.kafka/.
-- Explore the alloy-scenarios repository at https://github.com/grafana/alloy-scenarios for related examples.
+- Alloy components: https://grafana.com/docs/alloy/latest/reference/components/
+- `loki.source.kafka` reference: https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.kafka/
+- More examples: https://github.com/grafana/alloy-scenarios
