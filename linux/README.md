@@ -1,106 +1,200 @@
-# Monitoring Linux with Alloy
+# Monitor a Linux host
 
-Grafana Alloy can be used to monitor Linux servers and containers. In this guide, we will show you how to deploy Grafana Alloy in a Docker environment to monitor Linux system metrics and logs. The setup consists of:
-* Node Exporter metrics for system performance monitoring
-* System logs collection with Loki
+This scenario shows how to collect system metrics and logs from a Linux host with Grafana Alloy.
+Alloy uses the built-in `prometheus.exporter.unix` component, a Node Exporter integration, to collect CPU, memory, disk, and network metrics.
+It also collects logs from the systemd journal and from common log files under `/var/log`.
+Metrics flow to Prometheus and logs flow to Loki.
+Grafana includes pre-configured Prometheus and Loki data sources.
 
-## Prerequisites
+## Before you begin
 
-* Git - You will need Git to clone the repository.
-* Docker and Docker Compose - This tutorial uses Docker to host Grafana, Loki, Prometheus, and Alloy.
-* Linux environment - Either a Linux host running Docker or a Linux VM.
+Ensure you have the following:
 
-## About this Demo
+- Docker at https://docs.docker.com/get-docker/ and Docker Compose at https://docs.docker.com/compose/install/.
+- A Linux host or Linux virtual machine where you run Docker.
+  This scenario runs Alloy in a container that mounts the host `/proc`, `/sys`, and `/var/log` directories.
+  On macOS or Windows with Docker Desktop, those bind mounts resolve to the virtual machine filesystem rather than your actual host.
+  The metrics and logs you view reflect the virtual machine, not your machine.
+- Ports 3000, 9090, 3100, and 12345 free on the host.
 
-This demo runs Alloy in a container alongside Grafana, Prometheus, and Loki, creating a self-contained monitoring stack. The Alloy container acts as a "fake Linux server" to demonstrate monitoring capabilities out of the box.
+## Understand the architecture
 
-In a production environment, you would typically install Alloy directly on each Linux server you want to monitor.
-
-## Step 1: Clone the Repository
-
-Clone the repository to your machine:
-
-```bash
-git clone https://github.com/grafana/alloy-scenarios.git
-cd alloy-scenarios/linux
+```text
++-----------+     +-------+     +------------+     +---------+
+|  Linux    |---->| Alloy |---->| Prometheus |---->| Grafana |
+|  host     |     |       |     +------------+     |         |
+|           |     |       |---->|    Loki    |---->|         |
++-----------+     +-------+     +------------+     +---------+
 ```
 
-## Step 2: Deploy the Monitoring Stack
+- **Linux host**: The machine where you run Docker.
+  Alloy reads `/proc`, `/sys`, and `/var/log` to collect system metrics and log files.
+  Alloy also reads the systemd journal for structured log entries.
+- **Alloy**: Scrapes Node Exporter metrics from the host, tails log files and the systemd journal, and remote-writes both signals to their respective backends.
+- **Prometheus**: Stores the scraped system metrics and serves them to Grafana.
+- **Loki**: Stores the log entries and serves them to Grafana.
+- **Grafana**: Visualizes metrics and logs.
+  Prometheus and Loki data sources are pre-provisioned, and you don't need to log in.
 
-Use Docker Compose to deploy Grafana, Loki, Prometheus, and Alloy:
+## Run the scenario
 
-```bash
-docker-compose up -d
-```
+1. Clone the repository if you haven't already:
 
-You can check the status of the containers:
-
-```bash
-docker ps
-```
-
-Grafana should be running on [http://localhost:3000](http://localhost:3000).
-
-## Step 3: Explore the Monitoring Data
-
-Once the stack is running, you can explore the collected metrics and logs:
-
-1. Access Grafana at [http://localhost:3000](http://localhost:3000) (default credentials are admin/admin)
-2. Import the Node Exporter dashboard to visualize system metrics:
-   - Go to Dashboards → Import
-   - Upload the JSON file from [here](https://grafana.com/api/dashboards/1860/revisions/37/download)
-   - Select the Prometheus data source and click Import
-
-This community dashboard provides comprehensive system metrics including CPU, memory, disk, and network usage.
-
-## Step 4: Viewing Logs
-
-Open your browser and go to [http://localhost:3000/a/grafana-lokiexplore-app](http://localhost:3000/a/grafana-lokiexplore-app). This will take you to the Loki explorer in Grafana.
-
-## Deploying on Bare Metal
-
-To monitor actual Linux servers in production, you would:
-
-1. Install Alloy directly on each Linux server
-
-2. Modify the `config.alloy` file to point to your Prometheus and Loki instances:
+   ```sh
+   git clone https://github.com/grafana/alloy-scenarios.git
+   cd alloy-scenarios
    ```
+
+2. Navigate to this scenario:
+
+   ```sh
+   cd linux
+   ```
+
+3. Deploy the stack:
+
+   ```sh
+   docker compose up -d
+   ```
+
+   Or use centralized image versions from the repository root:
+
+   ```sh
+   ./run-example.sh linux
+   ```
+
+4. Confirm all containers are up:
+
+   ```sh
+   docker compose ps
+   ```
+
+## Explore the services
+
+- **Grafana** at http://localhost:3000: Dashboards and **Explore**, with no login required.
+- **Alloy UI** at http://localhost:12345: Pipeline graph, component health, and live debug views.
+- **Prometheus** at http://localhost:9090: Query metrics directly.
+- **Loki** at http://localhost:3100: Log storage backend.
+
+## Understand the Alloy pipeline
+
+The `config.alloy` pipeline runs two parallel paths: one for metrics and one for logs.
+
+Metrics path:
+
+1. **`prometheus.exporter.unix`**: Exposes Node Exporter metrics for the host.
+   The configuration disables several collectors (`ipvs`, `btrfs`, `infiniband`, `xfs`, `zfs`) to reduce noise in a typical Linux environment.
+2. **`discovery.relabel`**: Adds `instance`, set to the hostname, and `job`, set to `integrations/node_exporter`, labels to all metric targets before Alloy scrapes them.
+3. **`prometheus.scrape`**: Scrapes the exporter every 15 seconds and forwards samples to remote write.
+4. **`prometheus.remote_write`**: Sends all metrics to Prometheus.
+
+Logs path:
+
+1. **`loki.source.journal`**: Reads the systemd journal for the last 24 hours and promotes `unit`, `boot_id`, `instance`, `machine_id`, `transport`, and `level` as Loki labels through a `discovery.relabel` block.
+2. **`local.file_match`**: Discovers log files at `/var/log/{syslog,messages,*.log}`.
+3. **`loki.source.file`**: Tails the matched files and forwards entries to Loki.
+4. **`loki.write`**: Pushes all log entries to Loki.
+
+The two paths share no components.
+Alloy collects and forwards metrics and logs independently.
+`livedebugging{}` uses default settings so you can inspect both paths in the Alloy UI without extra configuration.
+
+## Try it out
+
+1. Open Grafana at http://localhost:3000 and import the Node Exporter community dashboard to visualize system metrics.
+   Go to **Dashboards → Import**.
+   Enter dashboard ID `1860` or download the JSON from https://grafana.com/api/dashboards/1860/revisions/37/download.
+   Select the **Prometheus** data source and click **Import**.
+   The dashboard provides CPU, memory, disk, and network panels pre-built against the metrics this scenario collects.
+
+2. To explore logs, open the Loki Explore view in Grafana at `http://localhost:3000/a/grafana-lokiexplore-app`.
+   Filter by `job = integrations/node_exporter` to see log entries that Alloy collects from the host journal and log files.
+
+3. To inspect both pipelines in real time, open the Alloy UI at http://localhost:12345.
+   Select either `prometheus.scrape.integrations_node_exporter` or `loki.source.journal.logs_integrations_integrations_node_exporter_journal_scrape` from the component graph to use live debug.
+
+## Customize the scenario
+
+- **Monitor a different log path**: Edit `local.file_match` in `config.alloy` and add entries to `path_targets` to tail additional log files, such as application logs under `/var/log/myapp/*.log`.
+- **Adjust the scrape interval**: Edit the `scrape_interval` value in `prometheus.scrape.integrations_node_exporter` in `config.alloy` to collect metrics more or less frequently.
+  The default is 15 seconds.
+- **Enable additional Node Exporter collectors**: Remove collector names from the `disable_collectors` list in `prometheus.exporter.unix` in `config.alloy` to expose metrics for `xfs`, `zfs`, `btrfs`, or other subsystems present on your host.
+
+## Deploy on a real Linux server
+
+To monitor actual Linux servers in production, complete these steps.
+
+1. Install Alloy directly on each Linux server.
+   Refer to the Linux install guide at https://grafana.com/docs/alloy/latest/set-up/install/linux/.
+
+2. Update the remote write endpoints in `config.alloy` to point at your Prometheus and Loki instances:
+
+   ```alloy
    prometheus.remote_write "local" {
      endpoint {
-       url = "http://localhost:9090/api/v1/write"
+       url = "http://<PROMETHEUS_HOST>:9090/api/v1/write"
      }
    }
-   
+
    loki.write "local" {
      endpoint {
-       url = "http://localhost:3100/loki/api/v1/push"
+       url = "http://<LOKI_HOST>:3100/loki/api/v1/push"
      }
    }
    ```
 
+   Replace _`<PROMETHEUS_HOST>`_ with the hostname or IP address of your Prometheus server.
+   Replace _`<LOKI_HOST>`_ with the hostname or IP address of your Loki server.
+
 3. Run Alloy as a service:
-   ```bash
-   sudo alloy run /path/to/config.alloy
+
+   ```sh
+   sudo alloy run <CONFIG_PATH>
    ```
 
-## Configuration Customization
+   Replace `<CONFIG_PATH>` with the path to your `config.alloy` file.
 
-The included `config.alloy` file sets up:
+## Troubleshoot common problems
 
-1. Node Exporter integration to collect system metrics
-2. Log collection from system logs and journal
-3. Relabeling rules to organize metrics and logs
-4. Remote write endpoints for Prometheus and Loki
+**Containers didn't start or exited unexpectedly**
 
-You can customize which collectors are enabled/disabled and adjust scrape intervals in the configuration file.
+Run `docker compose ps` to check the status of each container.
+If any container has exited, run `docker compose logs <SERVICE_NAME>` to read the failure reason.
+Replace `<SERVICE_NAME>` with the name of the service that exited.
+For Alloy specifically, the most common cause is a syntax error in `config.alloy`.
 
-## Troubleshooting
+**No data appears in Grafana after a few minutes**
 
-If you encounter issues:
+Open the Alloy UI at http://localhost:12345 and check that all components show a healthy status.
+Select the relevant source component and use live debug to confirm data passes through the pipeline.
+If the pipeline looks healthy but Grafana shows nothing, confirm that you select the correct data source in **Explore**.
 
-* Check container logs: `docker-compose logs`
-* Verify Alloy is running: `docker-compose ps`
-* Ensure ports are not conflicting with existing services
-* Review the Alloy configuration in `config.alloy`
+**Port conflicts with other services**
 
+Ports 3000 for Grafana, 9090 for Prometheus, 3100 for Loki, and 12345 for Alloy must be free before you start the stack.
+If another service uses one of these ports, edit the port mapping in `docker-compose.yml` for the conflicting service before you run `docker compose up -d`.
 
+**Metrics reflect a VM rather than the host machine**
+
+On macOS and Windows, Docker Desktop runs containers inside a Linux virtual machine.
+The bind mounts for `/proc` and `/sys` resolve to that virtual machine, so Node Exporter reports the virtual machine CPU, memory, and disk, not your physical machine.
+You should expect this behavior.
+To monitor your actual host, run Alloy natively on a Linux machine.
+
+**Journal logs are empty**
+
+The `loki.source.journal` component reads from `/var/log/journal` or `/run/log/journal`.
+If systemd isn't configured for persistent journal storage on your host, the volatile journal under `/run/log/journal` may be empty after a reboot.
+Run `journalctl --disk-usage` on the host to confirm whether journal data exists.
+
+## Stop the scenario
+
+```sh
+docker compose down
+```
+
+## Next steps
+
+- Learn more about Grafana Alloy components at https://grafana.com/docs/alloy/latest/reference/components/.
+- Read the Linux installation guide at https://grafana.com/docs/alloy/latest/set-up/install/linux/ to run Alloy on a production host.
+- Explore the alloy-scenarios repository at https://github.com/grafana/alloy-scenarios for related examples.
