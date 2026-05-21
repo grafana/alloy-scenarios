@@ -5,80 +5,45 @@
 # Grafana Alloy scenarios
 
 This repository provides self-contained, runnable scenarios that show how to use [Grafana Alloy](https://grafana.com/docs/alloy/) for telemetry collection and processing.
-Each scenario includes a full LGMT stack with Loki, Grafana, Mimir, and Tempo.
-Each scenario also includes pre-configured dashboards so you can explore immediately.
+Most scenarios include Docker Compose files for Alloy and the backends that demo needs, such as Loki, Grafana, Prometheus, and Tempo.
+Each scenario also includes pre-configured dashboards when Grafana is part of the stack.
 
-## Get started
+## Before you begin
 
-### Prerequisites
+Ensure you have the following:
 
-Install [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) before you run a scenario.
+- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/).
+- Git, to clone the repository.
 
-### Run a scenario
+## Run a scenario
 
-Start a scenario from its directory or from the repository root.
+Navigate to the scenario directory and open the README file.
+The scenario README documents everything you need to know to deploy and explore the scenario.
 
-```bash
-# Option 1: Navigate to the scenario directory
-cd <scenario-dir> && docker compose up -d
+From the repository root, you can start Docker-based scenarios with pinned image versions: `./run-example.sh <scenario-dir>`.
+Image versions are in `image-versions.env`.
 
-# Option 2: Use centralized image management (from repo root)
-./run-example.sh <scenario-directory>
-```
+Kubernetes scenarios use Helm charts.
 
-The centralized approach stores all Docker image versions in `image-versions.env`.
-You can update images across all scenarios from that single file.
+## Explore the services
 
-### Access the stack
-
-After a scenario starts, open these endpoints:
-
-- **Grafana**: [http://localhost:3000](http://localhost:3000). No login is required.
-- **Alloy UI**: [http://localhost:12345](http://localhost:12345) for pipeline debugging.
-
-### Run with the Coda app overlay
-
-Each scenario includes a `docker-compose.coda.yml` file that defines demo application services separately from the infrastructure stack.
-You can run the observability backend on its own, or add the app when you are ready.
-
-```bash
-# Infrastructure only
-cd <scenario-dir> && docker compose up -d
-
-# Infrastructure + demo app
-cd <scenario-dir> && docker compose -f docker-compose.yml -f docker-compose.coda.yml up -d
-```
-
-If you have the `coda` CLI installed, it manages the app overlay automatically:
-
-```bash
-coda start <scenario-dir>   # Start app containers
-coda stop <scenario-dir>    # Stop app containers
-coda status <scenario-dir>  # Show container status
-coda list                   # List all available scenarios
-```
-
-### Stop a scenario
-
-Shut down a scenario from its directory.
-
-```bash
-cd <scenario-dir> && docker compose down
-```
+Most Docker-based scenarios expose Grafana at http://localhost:3000 and the Alloy UI at http://localhost:12345.
+You don't need to log in to Grafana in these scenarios.
+Refer to the scenario README for additional endpoints.
 
 ## Scenarios
 
 Browse scenarios by telemetry type.
-Each row links to a directory with a README, `config.alloy`, and Docker Compose files.
+Each row links to a directory with a README and all the configuration files required to deploy and run the scenario.
 
 ### Logs
 
-These scenarios focus on log collection, parsing, routing, and redaction.
+These scenarios focus on log collection, log parsing, log routing, and log redaction.
 
 | Scenario | Description |
 | -------- | ----------- |
-| [AWS Data Firehose logs](aws-firehose-logs/) | Ingest AWS Data Firehose deliveries with `loki.source.awsfirehose`. Uses a local sender. No AWS account required. |
-| [GELF log ingestion](gelf-log-ingestion/) | Ingest GELF logs over UDP. |
+| [Amazon Data Firehose logs](aws-firehose-logs/) | Ingest Amazon Data Firehose deliveries with `loki.source.awsfirehose`. Uses a local sender. No AWS account required. |
+| [GELF log ingestion](gelf-log-ingestion/) | Ingest Graylog Extended Log Format logs over `UDP`. |
 | [Kafka logs](kafka/) | Consume and process logs from Apache Kafka topics. |
 | [Log API gateway](log-api-gateway/) | Use Alloy as a centralized log gateway that accepts logs via a Loki-compatible push API endpoint. |
 | [Log routing](routing/) | Route logs from multiple sources to different Loki tenants based on log content and origin. |
@@ -88,8 +53,8 @@ These scenarios focus on log collection, parsing, routing, and redaction.
 | [Popular logging frameworks](app-instrumentation/logging/popular-logging-frameworks/) | Parse logs from popular logging frameworks across 7 programming languages. |
 | [Structured log parsing](mail-house/) | Parse structured logs into labels and structured metadata. |
 | [Syslog monitoring](syslog/) | Monitor non-RFC5424 compliant syslog messages with `rsyslog` and Alloy. |
-| [systemd journal](systemd-journal/) | Ship systemd journal entries to Loki with filtering and labels tuned for fast queries. |
-| [Windows security events](windows-events/) | Ship Windows Security event logs to Loki with SOC-focused filtering and field extraction. |
+| [systemd journal](systemd-journal/) | Forward systemd journal entries to Loki with filters and labels tuned for fast queries. |
+| [Windows security events](windows-events/) | Forward Windows Security event logs to Loki with filters and field extraction for security operations center workflows. |
 
 ### Tracing
 
@@ -127,7 +92,7 @@ These scenarios load credentials and configuration from external stores.
 
 | Scenario | Description |
 | -------- | ----------- |
-| [Vault secrets](vault-secrets/) | Pull `prometheus.remote_write` basic_auth credentials from HashiCorp Vault at runtime with `remote.vault`. Credentials reload on rotation. |
+| [Vault secrets](vault-secrets/) | Pull `prometheus.remote_write` `basic_auth` credentials from HashiCorp Vault at runtime with `remote.vault`. Credentials reload on rotation. |
 
 ### Frontend
 
@@ -143,7 +108,7 @@ These scenarios pull telemetry from cloud provider APIs.
 
 | Scenario | Description |
 | -------- | ----------- |
-| [CloudWatch metrics](cloudwatch-metrics/) | Pull Amazon CloudWatch metrics into Prometheus with `prometheus.exporter.cloudwatch`. Uses LocalStack for offline reproducibility. No AWS account required. |
+| [Amazon CloudWatch metrics](cloudwatch-metrics/) | Pull metrics from Amazon CloudWatch into Prometheus with `prometheus.exporter.cloudwatch`. Uses LocalStack for offline reproducibility. No AWS account required. |
 
 ### Infrastructure monitoring
 
@@ -156,7 +121,7 @@ These scenarios monitor hosts, containers, and network devices.
 | [Windows monitoring](windows/) | Monitor Windows system metrics and Event Logs. |
 | [NGINX monitoring](nginx-monitoring/) | Monitor NGINX access and error logs plus `stub_status` metrics with Alloy. |
 | [Self-monitoring](self-monitoring/) | Configure Alloy to monitor itself and collect its own metrics and logs. |
-| [SNMP monitoring](snmp/) | Monitor SNMP devices with the Alloy SNMP exporter. |
+| [SNMP monitoring](snmp/) | Monitor devices with the Alloy SNMP exporter for Simple Network Management Protocol. |
 
 ### Database and cache monitoring
 
@@ -179,10 +144,10 @@ The `k8s/` directory groups Helm-based and manifest-based examples for Alloy on 
 | -------- | ----------- |
 | [Kubernetes](k8s/) | Scenarios for Alloy on Kubernetes with the k8s-monitoring Helm chart or plain manifests. See subdirectories for logs, metrics, profiling, tracing, and cluster events. |
 
-### OTel engine examples (experimental)
+### Experimental OTel engine examples
 
 Alloy v1.14 and later include an experimental **OTel Engine** that runs standard OpenTelemetry Collector YAML configurations directly.
-These scenarios use `alloy otel` instead of River or HCL syntax.
+These scenarios use OTel YAML syntax for teh OTel Engine and a minimal Alloy configuration to enable the Alloy UI.
 Refer to the [OTel examples README](otel-examples/) for details.
 
 | Scenario | Description |
@@ -191,21 +156,21 @@ Refer to the [OTel examples README](otel-examples/) for details.
 | [Count connector](otel-examples/count-connector/) | Derive request rate and error rate metrics from traces and logs with the `count` connector. |
 | [File log processing](otel-examples/filelog-processing/) | Collect and parse mixed-format log files with the OTel `filelog` receiver and operator chains. |
 | [Host metrics](otel-examples/host-metrics/) | Collect CPU, memory, disk, and network metrics with the `hostmetrics` receiver. |
-| [Kafka buffer](otel-examples/kafka-buffer/) | Buffer traces through Kafka for durability and backpressure control. |
+| [Kafka buffer](otel-examples/kafka-buffer/) | Buffer traces through Kafka for durability and `backpressure` control. |
 | [Multi-pipeline fan-out](otel-examples/multi-pipeline-fanout/) | Send traces to two backends. Each destination runs its own process path. |
 | [Multi-tenant routing](otel-examples/routing-multi-tenant/) | Route logs to different Loki tenants based on resource attributes with fan-out and filter. |
-| [OTTL transform cookbook](otel-examples/ottl-transform/) | A cookbook of OTTL patterns for JSON parsing, severity mapping, attribute promotion, and truncation. |
-| [PII redaction](otel-examples/pii-redaction/) | Scrub credit cards, emails, and IPs from traces and logs with OTTL `replace_pattern`. |
+| [OTTL transform cookbook](otel-examples/ottl-transform/) | A cookbook of OpenTelemetry Transformation Language patterns for JSON parsing, severity mapping, attribute promotion, and truncation. |
+| [PII redaction](otel-examples/pii-redaction/) | Scrub personally identifiable information, credit cards, emails, and IP addresses from traces and logs with OpenTelemetry Transformation Language `replace_pattern`. |
 | [Resource enrichment](otel-examples/resource-enrichment/) | Attach host, OS, and Docker metadata to all signals with `resourcedetection`. |
 
-## Contributing
+## Contribute
 
-We welcome scenarios and improvements.
+Contributions of scenarios and improvements are welcome.
 You can contribute in several ways.
 
 ### Suggest a scenario
 
-Share an idea when you do not have time to implement a full scenario.
+Share an idea when you don't have time to implement a full scenario.
 
 1. Open an [issue](https://github.com/grafana/alloy-scenarios/issues/new) on GitHub with the label `scenario-suggestion`
 2. Describe the scenario and what it would show
@@ -223,7 +188,7 @@ Add a complete scenario to the repository.
 
 ### Improve a scenario
 
-Update an existing scenario.
+Update a scenario you want to change.
 
 1. Fork this repository and create a branch
 2. Make your improvements to the scenario
@@ -233,29 +198,28 @@ Update an existing scenario.
 
 Include the following files when you create a scenario:
 
-- `docker-compose.yml` - Docker Compose file with the LGMT stack
-- `docker-compose.coda.yml` - Docker Compose override with the demo app services for use with the `coda` CLI or `-f` flag
-- `config.alloy` - Alloy configuration file for the scenario
-- `README.md` - Documentation that explains the scenario
+- `docker-compose.yml`: Docker Compose file with the observability backends and Alloy
+- `docker-compose.coda.yml`: Docker Compose override with the demo app services for use with the `coda` CLI or `-f` flag
+- `config.alloy`: Alloy configuration file for the scenario
+- `README.md`: Documentation that explains the scenario
 - Any additional files needed for your scenario, such as scripts or data files
 
 ### Scenario checklist
 
 Confirm the following items before you submit your scenario:
 
-- [ ] Created a directory in the root of this repository with a descriptive name
-- [ ] Included a docker-compose.yml file with the necessary components, such as LGMT stack or subset
-- [ ] Created a complete config.alloy file that shows the monitoring approach
-- [ ] Written a README.md with:
+- Create a directory in the root of this repository with a descriptive name
+- Include a `docker-compose.yml` file with the necessary components, such as Loki, Grafana, Prometheus, or a subset
+- Create a complete `config.alloy` file that shows the monitoring approach
+- Write a `README.md` with:
   - A clear description of what the scenario shows
   - Prerequisites to run the demo
   - Step-by-step instructions to run the demo
   - Expected output and what to look for
-  - Screenshots if applicable
   - Explanation of key configuration elements
-- [ ] Added the scenario to the table in this README.md
-- [ ] Ensured the scenario works with the centralized image management system
-- [ ] Verified all components start correctly with `docker compose up -d`
+- Add the scenario to the table in this `README.md`
+- Ensure the scenario works with the centralized image management system
+- Verify all components start correctly with `docker compose up -d`
 
 ### Best practices for scenarios
 
@@ -264,7 +228,7 @@ Follow these guidelines when you author or update a scenario:
 - Keep the scenario focused on one concept
 - Use clear, descriptive component and variable names
 - Add comments to explain complex parts of your Alloy configuration
-- Include a Customizing section in your README.md when readers might change the setup
+- Include a Customize section in your `README.md` with information about how readers might change the setup
 - Provide sample queries for Grafana, Prometheus, Loki, or Tempo that work with your scenario
 - Use environment variables for versions and configurable parameters
 
