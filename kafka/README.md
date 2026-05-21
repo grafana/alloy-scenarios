@@ -47,9 +47,6 @@ Ensure you have the following:
 
    - Deploy the scenario: `./run-example.sh kafka`
 
-   This scenario also includes `docker-compose.coda.yml` for the Kafka broker and producer.
-   For Coda overlays and the `coda` CLI, refer to Getting started in the repository root README.
-
 3. Confirm all containers are up: `cd alloy-scenarios/kafka && docker compose ps`
    Wait until the `kafka` container is healthy before you query logs in Grafana.
 
