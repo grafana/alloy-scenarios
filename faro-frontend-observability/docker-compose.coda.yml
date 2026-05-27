@@ -1,6 +1,6 @@
 services:
   web:
-    image: nginx:latest@sha256:1881968aff6f7cdcc4b888c00a11f4ce241ad7ec957e0cb4a9e19e93a3ff87ea
+    image: nginx:latest@sha256:5aca99593157f4ae539a5dec1092a0ad8762f8e2eb1789085a13a0f5622369f6
     ports:
       - 8080:80
     volumes:
