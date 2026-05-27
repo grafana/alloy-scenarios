@@ -1,90 +1,78 @@
 /*
- * lighting.js — day/night overlay.
+ * lighting.js — day/night overlay (v3).
  *
- * Reads `payload.lighting` from the tick (0 = dark, 1 = bright) and adjusts
- * the alpha of a full-map dim rectangle. CSS transitions the fill smoothly.
- * Also toggles a `.lit` class on the static lighthouse group so its lamp
- * glows when the phase is anything other than DAY.
+ * Reads payload.time.phase ("DAY" | "DUSK" | "DAWN" | "NIGHT") and applies
+ * matching CSS classes to:
+ *   - #lighting   : radial-gradient overlay div inside .map-wrap
+ *   - #mapWrap    : data-time attribute drives .windows + .lighthouse-beam
+ *
+ * Mapping:  DAY  -> ""     (no overlay)
+ *           DUSK -> "dusk"
+ *           DAWN -> "dusk"  (same warm radial)
+ *           NIGHT-> "night"
+ *
+ * Continuous-alpha fallback: the existing #lighting rect (if any) is still
+ * tinted by payload.lighting so non-CSS clients still degrade smoothly.
+ *
+ * Dream-mode class toggle on #world (or #mapWrap as fallback) when
+ * payload.dreams.length > 0 — unchanged from v2.
  */
 (function () {
   "use strict";
 
   const SVG_NS = "http://www.w3.org/2000/svg";
 
-  function ensureOverlay() {
-    const layer = document.getElementById("lighting");
-    if (!layer) return null;
-    let rect = layer.querySelector("rect.lighting-overlay");
-    if (!rect) {
-      rect = document.createElementNS(SVG_NS, "rect");
-      rect.setAttribute("class", "lighting-overlay");
-      rect.setAttribute("x", 0);
-      rect.setAttribute("y", 0);
-      rect.setAttribute("width", 1000);
-      rect.setAttribute("height", 700);
-      rect.setAttribute("pointer-events", "none");
-      rect.setAttribute("fill", "rgba(10, 12, 40, 0)");
-      layer.appendChild(rect);
+  function classForPhase(phase) {
+    const p = (phase || "DAY").toUpperCase();
+    if (p === "NIGHT") return "night";
+    if (p === "DUSK" || p === "DAWN") return "dusk";
+    return "";
+  }
+
+  function applyPhase(payload) {
+    const phase = (payload.time && payload.time.phase) || "DAY";
+    const cls = classForPhase(phase);
+    const wrap = document.getElementById("mapWrap");
+    const lighting = document.getElementById("lighting");
+    if (wrap) wrap.dataset.time = cls || "day";
+    if (lighting) lighting.className = "lighting " + cls;
+
+    // Continuous-alpha fallback. If #lighting is a <div>, we'll set an inline
+    // background-color tint as well so non-CSS clients still see the gradient.
+    if (lighting) {
+      const a = alphaFor(payload.lighting);
+      // Only paint the fallback tint when we're not relying on the .night/.dusk
+      // class (so the cleaner CSS overlay wins).
+      lighting.style.boxShadow = `inset 0 0 0 1000px rgba(10, 12, 40, ${a.toFixed(3)})`;
+      lighting.style.opacity = cls ? "" : (a > 0 ? "1" : "0");
     }
-    return rect;
   }
 
   function alphaFor(lighting) {
-    // Clamp + invert: lighting=1 -> alpha=0 ; lighting=0 -> alpha=0.85
     const clamped = Math.max(0, Math.min(1, Number(lighting) || 0));
-    return (1 - clamped) * 0.85;
-  }
-
-  function updateLighthouseGlow(phase) {
-    // The static SVG is rendered as an <image>, so we can't reach inside it from
-    // the host document. Instead we add an explicit overlay glow class to the
-    // outer <svg id="world"> element keyed on phase, and style it from CSS if
-    // a lighthouse halo overlay is added by future iterations. For now we just
-    // expose `data-phase` for any future SVG-as-DOM swap-in.
-    const world = document.getElementById("world");
-    if (!world) return;
-    world.dataset.phase = (phase || "DAY").toUpperCase();
-    const lit = world.dataset.phase !== "DAY";
-    // Inject (or refresh) a tiny lighthouse halo overlay on top of the map.
-    let halo = document.getElementById("lighthouse-halo");
-    if (lit) {
-      if (!halo) {
-        const overlays = document.getElementById("overlays");
-        if (overlays) {
-          halo = document.createElementNS(SVG_NS, "circle");
-          halo.setAttribute("id", "lighthouse-halo");
-          halo.setAttribute("cx", 500);
-          halo.setAttribute("cy", 522);
-          halo.setAttribute("r", 14);
-          halo.setAttribute("fill", "rgba(244, 215, 122, 0.35)");
-          halo.style.filter = "blur(6px)";
-          halo.style.pointerEvents = "none";
-          overlays.appendChild(halo);
-        }
-      }
-    } else if (halo) {
-      halo.remove();
-    }
+    return (1 - clamped) * 0.55;
   }
 
   // ---------------------------------------------------------- v2: dream overlay
-  // character_id -> <g class="dream-dialog">
   const dreamDialogs = new Map();
 
+  function dreamHost() {
+    return document.getElementById("world") || document.getElementById("mapWrap");
+  }
+
   function renderDreamOverlay(payload) {
-    const world = document.getElementById("world");
+    const host = dreamHost();
     const overlays = document.getElementById("overlays");
-    if (!world || !overlays) return;
+    if (!host || !overlays) return;
     const dreams = Array.isArray(payload.dreams) ? payload.dreams : [];
     if (dreams.length === 0) {
-      world.classList.remove("dream-mode");
+      host.classList.remove("dream-mode");
       for (const [, g] of dreamDialogs) g.remove();
       dreamDialogs.clear();
       return;
     }
-    world.classList.add("dream-mode");
+    host.classList.add("dream-mode");
 
-    // Build an id -> {x, y} lookup from the agents in this snapshot.
     const agentXY = new Map();
     for (const a of (payload.agents || [])) {
       if (a && a.id) agentXY.set(a.id, { x: a.x, y: a.y });
@@ -104,11 +92,9 @@
         overlays.appendChild(g);
         dreamDialogs.set(d.character_id, g);
       }
-      // Position dialog just above and to the right of the dreaming dot.
       const ox = (pos.x || 0) + 12;
       const oy = (pos.y || 0) - 18;
       g.setAttribute("transform", `translate(${ox}, ${oy})`);
-      // Show the latest 1-2 lines.
       while (g.firstChild) g.removeChild(g.firstChild);
       const lines = (Array.isArray(d.lines) ? d.lines : []).slice(-2);
       lines.forEach((line, i) => {
@@ -119,7 +105,6 @@
         g.appendChild(t);
       });
     }
-    // Cull dialogs for dreams that have ended this tick.
     for (const [id, g] of dreamDialogs) {
       if (!seen.has(id)) {
         g.remove();
@@ -130,13 +115,7 @@
 
   window.addEventListener("from:tick", (e) => {
     const payload = e.detail || {};
-    const rect = ensureOverlay();
-    if (rect) {
-      const a = alphaFor(payload.lighting);
-      rect.setAttribute("fill", `rgba(10, 12, 40, ${a.toFixed(3)})`);
-    }
-    const phase = (payload.time && payload.time.phase) || "DAY";
-    updateLighthouseGlow(phase);
+    applyPhase(payload);
     renderDreamOverlay(payload);
   });
 })();

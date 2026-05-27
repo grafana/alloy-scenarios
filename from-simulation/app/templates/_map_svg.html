@@ -1,5 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg viewBox="0 0 1000 700" xmlns="http://www.w3.org/2000/svg" id="map">
+<svg viewBox="0 0 1000 700" xmlns="http://www.w3.org/2000/svg" id="map" preserveAspectRatio="xMidYMid meet">
   <defs>
     <filter id="wobble" x="-2%" y="-2%" width="104%" height="104%">
       <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" seed="3" />
@@ -15,7 +14,6 @@
       <feComposite in2="SourceGraphic" operator="in"/>
     </filter>
 
-    <!-- patterns -->
     <pattern id="meadow" patternUnits="userSpaceOnUse" width="26" height="26">
       <rect width="26" height="26" fill="#b3b285"/>
       <path d="M3 18 q1 -4 2 0 M9 22 q1 -3 2 0 M16 16 q1 -4 2 0 M21 21 q1 -3 2 0 M14 7 q1 -3 2 0"
@@ -65,7 +63,6 @@
       <stop offset="100%" stop-color="#fff6c8" stop-opacity="0"/>
     </linearGradient>
 
-    <!-- TREES -->
     <g id="tree">
       <circle cx="0" cy="0" r="10" fill="#2c3a25" />
       <circle cx="-2" cy="-2" r="7.5" fill="#3e4f33" />
@@ -82,7 +79,6 @@
       <polygon points="0,-2 4,4 -4,4" fill="#4a6240"/>
     </g>
 
-    <!-- FARAWAY/BOTTLE TREE -->
     <g id="faraway-tree">
       <circle cx="0" cy="0" r="18" fill="#1d2616"/>
       <circle cx="-3" cy="-3" r="14" fill="#2b3a22"/>
@@ -100,7 +96,6 @@
       <circle cx="16" cy="-1" r="1.2" fill="#d8a83a"/>
     </g>
 
-    <!-- TALISMAN -->
     <g id="talisman">
       <circle cx="0" cy="0" r="7" fill="#f0e6c8" stroke="#1a1611" stroke-width="0.7"/>
       <path d="M0 -5 L2 -1 L6 0 L2.5 2.5 L3.3 6.5 L0 4.2 L-3.3 6.5 L-2.5 2.5 L-6 0 L-2 -1 Z"
@@ -108,25 +103,21 @@
       <circle cx="0" cy="0" r="1.1" fill="#a83a2a"/>
     </g>
 
-    <!-- SPAWN MARKER -->
     <g id="spawn-mark">
       <path d="M 0 -7 L 6 5 L -6 5 Z" fill="#e8dec0" stroke="#1a1611" stroke-width="0.9"/>
       <path d="M -2.5 -2 L -3.5 2 M 0 -3 L 0 2 M 2.5 -2 L 3.5 2"
             stroke="#1a1611" stroke-width="0.9" stroke-linecap="round" fill="none"/>
     </g>
 
-    <!-- NUMBERED PIN -->
     <g id="num-pin">
       <circle r="7.5" fill="#a83a2a" stroke="#1a1611" stroke-width="0.8"/>
     </g>
-    <!-- LANDMARK PIN -->
     <g id="lm-pin">
       <circle r="3.5" fill="#a83a2a" stroke="#1a1611" stroke-width="0.6"/>
     </g>
 
     <!-- ====================================================== -->
     <!--   CHARACTER TOKEN SYMBOLS (60x80 viewBox each)         -->
-    <!--   Mounted via <use href="#token-{name}"> by map.js     -->
     <!-- ====================================================== -->
     <symbol id="token-boyd" viewBox="0 0 60 80">
       <ellipse cx="30" cy="76" rx="18" ry="2" fill="#1a1611" opacity="0.3"/>
@@ -259,16 +250,10 @@
     </symbol>
   </defs>
 
-  <!-- ========================================== -->
-  <!--   LAYER 1: FOREST BASE                     -->
-  <!-- ========================================== -->
+  <!-- LAYER 1: FOREST BASE -->
   <rect width="1000" height="700" fill="url(#forest-floor)"/>
 
-  <!-- ========================================== -->
-  <!--   LAYER 2: BIG MEADOW (most of the map)    -->
-  <!--   The township sits inside this clearing,  -->
-  <!--   surrounded by forest at the edges.       -->
-  <!-- ========================================== -->
+  <!-- LAYER 2: BIG MEADOW -->
   <g filter="url(#wobble)">
     <path d="M 60 220
              C 80 130, 220 70, 380 80
@@ -281,7 +266,6 @@
           fill="url(#meadow)" stroke="#7a7256" stroke-width="0.9"/>
   </g>
 
-  <!-- contour wisps (topo lines) — subtle paper texture -->
   <g stroke="#8c8662" stroke-width="0.6" fill="none" opacity="0.35" filter="url(#wobble-soft)">
     <path d="M 90 140 Q 180 100 280 130 T 460 160"/>
     <path d="M 60 200 Q 160 170 270 200 T 460 220"/>
@@ -291,9 +275,7 @@
     <path d="M 100 540 Q 180 580 270 580"/>
   </g>
 
-  <!-- ========================================== -->
-  <!--   LAYER 3: ROCK OUTCROPS                   -->
-  <!-- ========================================== -->
+  <!-- LAYER 3: ROCK OUTCROPS -->
   <g id="outcrops" filter="url(#wobble-soft)" opacity="0.85">
     <path d="M 70 90 q 50 -30 90 -10 q 30 30 -10 50 q -50 20 -80 -20 z" fill="url(#rock)" stroke="#a89b76" stroke-width="0.6"/>
     <path d="M 210 130 q 60 -20 80 10 q 10 30 -40 30 q -60 0 -40 -40 z" fill="url(#rock)" stroke="#a89b76" stroke-width="0.6"/>
@@ -309,34 +291,20 @@
     <path d="M 480 660 q 40 -10 60 10 q 0 20 -40 20 q -40 -10 -20 -30 z" fill="url(#rock)" stroke="#a89b76" stroke-width="0.6"/>
   </g>
 
-  <!-- ========================================== -->
-  <!--   LAYER 4: WATER                           -->
-  <!-- ========================================== -->
+  <!-- LAYER 4: WATER -->
   <g id="water-bodies" filter="url(#wobble-soft)">
-    <!-- LAKE upper-right -->
     <path d="M 700 200 q 50 -20 90 10 q 30 40 0 80 q -50 30 -90 -10 q -30 -40 0 -80 z"
           fill="url(#water)" stroke="#456d7c" stroke-width="1"/>
-    <!-- stream feeding lake -->
     <path d="M 660 30 q 20 60 50 100 q 20 40 -10 70" stroke="#7da9b8" stroke-width="3" fill="none" opacity="0.85"/>
-
-    <!-- BRUNDLES pond -->
     <ellipse cx="375" cy="335" rx="22" ry="14" fill="url(#water)" stroke="#456d7c" stroke-width="0.8"/>
-
-    <!-- small upper-left pond -->
     <ellipse cx="155" cy="220" rx="20" ry="12" fill="url(#water)" stroke="#456d7c" stroke-width="0.8"/>
   </g>
 
-  <!-- ========================================== -->
-  <!--   LAYER 5: FOREST CANOPY (perimeter)       -->
-  <!--   Populated by map.js mulberry32 scatter   -->
-  <!-- ========================================== -->
+  <!-- LAYER 5: FOREST CANOPY (populated by map.js) -->
   <g id="forest"></g>
 
-  <!-- ========================================== -->
-  <!--   LAYER 6: ROADS                           -->
-  <!-- ========================================== -->
+  <!-- LAYER 6: ROADS -->
   <g id="roads" filter="url(#wobble-soft)">
-    <!-- shoulder -->
     <path d="M -20 200
              C 80 240, 160 280, 240 320
              C 300 350, 360 380, 395 405
@@ -346,7 +314,6 @@
              C 580 595, 640 640, 720 690
              L 760 720"
           stroke="#2a2622" stroke-width="22" fill="none" stroke-linejoin="round" opacity="0.5"/>
-    <!-- asphalt -->
     <path d="M -20 200
              C 80 240, 160 280, 240 320
              C 300 350, 360 380, 395 405
@@ -356,7 +323,6 @@
              C 580 595, 640 640, 720 690
              L 760 720"
           stroke="url(#asphalt)" stroke-width="16" fill="none" stroke-linejoin="round"/>
-    <!-- center dashes -->
     <path d="M -20 200
              C 80 240, 160 280, 240 320
              C 300 350, 360 380, 395 405
@@ -367,39 +333,20 @@
              L 760 720"
           stroke="#e8dec0" stroke-width="0.8" stroke-dasharray="5 8" fill="none" opacity="0.55"/>
 
-    <!-- internal town streets (dirt lanes inside the cluster) -->
     <g opacity="0.95">
-      <!-- vertical Main Street through town -->
       <path d="M 450 410 L 450 555" stroke="#3a3024" stroke-width="13" fill="none" opacity="0.45" stroke-linecap="round"/>
       <path d="M 450 410 L 450 555" stroke="url(#dirt)" stroke-width="8" fill="none" stroke-linecap="round"/>
-      <!-- east-west cross lane -->
       <path d="M 380 485 L 555 485" stroke="#3a3024" stroke-width="11" fill="none" opacity="0.45" stroke-linecap="round"/>
       <path d="M 380 485 L 555 485" stroke="url(#dirt)" stroke-width="7" fill="none" stroke-linecap="round"/>
-      <!-- small lane to barn -->
       <path d="M 510 462 L 555 458" stroke="url(#dirt)" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.85"/>
     </g>
   </g>
 
-  <!-- ========================================== -->
-  <!--   LAYER 7: NON-TOWN LANDMARKS              -->
-  <!-- ========================================== -->
+  <!-- LAYER 7: NON-TOWN LANDMARKS -->
+  <g transform="translate(560 55)"><use href="#faraway-tree"/></g>
+  <g transform="translate(735 485)"><use href="#faraway-tree"/></g>
+  <g transform="translate(575 660)"><use href="#faraway-tree" transform="scale(0.85)"/></g>
 
-  <!-- BOTTLE TREE (Boyd / Sara) -->
-  <g transform="translate(560 55)">
-    <use href="#faraway-tree"/>
-  </g>
-
-  <!-- FARWAY TREE (Victor / Ethan) -->
-  <g transform="translate(735 485)">
-    <use href="#faraway-tree"/>
-  </g>
-
-  <!-- FARWAY / BOTTLE TREE (bottom) -->
-  <g transform="translate(575 660)">
-    <use href="#faraway-tree" transform="scale(0.85)"/>
-  </g>
-
-  <!-- TALISMAN TOME (small monolith / open book on stone) -->
   <g transform="translate(465 195)" filter="url(#wobble-soft)">
     <rect x="-8" y="-3" width="16" height="10" fill="#6a5238" stroke="#1a1611" stroke-width="0.8"/>
     <rect x="-8" y="-8" width="16" height="6" fill="#e8dec0" stroke="#1a1611" stroke-width="0.6"/>
@@ -407,7 +354,6 @@
     <path d="M -6 -6 h 4 M -6 -4 h 4 M 2 -6 h 4 M 2 -4 h 4" stroke="#1a1611" stroke-width="0.3" opacity="0.6"/>
   </g>
 
-  <!-- LOG CABINS (small cluster of 3 cabins) -->
   <g transform="translate(620 230)" filter="url(#wobble-soft)">
     <g transform="translate(-12 -8)">
       <rect x="-9" y="-6" width="18" height="12" fill="#7a5a3a" stroke="#1a1611" stroke-width="0.7"/>
@@ -424,14 +370,12 @@
     </g>
   </g>
 
-  <!-- SHACK -->
   <g transform="translate(615 335)" filter="url(#wobble-soft)">
     <rect x="-10" y="-6" width="20" height="12" fill="#5a4632" stroke="#1a1611" stroke-width="0.8"/>
     <polygon points="-12,-6 12,-6 9,-13 -9,-13" fill="#2a1810" stroke="#1a1611" stroke-width="0.8"/>
     <rect x="-2" y="-2" width="4" height="8" fill="#2a1810"/>
   </g>
 
-  <!-- STONE CIRCLE -->
   <g transform="translate(260 510)" filter="url(#wobble-soft)">
     <ellipse cx="0" cy="0" rx="25" ry="14" fill="#9c9276" stroke="#7a7050" stroke-width="0.6" opacity="0.5"/>
     <g fill="#5a4f3a" stroke="#1a1611" stroke-width="0.6">
@@ -446,14 +390,12 @@
     </g>
   </g>
 
-  <!-- ABBY'S GRAVE -->
   <g transform="translate(345 580)" filter="url(#wobble-soft)">
     <rect x="-6" y="-4" width="12" height="6" fill="#9c9276" stroke="#1a1611" stroke-width="0.6"/>
     <rect x="-3" y="-10" width="6" height="6" fill="#cabd9a" stroke="#1a1611" stroke-width="0.6"/>
     <path d="M -1 -8 v 4 M -2 -7 h 2" stroke="#3a3024" stroke-width="0.5"/>
   </g>
 
-  <!-- VICTOR'S HIDEOUT TRUCK -->
   <g transform="translate(275 610) rotate(-10)" filter="url(#wobble-soft)">
     <rect x="-13" y="-4" width="20" height="9" fill="#5a6a52" stroke="#1a1611" stroke-width="0.8"/>
     <rect x="7" y="-7" width="8" height="12" fill="#445040" stroke="#1a1611" stroke-width="0.8"/>
@@ -463,7 +405,6 @@
     <circle cx="12" cy="6" r="2.5" fill="#1a1611"/>
   </g>
 
-  <!-- CAR GRAVEYARD -->
   <g transform="translate(470 615)" filter="url(#wobble-soft)">
     <g transform="translate(-12 4) rotate(15)"><rect x="-10" y="-4" width="20" height="8" rx="2" fill="#6a3a2a" stroke="#1a1611" stroke-width="0.7"/></g>
     <g transform="translate(8 2) rotate(-20)"><rect x="-9" y="-3" width="18" height="6" rx="2" fill="#4a4036" stroke="#1a1611" stroke-width="0.7"/></g>
@@ -471,30 +412,26 @@
     <g transform="translate(-2 12) rotate(-5)"><rect x="-9" y="-3" width="18" height="6" rx="2" fill="#3a4036" stroke="#1a1611" stroke-width="0.7"/></g>
   </g>
 
-  <!-- DUNGEON (cave mouth) -->
   <g transform="translate(240 650)" filter="url(#wobble-soft)">
     <ellipse cx="0" cy="0" rx="14" ry="9" fill="#cdc4a3" stroke="#7a7050" stroke-width="0.6"/>
     <path d="M -10 4 q 0 -14 10 -14 q 10 0 10 14 z" fill="#0e0a08" stroke="#1a1611" stroke-width="0.8"/>
     <path d="M -7 0 L -4 -6 M 0 -10 L 0 -4 M 6 -8 L 4 -2" stroke="#3a3024" stroke-width="0.4" opacity="0.8"/>
   </g>
 
-  <!-- CAVE ENTRY -->
   <g transform="translate(390 670)" filter="url(#wobble-soft)">
     <ellipse cx="0" cy="2" rx="12" ry="7" fill="#cdc4a3" stroke="#7a7050" stroke-width="0.6"/>
     <path d="M -8 4 q 0 -12 8 -12 q 8 0 8 12 z" fill="#0e0a08" stroke="#1a1611" stroke-width="0.7"/>
   </g>
 
-  <!-- CRASH SITE -->
   <g transform="translate(720 670) rotate(35)" filter="url(#wobble-soft)">
     <rect x="-12" y="-6" width="24" height="12" rx="2" fill="#6a3a2a" stroke="#1a1611" stroke-width="0.8"/>
     <rect x="-8" y="-4" width="6" height="6" fill="#2a2d2a"/>
     <rect x="2" y="-4" width="6" height="6" fill="#2a2d2a"/>
     <path d="M -16 -2 L -12 -6 M 14 -2 L 18 -6 M 0 -10 L 0 -6" stroke="#a83a2a" stroke-width="0.6"/>
-    <!-- smoke -->
     <path d="M -2 -8 q -3 -8 2 -14 q 5 -4 0 -10" stroke="#5a5650" stroke-width="0.8" fill="none" opacity="0.5"/>
   </g>
 
-  <!-- LIGHTHOUSE (140, 585) — lower-left, separate from town -->
+  <!-- LIGHTHOUSE (140, 585) -->
   <g filter="url(#wobble-soft)">
     <ellipse cx="140" cy="585" rx="38" ry="26" fill="url(#meadow)" stroke="#7a7256" stroke-width="0.8"/>
   </g>
@@ -506,17 +443,14 @@
     <circle cx="0" cy="0" r="6" fill="#f6c869" stroke="#1a1611" stroke-width="0.9"/>
     <circle cx="0" cy="0" r="2.5" fill="#fff6c8"/>
   </g>
-  <!-- lighthouse rotating beam -->
   <g class="lighthouse-beam">
     <polygon points="140,585 105,310 175,310" fill="url(#beamGrad)" opacity="0.55"/>
   </g>
 
-  <!-- ========================================== -->
-  <!--   LAYER 8: TOWN BUILDINGS (numbered 1–18) -->
-  <!-- ========================================== -->
+  <!-- LAYER 8: TOWN BUILDINGS -->
   <g id="town" filter="url(#wobble-soft)">
 
-    <!-- 1 COLONY HOUSE (385, 420) — NW corner, Victorian, 3-story -->
+    <!-- 1 COLONY HOUSE -->
     <g transform="translate(385 420)">
       <rect x="-22" y="-15" width="44" height="30" fill="#7c5a3e" stroke="#1a1611" stroke-width="1.2"/>
       <polygon points="-25,-15 25,-15 19,-25 -19,-25" fill="#3a261a" stroke="#1a1611" stroke-width="1.2"/>
@@ -535,7 +469,7 @@
     </g>
     <use href="#talisman" transform="translate(385 388) scale(0.55)"/>
 
-    <!-- 2 GREEN HOUSE (418, 400) — small green-roof house -->
+    <!-- 2 GREEN HOUSE -->
     <g transform="translate(418 400) rotate(-3)">
       <rect x="-10" y="-7" width="20" height="14" fill="#a8b07a" stroke="#1a1611" stroke-width="0.9"/>
       <polygon points="-12,-7 12,-7 8,-13 -8,-13" fill="#4a5e34" stroke="#1a1611" stroke-width="0.9"/>
@@ -546,13 +480,13 @@
       <rect x="424" y="396" width="3" height="3" fill="#f6c869"/>
     </g>
 
-    <!-- 3 SHED (442, 388) — tiny shed -->
+    <!-- 3 SHED -->
     <g transform="translate(442 388)">
       <rect x="-6" y="-5" width="12" height="10" fill="#5a4632" stroke="#1a1611" stroke-width="0.8"/>
       <polygon points="-7,-5 7,-5 5,-9 -5,-9" fill="#2a1810" stroke="#1a1611" stroke-width="0.8"/>
     </g>
 
-    <!-- 4 CLINIC (478, 402) -->
+    <!-- 4 CLINIC -->
     <g transform="translate(478 402) rotate(2)">
       <rect x="-13" y="-9" width="26" height="18" fill="#c9bca0" stroke="#1a1611" stroke-width="1"/>
       <polygon points="-15,-9 15,-9 12,-15 -12,-15" fill="#5d4a3a" stroke="#1a1611" stroke-width="1"/>
@@ -565,21 +499,21 @@
     </g>
     <use href="#talisman" transform="translate(478 376) scale(0.5)"/>
 
-    <!-- 5 ROOT CELLAR (495, 432) — partly-underground -->
+    <!-- 5 ROOT CELLAR -->
     <g transform="translate(495 432)">
       <ellipse cx="0" cy="2" rx="10" ry="6" fill="#7a5a3a" stroke="#1a1611" stroke-width="0.9"/>
       <ellipse cx="0" cy="2" rx="6" ry="3" fill="#2a1810"/>
       <path d="M -2 1 v -3 M 2 1 v -3" stroke="#3a2418" stroke-width="0.6"/>
     </g>
 
-    <!-- 6 CHOOSING CEREMONY STONE (390, 470) -->
+    <!-- 6 CHOOSING CEREMONY STONE -->
     <g transform="translate(390 470)">
       <ellipse cx="0" cy="5" rx="7" ry="2" fill="#3a3024" opacity="0.5"/>
       <polygon points="-3,4 -4,-5 -1,-9 3,-7 4,4" fill="#6a5f48" stroke="#1a1611" stroke-width="0.7"/>
       <path d="M -2 -4 q 2 -2 4 0" stroke="#3a3024" stroke-width="0.4" fill="none"/>
     </g>
 
-    <!-- 7 CHURCH (385, 510) -->
+    <!-- 7 CHURCH -->
     <g transform="translate(385 510)">
       <rect x="-18" y="-10" width="36" height="20" fill="#9a8e72" stroke="#1a1611" stroke-width="1"/>
       <polygon points="-21,-10 21,-10 16,-18 -16,-18" fill="#3a3024" stroke="#1a1611" stroke-width="1"/>
@@ -598,7 +532,7 @@
     </g>
     <use href="#talisman" transform="translate(385 476) scale(0.5)"/>
 
-    <!-- 8 GREY HOUSE (420, 490) -->
+    <!-- 8 GREY HOUSE -->
     <g transform="translate(420 490) rotate(-2)">
       <rect x="-10" y="-7" width="20" height="14" fill="#7a7468" stroke="#1a1611" stroke-width="0.9"/>
       <polygon points="-12,-7 12,-7 8,-13 -8,-13" fill="#3a3a32" stroke="#1a1611" stroke-width="0.9"/>
@@ -609,7 +543,7 @@
       <rect x="426" y="486" width="3" height="3" fill="#f6c869"/>
     </g>
 
-    <!-- 9 BLUE HOUSE (440, 490) -->
+    <!-- 9 BLUE HOUSE -->
     <g transform="translate(440 490) rotate(2)">
       <rect x="-10" y="-7" width="20" height="14" fill="#6a7e92" stroke="#1a1611" stroke-width="0.9"/>
       <polygon points="-12,-7 12,-7 8,-13 -8,-13" fill="#3a4250" stroke="#1a1611" stroke-width="0.9"/>
@@ -620,14 +554,14 @@
       <rect x="446" y="486" width="3" height="3" fill="#f6c869"/>
     </g>
 
-    <!-- 10 POOL (462, 478) -->
+    <!-- 10 POOL -->
     <g transform="translate(462 478)">
       <rect x="-10" y="-6" width="20" height="12" rx="1" fill="#cabd9a" stroke="#1a1611" stroke-width="0.9"/>
       <rect x="-7" y="-4" width="14" height="8" rx="1" fill="url(#pooltile)" stroke="#1a1611" stroke-width="0.7"/>
       <path d="M -5 -2 L 1 0 L 4 2 M -2 3 L 1 1" stroke="#3a3024" stroke-width="0.4" fill="none" opacity="0.8"/>
     </g>
 
-    <!-- 11 LIUS' HOME (478, 462) -->
+    <!-- 11 LIUS' HOME -->
     <g transform="translate(478 462)">
       <rect x="-9" y="-7" width="18" height="14" fill="#8a6a48" stroke="#1a1611" stroke-width="0.9"/>
       <polygon points="-11,-7 11,-7 8,-13 -8,-13" fill="#4a3024" stroke="#1a1611" stroke-width="0.9"/>
@@ -638,7 +572,7 @@
       <rect x="483" y="458" width="3" height="3" fill="#f6c869"/>
     </g>
 
-    <!-- 12 BAR (510, 458) — former gas station -->
+    <!-- 12 BAR -->
     <g transform="translate(510 458) rotate(-2)">
       <rect x="-12" y="-9" width="24" height="4" fill="#3a2820" stroke="#1a1611" stroke-width="0.8"/>
       <rect x="-7" y="-5" width="2" height="3" fill="#a83a2a"/>
@@ -652,7 +586,7 @@
       <rect x="514" y="460" width="3" height="2" fill="#f6c869"/>
     </g>
 
-    <!-- 13 BARN (555, 454) -->
+    <!-- 13 BARN -->
     <g transform="translate(555 454) rotate(3)">
       <rect x="-15" y="-10" width="30" height="20" fill="#a83a2a" stroke="#1a1611" stroke-width="1"/>
       <polygon points="-17,-10 17,-10 13,-18 -13,-18" fill="#2a1810" stroke="#1a1611" stroke-width="1"/>
@@ -661,7 +595,7 @@
       <circle cx="0" cy="-13" r="1.5" fill="#d8a83a" stroke="#1a1611" stroke-width="0.3"/>
     </g>
 
-    <!-- 14 SHERIFF'S OFFICE (490, 510) -->
+    <!-- 14 SHERIFF'S OFFICE -->
     <g transform="translate(490 510)">
       <rect x="-13" y="-9" width="26" height="18" fill="#7a5c3e" stroke="#1a1611" stroke-width="1"/>
       <polygon points="-15,-9 15,-9 12,-16 -12,-16" fill="#3a2820" stroke="#1a1611" stroke-width="1"/>
@@ -676,7 +610,7 @@
     </g>
     <use href="#talisman" transform="translate(490 484) scale(0.5)"/>
 
-    <!-- 15 BUS (460, 538) -->
+    <!-- 15 BUS -->
     <g transform="translate(460 538) rotate(-5)">
       <rect x="-18" y="-5" width="36" height="9" rx="1.5" fill="#d8a83a" stroke="#1a1611" stroke-width="0.9"/>
       <rect x="-15" y="-3" width="4" height="3" fill="#2a3038"/>
@@ -689,7 +623,7 @@
       <circle cx="12" cy="5" r="2" fill="#1a1611"/>
     </g>
 
-    <!-- 16 MATTHEWS' HOME (collapsed) (430, 545) -->
+    <!-- 16 MATTHEWS' HOME -->
     <g transform="translate(430 545) rotate(4)">
       <rect x="-11" y="-7" width="22" height="14" fill="#7a5640" stroke="#1a1611" stroke-width="0.9"/>
       <polygon points="-13,-7 -2,-7 -4,-12 -10,-13 -13,-7" fill="#3a2820" stroke="#1a1611" stroke-width="0.9"/>
@@ -701,7 +635,7 @@
     </g>
     <use href="#talisman" transform="translate(430 526) scale(0.5)"/>
 
-    <!-- 17 DINER (405, 530) -->
+    <!-- 17 DINER -->
     <g transform="translate(405 530) rotate(-2)">
       <rect x="-12" y="-6" width="24" height="12" fill="#b07a3a" stroke="#1a1611" stroke-width="0.9"/>
       <path d="M -12 -6 Q 0 -12 12 -6" fill="#cdc6b4" stroke="#1a1611" stroke-width="0.9"/>
@@ -714,7 +648,7 @@
       <rect x="394" y="528" width="20" height="2" fill="#f6c869"/>
     </g>
 
-    <!-- 18 MYERS' HOME (382, 552) -->
+    <!-- 18 MYERS' HOME -->
     <g transform="translate(382 552) rotate(3)">
       <rect x="-10" y="-7" width="20" height="14" fill="#8a6a48" stroke="#1a1611" stroke-width="0.9"/>
       <polygon points="-12,-7 12,-7 8,-13 -8,-13" fill="#4a3024" stroke="#1a1611" stroke-width="0.9"/>
@@ -727,9 +661,10 @@
 
   </g>
 
-  <!-- ========================================== -->
-  <!--   LAYER 9: COMPASS + CARTOUCHE             -->
-  <!-- ========================================== -->
+  <!-- LAYER 9: OVERLAYS (hash marks, bus, rings, tendrils, halo, dream dialogs) -->
+  <g id="overlays"></g>
+
+  <!-- LAYER 10: COMPASS + CARTOUCHE -->
   <g id="compass" transform="translate(60 60)">
     <circle r="26" fill="#e3d8b4" stroke="#1a1611" stroke-width="1.1" opacity="0.92"/>
     <polygon points="0,-20 4,0 0,20 -4,0" fill="#1a1611"/>
@@ -746,9 +681,7 @@
     <text x="0" y="9" text-anchor="middle" font-size="8.5" font-family="Georgia, serif" fill="#5a4632" letter-spacing="2">— the town &amp; its surroundings —</text>
   </g>
 
-  <!-- ========================================== -->
-  <!--   LAYER 10: ENTITIES (populated by map.js) -->
-  <!-- ========================================== -->
+  <!-- LAYER 11: ENTITIES (populated by map.js) -->
   <g id="entities"></g>
 
   <!-- grain overlay (always last) -->

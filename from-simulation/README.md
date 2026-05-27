@@ -130,6 +130,10 @@ Late in NIGHT (after `LIGHTHOUSE_CALL_TICK_FRAC` of the phase), the lighthouse m
 - All v2 panels read snapshot fields **only**: `payload.legacy`, `payload.dreams`, `payload.bus`, `payload.lighthouse`, `payload.yellow.tendrils`. No new client/server contract is required beyond `snapshot_dict`.
 - The dream overlay, hash-mark groups, ring overlays, bus group, and outsider glyphs are all reused between ticks — they are created on demand and torn down only when the corresponding world state stops emitting them, so per-tick render cost stays near v1.
 
+### v3 — hand-drawn map & character tokens
+
+The map is now the **Claude Design hand-drawn Fromville** — a paper-stock meadow inside a dark forest ring with a single S-curve highway, internal dirt streets, three Faraway/Bottle Trees, a rotating lighthouse beam, and all 18 numbered township buildings (forest scatter is generated client-side from a seeded RNG so it stays consistent across sessions). A new **Township Index** side panel lists every building with its number, mini-icon, and name; the five talisman-protected buildings — **Colony House, Clinic, Church, Sheriff's Office, Matthews' Home** — are marked with a ★. Named characters now render as hand-drawn 60×80 token sprites (one `<symbol>` per character, dropped onto the map via `<use href="#token-{name}">`), and the Man in Yellow / Boy in White get their own distinct tokens. Building windows glow at DUSK and NIGHT and a radial-gradient overlay deepens the village in dream-time.
+
 ## Repository
 
 Return to the [main repo README](../README.md) for the full scenario index.

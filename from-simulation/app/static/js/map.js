@@ -1,95 +1,329 @@
 /*
  * map.js — render the per-tick snapshot onto the SVG, drive the UI panels.
  *
- * Tick payload keys we read (see contracts.snapshot_dict):
- *   tick, time, lighting, cycle_number, village_wipes,
- *   food_supply, food_capacity, farm_health,
- *   yellow:{mode, deadline_in},
- *   buildings[], agents[], creatures[], supernaturals[], events[],
- *   narration[]?  (optional — only present when the LLM driver is wired)
+ * v3 changes:
+ *  - Named characters render as <use href="#token-{name}"> hand-drawn tokens
+ *    that live inside the inline map SVG's <defs> as 60x80 <symbol>s.
+ *  - Man in Yellow / Boy in White render the same way (token-yellow / token-white).
+ *  - NPCs / creatures / anghkooey keep simple shapes (circle / polygon).
+ *  - Outsiders keep v2 styling: circle with a '+' glyph above.
+ *  - Forest scatter is generated once per session into <g id="forest"> via a
+ *    seeded mulberry32 RNG (matches the design reference exactly).
+ *  - Hash marks use a per-building offset table for the 5 talisman set.
  *
- * We maintain a Map id -> {circle, label} so updates are O(deltas), not O(N²).
+ * Tick payload keys (see contracts.snapshot_dict): tick, time, lighting,
+ *   cycle_number, village_wipes, food_supply, food_capacity, farm_health,
+ *   yellow:{mode, deadline_in, tendrils, disguised_as},
+ *   buildings[], agents[], creatures[], supernaturals[], events[],
+ *   narration[]?, legacy:{building_breach_marks, journal_fragments,
+ *   cycles_witnessed}, lighthouse:{voice_active, called}, bus:{...},
+ *   dreams[].
  */
 (function () {
   "use strict";
 
   const SVG_NS = "http://www.w3.org/2000/svg";
-  const RADIUS_BY_CLASS = {
-    "char": 6,
-    "npc": 4.5,
-    "creature": 5,
-    "boy-in-white": 5,
-    "man-in-yellow": 6,
-    "anghkooey": 5,
-    "faraway-tree": 0, // already drawn in static SVG; skip rendering
-  };
 
-  // Per-pool live registries. id -> {el, lastClass}
-  const dots = new Map();
-  // id -> {ring: <circle>, lastKind: "tendril"|"tendril-leader"|"called"} for pulsing rings around dots
+  // Tokens we have hand-drawn SVG <symbol>s for.
+  const TOKEN_NAMES = new Set([
+    "boyd", "donna", "jim", "tabitha", "ethan", "julie",
+    "jade", "kenny", "khatri", "sara", "yellow", "white",
+  ]);
+
+  // Per-building hash-mark anchor offsets. Other buildings fall back to [18, 18].
+  const HASH_OFFSET = {
+    colony_house:   [ 28,  18],
+    clinic:         [ 16,  18],
+    church:         [ 22, -22],
+    sheriff_office: [ 18,  20],
+    matthews_home:  [ 16,  18],
+  };
+  const HASH_OFFSET_DEFAULT = [18, 18];
+
+  // Per-pool live registries. id -> {el, kind, lastClass}
+  // kind === "token" means el is a <use>, kind === "shape" means el is the primary
+  // SVG element (circle/polygon).
+  const entities = new Map();
+
+  // id -> {ring: <circle>, lastKind} for pulsing rings around dots.
   const rings = new Map();
-  // id -> <text> "+" glyph for outsiders
+  // id -> <text> "+" glyph for outsiders.
   const outsiderGlyphs = new Map();
   // building_id -> {group: <g>, lastCount}
   const hashGroups = new Map();
-  // Single bus group (or null when bus inactive)
+  // Single bus group (or null when bus inactive).
   let busGroup = null;
   let lastJournalKey = "";
   let lastVoiceTick = -1;
-
   let selectedId = null;
   let lastEventTick = -1;
 
+  // Forest scatter runs once per session.
+  let forestScattered = false;
+
   function $(id) { return document.getElementById(id); }
 
-  function ensureCircle(id, markerClass) {
-    let entry = dots.get(id);
-    const r = RADIUS_BY_CLASS[markerClass] != null ? RADIUS_BY_CLASS[markerClass] : 4;
-    if (r === 0) return null; // faraway-trees live in the static map
-    if (entry) {
-      if (entry.lastClass !== markerClass) {
-        entry.el.setAttribute("class", markerClass);
-        entry.el.setAttribute("r", r);
-        entry.lastClass = markerClass;
-      }
+  // ---------------------------------------------------------- Forest scatter
+  // Seeded RNG copied verbatim from Fromville_Map.html (mulberry32).
+  function mulberry32(seed) {
+    return function () {
+      let t = seed += 0x6D2B79F5;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  // The big meadow polygon; trees go OUTSIDE this clearing for the dark forest
+  // ring at the edges. Also a handful are placed INSIDE the meadow but away
+  // from town/landmarks/road/water for texture.
+  const MEADOW = [
+    [60,220],[80,130],[220,70],[380,80],[520,60],[660,70],[800,110],
+    [880,140],[940,230],[920,340],[950,460],[870,580],[720,620],
+    [600,680],[440,690],[300,660],[180,640],[60,540],[50,420],[30,360],
+  ];
+  const TOWN_PTS = [
+    {x:385,y:420},{x:418,y:400},{x:442,y:388},{x:478,y:402},{x:495,y:432},
+    {x:390,y:470},{x:385,y:510},{x:420,y:490},{x:440,y:490},{x:462,y:478},
+    {x:478,y:462},{x:510,y:458},{x:555,y:454},{x:490,y:510},{x:460,y:538},
+    {x:430,y:545},{x:405,y:530},{x:382,y:552},
+  ];
+  const LANDMARK_PTS = [
+    {x:560,y:55},{x:465,y:195},{x:620,y:225},{x:760,y:218},{x:380,y:325},
+    {x:615,y:335},{x:260,y:510},{x:345,y:580},{x:275,y:610},{x:470,y:615},
+    {x:240,y:650},{x:735,y:485},{x:390,y:670},{x:575,y:660},{x:720,y:670},
+    {x:140,y:585},
+  ];
+
+  function pointInPoly(x, y, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1];
+      const xj = poly[j][0], yj = poly[j][1];
+      const intersect = ((yi > y) !== (yj > y)) &&
+        (x < (xj - xi) * (y - yi) / (yj - yi + 1e-9) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+  function nearAny(x, y, pts, r) {
+    return pts.some((p) => (p.x - x) ** 2 + (p.y - y) ** 2 < r * r);
+  }
+  function nearRoad(x, y) {
+    const segs = [
+      [-20,200, 240,320], [240,320, 395,405], [395,405, 555,405],
+      [555,405, 575,425], [575,425, 565,555], [565,555, 720,690],
+    ];
+    for (const [ax, ay, bx, by] of segs) {
+      const dx = bx - ax, dy = by - ay;
+      const t = Math.max(0, Math.min(1,
+        ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy + 1e-9)));
+      const px = ax + t * dx, py = ay + t * dy;
+      if ((px - x) ** 2 + (py - y) ** 2 < 22 * 22) return true;
+    }
+    return false;
+  }
+
+  function scatterForest() {
+    if (forestScattered) return;
+    const forestG = $("forest");
+    if (!forestG) return;
+    forestScattered = true;
+
+    const rng = mulberry32(42);
+    const symbols = ["#tree", "#tree-dark", "#tree-pine"];
+    const placed = [];
+
+    // ~300 trees outside the meadow polygon.
+    for (let i = 0; i < 300; i++) {
+      const x = rng() * 1000;
+      const y = rng() * 700;
+      if (pointInPoly(x, y, MEADOW)) continue;
+      if (nearAny(x, y, placed, 14)) continue;
+      placed.push({ x, y });
+      const sym = symbols[Math.floor(rng() * symbols.length)];
+      const scale = 0.7 + rng() * 0.9;
+      const use = document.createElementNS(SVG_NS, "use");
+      use.setAttribute("href", sym);
+      use.setAttribute("transform",
+        `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(2)})`);
+      forestG.appendChild(use);
+    }
+
+    // ~60 extras inside the meadow, away from points of interest.
+    const avoid = [
+      ...TOWN_PTS.map((t) => ({ x: t.x, y: t.y, r: 30 })),
+      ...LANDMARK_PTS.map((L) => ({ x: L.x, y: L.y, r: 30 })),
+      { x: 745, y: 240, r: 65 }, // lake
+      { x: 375, y: 335, r: 30 }, // brundles
+      { x: 155, y: 220, r: 30 }, // small pond
+    ];
+    function nearAvoid(x, y) {
+      return avoid.some((a) => (a.x - x) ** 2 + (a.y - y) ** 2 < a.r * a.r);
+    }
+    const extras = [];
+    for (let i = 0; i < 60; i++) {
+      const x = 70 + rng() * 860;
+      const y = 90 + rng() * 540;
+      if (!pointInPoly(x, y, MEADOW)) continue;
+      if (nearAvoid(x, y)) continue;
+      if (nearRoad(x, y)) continue;
+      if (nearAny(x, y, extras, 32)) continue;
+      extras.push({ x, y });
+      const sym = symbols[Math.floor(rng() * symbols.length)];
+      const scale = 0.55 + rng() * 0.5;
+      const use = document.createElementNS(SVG_NS, "use");
+      use.setAttribute("href", sym);
+      use.setAttribute("transform",
+        `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(2)})`);
+      use.setAttribute("opacity", "0.92");
+      forestG.appendChild(use);
+    }
+  }
+
+  // ---------------------------------------------------------- Entity rendering
+  // Decide which token symbol id (if any) to use for a given agent.
+  function tokenIdFor(item) {
+    if (!item || !item.name) return null;
+    const key = String(item.name).toLowerCase().trim();
+    // Strip "the " prefixes for Man in Yellow / Boy in White if present.
+    if (key.includes("yellow")) return "token-yellow";
+    if (key.includes("white"))  return "token-white";
+    if (TOKEN_NAMES.has(key)) return "token-" + key;
+    // Marker-class fallbacks for supernaturals carrying no name.
+    const mc = item.marker_class || "";
+    if (mc === "man-in-yellow") return "token-yellow";
+    if (mc === "boy-in-white")  return "token-white";
+    return null;
+  }
+
+  function attachClick(el, id) {
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      selectedId = id;
+      if (window.FROM_SOCKET) window.FROM_SOCKET.emit("inspect", { id });
+      highlightRoster(id);
+    });
+  }
+
+  function ensureToken(id, symbolId, klass) {
+    let entry = entities.get(id);
+    if (entry && entry.kind === "token" && entry.symbolId === symbolId) {
       return entry;
+    }
+    if (entry) {
+      // Kind/symbol changed — tear down and rebuild.
+      entry.el.remove();
+      entities.delete(id);
     }
     const layer = $("entities");
     if (!layer) return null;
-    const circle = document.createElementNS(SVG_NS, "circle");
-    circle.setAttribute("class", markerClass);
-    circle.setAttribute("r", r);
-    circle.setAttribute("data-id", id);
-    circle.addEventListener("click", (e) => {
-      e.stopPropagation();
-      selectedId = id;
-      if (window.FROM_SOCKET) {
-        window.FROM_SOCKET.emit("inspect", { id });
-      }
-      highlightRoster(id);
-    });
-    layer.appendChild(circle);
-    entry = { el: circle, lastClass: markerClass };
-    dots.set(id, entry);
+    const use = document.createElementNS(SVG_NS, "use");
+    use.setAttribute("href", "#" + symbolId);
+    use.setAttribute("class", "token " + klass);
+    use.setAttribute("data-id", id);
+    layer.appendChild(use);
+    attachClick(use, id);
+    entry = { el: use, kind: "token", symbolId, klass };
+    entities.set(id, entry);
     return entry;
   }
 
-  function removeDots(seenIds) {
-    for (const [id, entry] of dots) {
-      if (!seenIds.has(id)) {
-        entry.el.remove();
-        dots.delete(id);
+  function ensureShape(id, tag, klass, attrs) {
+    let entry = entities.get(id);
+    if (entry && entry.kind === "shape" && entry.tag === tag) {
+      if (entry.klass !== klass) {
+        entry.el.setAttribute("class", klass);
+        entry.klass = klass;
       }
+      return entry;
     }
+    if (entry) {
+      entry.el.remove();
+      entities.delete(id);
+    }
+    const layer = $("entities");
+    if (!layer) return null;
+    const el = document.createElementNS(SVG_NS, tag);
+    el.setAttribute("class", klass);
+    el.setAttribute("data-id", id);
+    if (attrs) {
+      for (const k in attrs) el.setAttribute(k, attrs[k]);
+    }
+    layer.appendChild(el);
+    attachClick(el, id);
+    entry = { el, kind: "shape", tag, klass };
+    entities.set(id, entry);
+    return entry;
+  }
+
+  function placeToken(entry, x, y) {
+    // 60x80 viewBox centered roughly on token's belt; scale 0.55 ⇒ visual ~33x44.
+    // Anchor so that (x,y) sits at the centre of the token's mass.
+    entry.el.setAttribute(
+      "transform",
+      `translate(${(x - 15).toFixed(2)} ${(y - 22).toFixed(2)}) scale(0.55)`,
+    );
   }
 
   function applyAgent(item, seenIds) {
     if (!item || !item.id) return;
     seenIds.add(item.id);
-    const entry = ensureCircle(item.id, item.marker_class || "npc");
-    if (!entry) return;
-    entry.el.setAttribute("cx", item.x);
-    entry.el.setAttribute("cy", item.y);
+
+    const tokenId = tokenIdFor(item);
+    const x = item.x || 0;
+    const y = item.y || 0;
+
+    if (tokenId) {
+      const klass = (item.marker_class || "char") === "man-in-yellow"
+        ? "yellow"
+        : (item.marker_class === "boy-in-white" ? "white" : "char");
+      const entry = ensureToken(item.id, tokenId, klass);
+      if (entry) placeToken(entry, x, y);
+      return;
+    }
+
+    // Fallback shapes by marker_class.
+    const mc = item.marker_class || "npc";
+    if (mc === "creature") {
+      // small jagged triangle, points roughly forming a creature glyph
+      const entry = ensureShape(item.id, "polygon", "creature", {
+        points: "0,-7 6,5 -2,2 -6,5",
+      });
+      if (entry) entry.el.setAttribute("transform", `translate(${x} ${y})`);
+      return;
+    }
+    if (mc === "anghkooey") {
+      const entry = ensureShape(item.id, "circle", "anghkooey", { r: 5 });
+      if (entry) {
+        entry.el.setAttribute("cx", x);
+        entry.el.setAttribute("cy", y);
+      }
+      return;
+    }
+    if (item.kind === "outsider" || mc === "outsider") {
+      const entry = ensureShape(item.id, "circle", "outsider", { r: 7 });
+      if (entry) {
+        entry.el.setAttribute("cx", x);
+        entry.el.setAttribute("cy", y);
+      }
+      return;
+    }
+    // Default: NPC dot.
+    const entry = ensureShape(item.id, "circle", "npc", { r: 6 });
+    if (entry) {
+      entry.el.setAttribute("cx", x);
+      entry.el.setAttribute("cy", y);
+    }
+  }
+
+  function removeEntities(seenIds) {
+    for (const [id, entry] of entities) {
+      if (!seenIds.has(id)) {
+        entry.el.remove();
+        entities.delete(id);
+      }
+    }
   }
 
   // ---------------------------------------------------------- HUD updates
@@ -155,7 +389,6 @@
     const y = payload.yellow || { mode: "DORMANT" };
     setText("stat-yellow", y.mode || "DORMANT");
 
-    // Roster summary chips
     const roster = $("roster-summary");
     if (roster) {
       roster.querySelector('[data-pool="char"]').textContent = counts.char + " chars";
@@ -173,13 +406,9 @@
     if (!Array.isArray(events) || events.length === 0) return;
     const ol = $("event-log");
     if (!ol) return;
-
-    // Append only new events since last tick (deduped by tick + type + subject).
     const latestTick = events[events.length - 1].tick;
     if (latestTick === lastEventTick) return;
     lastEventTick = latestTick;
-
-    // Replace contents — payload already last-50 from server.
     ol.innerHTML = "";
     for (let i = events.length - 1; i >= 0; i--) {
       const ev = events[i];
@@ -205,14 +434,11 @@
   function renderRosterList(agents) {
     const list = $("roster-list");
     if (!list) return;
-    // Re-render only when count changes — names rarely shift mid-tick.
     if (list.childElementCount === agents.length) return;
     list.innerHTML = "";
     for (const a of agents) {
       const li = document.createElement("li");
       const base = (a.name || a.id) + (a.role ? "  ·  " + a.role : "");
-      // Optional drift indicator: agent may carry a "drift" field per v2;
-      // when present (truthy), show a small "↕" glyph beside the name.
       const drifted = !!(a.drift || a.personality_drifted);
       li.textContent = base + (drifted ? "  ↕" : "");
       if (drifted) li.classList.add("drifted");
@@ -278,10 +504,7 @@
     const panel = $("narration-panel");
     const list = $("narration");
     if (!panel || !list) return;
-    if (!Array.isArray(items) || items.length === 0) {
-      // leave panel hidden if server has never sent any
-      return;
-    }
+    if (!Array.isArray(items) || items.length === 0) return;
     panel.style.display = "";
     list.innerHTML = "";
     items.slice(-10).reverse().forEach((line) => {
@@ -291,7 +514,7 @@
     });
   }
 
-  // ---------------------------------------------------------- v2: hash marks on buildings
+  // ---------------------------------------------------------- v2: hash marks
   function renderHashMarks(buildings, marks) {
     const overlays = $("overlays");
     if (!overlays) return;
@@ -302,7 +525,6 @@
       if (!b || !b.id) continue;
       const count = Math.max(0, Math.floor(safeMarks[b.id] || 0));
       if (count === 0) {
-        // Tear down any group we previously created for this building.
         const existing = hashGroups.get(b.id);
         if (existing) {
           existing.group.remove();
@@ -319,19 +541,19 @@
         entry = { group: g, lastCount: -1 };
         hashGroups.set(b.id, entry);
       }
-      // Anchor at (b.x + 30, b.y + 30).
-      const ox = (b.x || 0) + 30;
-      const oy = (b.y || 0) + 30;
+
+      // v3: per-building offset table for the 5 talisman set, fallback otherwise.
+      const off = HASH_OFFSET[b.id] || HASH_OFFSET_DEFAULT;
+      const ox = (b.x || 0) + off[0];
+      const oy = (b.y || 0) + off[1];
       entry.group.setAttribute("transform", `translate(${ox}, ${oy})`);
 
       if (entry.lastCount === count) continue;
       entry.lastCount = count;
 
-      // Clear and redraw — up to 12 tally lines + optional "+N" overflow label.
       while (entry.group.firstChild) entry.group.removeChild(entry.group.firstChild);
 
       const visible = Math.min(12, count);
-      // Render in groups of 5 — four uprights + diagonal slash.
       for (let i = 0; i < visible; i++) {
         const groupIdx = Math.floor(i / 5);
         const posInGroup = i % 5;
@@ -362,7 +584,6 @@
       }
     }
 
-    // Tear down groups for buildings that no longer have any marks.
     for (const [bid, entry] of hashGroups) {
       if (!seenBuildings.has(bid)) {
         entry.group.remove();
@@ -371,7 +592,7 @@
     }
   }
 
-  // ---------------------------------------------------------- v2: bus
+  // ---------------------------------------------------------- v2: bus marker
   function renderBus(bus) {
     const overlays = $("overlays");
     if (!overlays) return;
@@ -385,7 +606,6 @@
     if (!busGroup) {
       const g = document.createElementNS(SVG_NS, "g");
       g.setAttribute("class", "bus");
-      // Hand-drawn-feel yellow school bus, ~50 x 20 (centered on origin).
       g.innerHTML = [
         '<rect class="bus-body-rect" x="-25" y="-10" width="50" height="20" rx="3" ry="3"></rect>',
         '<rect class="bus-window" x="-21" y="-7" width="8" height="6"></rect>',
@@ -402,7 +622,7 @@
     busGroup.setAttribute("transform", `translate(${bus.x || 0}, ${bus.y || 0})`);
   }
 
-  // ---------------------------------------------------------- v2: outsider glyphs
+  // ---------------------------------------------------------- v2: outsider '+'
   function applyOutsiderGlyph(item, seenGlyphs) {
     if (!item || item.kind !== "outsider") return;
     seenGlyphs.add(item.id);
@@ -420,7 +640,6 @@
     glyph.setAttribute("x", item.x);
     glyph.setAttribute("y", (item.y || 0) - 8);
   }
-
   function pruneOutsiderGlyphs(seenGlyphs) {
     for (const [id, el] of outsiderGlyphs) {
       if (!seenGlyphs.has(id)) {
@@ -430,7 +649,7 @@
     }
   }
 
-  // ---------------------------------------------------------- v2: pulsing rings (tendrils + called)
+  // ---------------------------------------------------------- v2: pulsing rings
   function applyRing(id, x, y, kind) {
     let entry = rings.get(id);
     if (!entry) {
@@ -451,7 +670,6 @@
     entry.ring.setAttribute("cx", x);
     entry.ring.setAttribute("cy", y);
   }
-
   function pruneRings(seenRingIds) {
     for (const [id, entry] of rings) {
       if (!seenRingIds.has(id)) {
@@ -474,12 +692,10 @@
     const fragments = (legacy && Array.isArray(legacy.journal_fragments))
       ? legacy.journal_fragments : [];
     if (frag) frag.textContent = "📜 " + fragments.length + " fragments";
-    // Cheap change-key — only re-render when content shifts.
-    const key = fragments.map((f) => `${f.cycle}|${f.burned}|${f.text}`).join("");
+    const key = fragments.map((f) => `${f.cycle}|${f.burned}|${f.text}`).join("");
     if (key === lastJournalKey) return;
     lastJournalKey = key;
     ol.innerHTML = "";
-    // Oldest first (server already trims to last 12).
     for (const f of fragments) {
       const li = document.createElement("li");
       const burned = Math.max(0, Math.min(1, Number(f.burned) || 0));
@@ -489,7 +705,7 @@
     }
   }
 
-  // ---------------------------------------------------------- v2: lighthouse-voice panel
+  // ---------------------------------------------------------- v2: lighthouse-voice
   function renderLighthouseVoice(payload) {
     const panel = $("lighthouse-voice");
     const list = $("lighthouse-voice-list");
@@ -527,7 +743,6 @@
       return;
     }
     panel.style.display = "";
-    // Lookup agents by id.
     const agents = Array.isArray(payload.agents) ? payload.agents : [];
     const byId = new Map(agents.map((a) => [a.id, a]));
     const passengers = Array.isArray(bus.passengers) ? bus.passengers : [];
@@ -547,13 +762,15 @@
       li.textContent = "(no passengers boarded yet)";
       list.appendChild(li);
     }
-    // Departure countdown — next_arrival_cycle is a cycle counter, so display it raw.
     const next = bus.next_arrival_cycle;
     countdown.textContent = next != null ? ("Next bus: cycle " + next) : "—";
   }
 
   // ---------------------------------------------------------- main tick
   function handleTick(payload) {
+    // Forest scatter runs once per session, on the first real tick.
+    scatterForest();
+
     const seen = new Set();
     const counts = { char: 0, npc: 0, creature: 0, other: 0 };
 
@@ -579,7 +796,7 @@
       counts.other++;
     }
 
-    removeDots(seen);
+    removeEntities(seen);
     pruneOutsiderGlyphs(seenGlyphs);
 
     // ---- v2: rings (tendrils + called) ----
@@ -590,27 +807,25 @@
     const calledId = lighthouse.called || null;
 
     const seenRingIds = new Set();
-    const dotById = new Map();
-    for (const a of agents) dotById.set(a.id, a);
+    const agentById = new Map();
+    for (const a of agents) agentById.set(a.id, a);
 
     for (const id of tendrils) {
-      const a = dotById.get(id);
+      const a = agentById.get(id);
       if (!a) continue;
       const kind = (id === leader) ? "tendril-leader" : "tendril";
       applyRing(id, a.x, a.y, kind);
       seenRingIds.add(id);
     }
     if (calledId) {
-      const a = dotById.get(calledId);
+      const a = agentById.get(calledId);
       if (a) {
-        // If the called character is also a tendril, the called ring overrides (slow aqua pulse).
         applyRing(calledId, a.x, a.y, "called");
         seenRingIds.add(calledId);
       }
     }
     pruneRings(seenRingIds);
 
-    // ---- v2: hash marks + bus ----
     const buildings = Array.isArray(payload.buildings) ? payload.buildings : [];
     const legacy = payload.legacy || {};
     renderHashMarks(buildings, legacy.building_breach_marks);
@@ -622,7 +837,6 @@
     renderRosterList(agents);
     renderNarration(payload.narration);
 
-    // v2 right-column panels
     renderJournal(legacy);
     renderLighthouseVoice(payload);
     renderBusPanel(payload);

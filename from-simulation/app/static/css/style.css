@@ -696,3 +696,175 @@ svg#world.dream-mode {
   color: var(--muted);
   font-style: italic;
 }
+
+/* ============================================================
+ * v3 additions — hand-drawn map, character tokens, day/night
+ * lighting overlay (radial-gradient + windows + beam sweep),
+ * Township Index panel.
+ * ============================================================ */
+
+/* The hand-drawn map sits inside .map-wrap, which contains the inline
+ * SVG and the radial lighting overlay <div>. */
+.map-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1000 / 700;
+  background: #c9c2a8;
+  overflow: hidden;
+}
+.map-wrap > svg#map {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Lighting overlay: empty/dark on DAY, radial gradient on DUSK / NIGHT */
+.lighting {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  transition: background 800ms ease, opacity 800ms ease;
+  opacity: 0;
+}
+.lighting.dusk {
+  opacity: 1;
+  background:
+    radial-gradient(60% 70% at 47% 65%,
+      rgba(70, 40, 60, 0.0) 0%,
+      rgba(40, 25, 55, 0.55) 60%,
+      rgba(15, 10, 30, 0.78) 100%);
+}
+.lighting.night {
+  opacity: 1;
+  background:
+    radial-gradient(45% 55% at 47% 65%,
+      rgba(10, 12, 30, 0.55) 0%,
+      rgba(8, 10, 26, 0.85) 50%,
+      rgba(4, 6, 18, 0.96) 100%);
+}
+
+/* Building windows light up at DUSK / NIGHT — controlled by mapWrap[data-time]. */
+.map-wrap .windows { opacity: 0; transition: opacity 800ms ease; }
+.map-wrap[data-time="dusk"]  .windows { opacity: 0.55; }
+.map-wrap[data-time="night"] .windows { opacity: 1; }
+
+/* Lighthouse rotating beam — sweeps continuously, fades in at DUSK/NIGHT. */
+.lighthouse-beam {
+  opacity: 0;
+  transition: opacity 800ms ease;
+  transform-origin: 140px 585px;
+  animation: sweep 9s linear infinite;
+}
+.map-wrap[data-time="dusk"]  .lighthouse-beam { opacity: 0.4; }
+.map-wrap[data-time="night"] .lighthouse-beam { opacity: 0.85; }
+@keyframes sweep {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Talisman sigils on talisman buildings — re-uses v1 rune-glow keyframes. */
+.map-wrap use[href="#talisman"] {
+  animation: rune-glow 6s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* ----- character token sprites ----- */
+.token {
+  cursor: pointer;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+  transition: transform 500ms linear;
+}
+.token.char:hover {
+  filter: drop-shadow(0 0 6px #d8a83a);
+}
+.token.yellow {
+  filter: drop-shadow(0 0 8px rgba(216, 200, 74, 0.85));
+}
+.token.white {
+  filter: drop-shadow(0 0 10px rgba(244, 246, 255, 0.9));
+  opacity: 0.95;
+}
+
+/* ----- simple shape entities (NPCs / creatures / anghkooey) ----- */
+#entities .npc {
+  fill: #6d6856;
+  stroke: #1a1611;
+  stroke-width: 0.6;
+  cursor: pointer;
+  transition: cx 500ms linear, cy 500ms linear;
+}
+#entities .npc:hover { stroke: var(--talisman); stroke-width: 1.4; }
+
+#entities .creature {
+  fill: #a83a2a;
+  stroke: #1a1611;
+  stroke-width: 0.7;
+  opacity: 0.92;
+  cursor: pointer;
+  transition: transform 500ms linear;
+}
+#entities .creature:hover { stroke: #f4a884; stroke-width: 1.2; }
+
+#entities .anghkooey {
+  fill: #7d6dc0;
+  opacity: 0.7;
+  stroke: #1a1611;
+  stroke-width: 0.5;
+  cursor: pointer;
+  transition: cx 500ms linear, cy 500ms linear;
+}
+
+/* ----- hash marks: thin charcoal tallies above breach-prone buildings ----- */
+#overlays .hash-marks line {
+  stroke: #1a1611;
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+#overlays .hash-marks text {
+  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  font-size: 8px;
+  fill: #1a1611;
+}
+
+/* ----- Township Index panel ----- */
+#township-index .index-list {
+  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  display: grid;
+  grid-template-columns: 22px 24px 1fr;
+  gap: 5px 8px;
+  align-items: center;
+  color: var(--text);
+  line-height: 1.5;
+}
+#township-index .index-list .n {
+  color: var(--talisman);
+  text-align: right;
+}
+#township-index .index-list .ic {
+  width: 22px;
+  height: 16px;
+  display: block;
+}
+#township-index .index-list .ic svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+#township-index .index-list .t .tag {
+  color: #a83a2a;
+  margin-left: 6px;
+  font-size: 10px;
+}
+
+/* World host (now a div, not an SVG) hosts the dream-mode hue rotation. */
+#world {
+  transition: filter 1000ms ease;
+}
+#world.dream-mode,
+.map-wrap.dream-mode {
+  filter: hue-rotate(80deg) saturate(0.6) brightness(0.85);
+}

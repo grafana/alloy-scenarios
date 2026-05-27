@@ -157,7 +157,7 @@ class _Seed:
 CHARACTER_SEEDS: List[_Seed] = [
     _Seed(
         name="Boyd",
-        dwelling_id="camper",
+        dwelling_id="sheriff_office",
         role=Role.SHERIFF,
         personality={"brave": 0.9, "social": 0.5, "devout": 0.3,
                      "paranoid": 0.4, "caretaker": 0.6, "leader": 0.8},
@@ -173,7 +173,7 @@ CHARACTER_SEEDS: List[_Seed] = [
     ),
     _Seed(
         name="Jim",
-        dwelling_id="matthews_house",
+        dwelling_id="matthews_home",
         role=Role.ENGINEER,
         personality={"brave": 0.7, "social": 0.5, "devout": 0.2,
                      "paranoid": 0.6, "caretaker": 0.5, "leader": 0.4},
@@ -181,7 +181,7 @@ CHARACTER_SEEDS: List[_Seed] = [
     ),
     _Seed(
         name="Tabitha",
-        dwelling_id="matthews_house",
+        dwelling_id="matthews_home",
         role=Role.CARETAKER,
         personality={"brave": 0.5, "social": 0.7, "devout": 0.6,
                      "paranoid": 0.5, "caretaker": 0.95, "leader": 0.4},
@@ -189,7 +189,7 @@ CHARACTER_SEEDS: List[_Seed] = [
     ),
     _Seed(
         name="Ethan",
-        dwelling_id="matthews_house",
+        dwelling_id="matthews_home",
         role=Role.CHILD,
         personality={"brave": 0.6, "social": 0.6, "devout": 0.2,
                      "paranoid": 0.4, "caretaker": 0.2, "leader": 0.1},
@@ -213,7 +213,7 @@ CHARACTER_SEEDS: List[_Seed] = [
     ),
     _Seed(
         name="Kenny",
-        dwelling_id="colony_house",
+        dwelling_id="lius_home",
         role=Role.DEPUTY,
         personality={"brave": 0.7, "social": 0.7, "devout": 0.3,
                      "paranoid": 0.4, "caretaker": 0.6, "leader": 0.4},
@@ -229,7 +229,7 @@ CHARACTER_SEEDS: List[_Seed] = [
     ),
     _Seed(
         name="Sara",
-        dwelling_id="lighthouse",
+        dwelling_id="myers_home",
         role=Role.SEER,
         personality={"brave": 0.5, "social": 0.4, "devout": 0.6,
                      "paranoid": 0.7, "caretaker": 0.4, "leader": 0.3},

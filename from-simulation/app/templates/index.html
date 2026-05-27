@@ -38,25 +38,11 @@
 {% endblock %}
 
 {% block main %}
-<section class="map-pane">
-  <svg
-    id="world"
-    viewBox="0 0 1000 700"
-    preserveAspectRatio="xMidYMid meet"
-    role="img"
-    aria-label="Fromville map"
-  >
-    <image
-      href="{{ url_for('static', filename='img/fromville.svg') }}"
-      x="0"
-      y="0"
-      width="1000"
-      height="700"
-    />
-    <g id="overlays"></g>
-    <g id="lighting"></g>
-    <g id="entities"></g>
-  </svg>
+<section class="map-pane" id="world">
+  <div class="map-wrap" id="mapWrap" data-time="day">
+    <div class="lighting" id="lighting"></div>
+    {% include "_map_svg.html" %}
+  </div>
 </section>
 
 <aside class="side-pane">
@@ -75,7 +61,7 @@
       </div>
       <ul id="roster-list" class="roster-list"></ul>
       <div id="roster-detail" class="roster-detail">
-        <div class="roster-empty">Click any dot on the map to inspect.</div>
+        <div class="roster-empty">Click any token on the map to inspect.</div>
       </div>
     </div>
   </details>
@@ -94,6 +80,83 @@
       <dt>Creatures</dt><dd id="stat-creatures">0</dd>
       <dt>Yellow Man</dt><dd id="stat-yellow">DORMANT</dd>
     </dl>
+  </details>
+
+  <details class="panel" id="township-index" open>
+    <summary>Township Index</summary>
+    <div class="index-list" id="indexList">
+      <div class="n">1</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="2" y="7" width="12" height="8" fill="#7c5a3e" stroke="#1a1611" stroke-width="0.5"/><polygon points="1,7 15,7 13,4 3,4" fill="#3a261a" stroke="#1a1611" stroke-width="0.5"/><circle cx="5" cy="7" r="1.7" fill="#8a6a4a" stroke="#1a1611" stroke-width="0.4"/><polygon points="3.3,7 6.7,7 5,4.5" fill="#3a261a" stroke="#1a1611" stroke-width="0.4"/><rect x="7" y="11" width="2" height="4" fill="#2a1810"/></svg></div>
+      <div class="t">Colony House<span class="tag">&#x2605;</span></div>
+
+      <div class="n">2</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="8" width="10" height="7" fill="#a8b07a" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,8 14,8 12,4 4,4" fill="#4a5e34" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="11" width="2" height="4" fill="#2a2a18"/></svg></div>
+      <div class="t">Green House</div>
+
+      <div class="n">3</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="4" y="9" width="8" height="6" fill="#5a4632" stroke="#1a1611" stroke-width="0.5"/><polygon points="3,9 13,9 11,5 5,5" fill="#2a1810" stroke="#1a1611" stroke-width="0.5"/></svg></div>
+      <div class="t">Shed</div>
+
+      <div class="n">4</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="8" width="10" height="7" fill="#c9bca0" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,8 14,8 12,4 4,4" fill="#5d4a3a" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="10" width="2" height="4" fill="#a83a2a"/><rect x="6" y="11" width="4" height="2" fill="#a83a2a"/></svg></div>
+      <div class="t">Clinic<span class="tag">&#x2605;</span></div>
+
+      <div class="n">5</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><ellipse cx="8" cy="13" rx="6" ry="3" fill="#3a3024" opacity="0.5"/><ellipse cx="8" cy="11" rx="7" ry="4" fill="#7a5a3a" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="10" width="2" height="4" fill="#2a1810"/></svg></div>
+      <div class="t">Root Cellar</div>
+
+      <div class="n">6</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><ellipse cx="8" cy="14" rx="5" ry="1" fill="#3a3024" opacity="0.5"/><polygon points="5.5,14 5,5 7.5,3 10,5 9.5,14" fill="#6a5f48" stroke="#1a1611" stroke-width="0.5"/><path d="M 6.5 7 q 1.5 -1.5 3 0" stroke="#3a3024" stroke-width="0.4" fill="none"/></svg></div>
+      <div class="t">Choosing Ceremony Stone</div>
+
+      <div class="n">7</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="9" width="10" height="6" fill="#9a8e72" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,9 14,9 12,6 4,6" fill="#3a3024" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="4" width="2" height="3" fill="#7a6e58" stroke="#1a1611" stroke-width="0.4"/><polygon points="6.8,4 9.2,4 8,1.5" fill="#3a3024"/><rect x="7.7" y="0" width="0.6" height="3" fill="#1a1611"/><rect x="6.8" y="1" width="2.4" height="0.5" fill="#1a1611"/><circle cx="8" cy="11.5" r="0.7" fill="#d4a85a"/></svg></div>
+      <div class="t">Church<span class="tag">&#x2605;</span></div>
+
+      <div class="n">8</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="8" width="10" height="7" fill="#7a7468" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,8 14,8 12,4 4,4" fill="#3a3a32" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="11" width="2" height="4" fill="#2a2a22"/></svg></div>
+      <div class="t">Grey House</div>
+
+      <div class="n">9</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="8" width="10" height="7" fill="#6a7e92" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,8 14,8 12,4 4,4" fill="#3a4250" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="11" width="2" height="4" fill="#2a3038"/></svg></div>
+      <div class="t">Blue House</div>
+
+      <div class="n">10</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="2" y="7" width="12" height="8" rx="0.6" fill="#cabd9a" stroke="#1a1611" stroke-width="0.5"/><rect x="4" y="9" width="8" height="4" fill="#6a8a8e" stroke="#1a1611" stroke-width="0.4"/><path d="M4 11 h8 M8 9 v4" stroke="#4a6e72" stroke-width="0.4"/></svg></div>
+      <div class="t">Pool</div>
+
+      <div class="n">11</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="8" width="10" height="7" fill="#8a6a48" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,8 14,8 12,4 4,4" fill="#4a3024" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="11" width="2" height="4" fill="#2a1810"/></svg></div>
+      <div class="t">Lius' Home</div>
+
+      <div class="n">12</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="2" y="7" width="12" height="2" fill="#3a2820" stroke="#1a1611" stroke-width="0.4"/><rect x="3" y="9" width="1.8" height="2" fill="#a83a2a" stroke="#1a1611" stroke-width="0.3"/><rect x="2" y="9" width="12" height="6" fill="#5a4632" stroke="#1a1611" stroke-width="0.5"/><rect x="5" y="11" width="6" height="2" fill="#1a1611"/><text x="8" y="12.6" font-size="1.9" fill="#d8a83a" text-anchor="middle" font-family="Georgia, serif" font-weight="bold">BAR</text></svg></div>
+      <div class="t">Bar</div>
+
+      <div class="n">13</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="2" y="7" width="12" height="8" fill="#a83a2a" stroke="#1a1611" stroke-width="0.5"/><polygon points="1,7 15,7 13,4 3,4" fill="#2a1810" stroke="#1a1611" stroke-width="0.5"/><rect x="6" y="10" width="4" height="5" fill="#3a2418" stroke="#1a1611" stroke-width="0.4"/><path d="M6 10 L10 15 M10 10 L6 15" stroke="#f0e6c8" stroke-width="0.5"/></svg></div>
+      <div class="t">Barn</div>
+
+      <div class="n">14</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><path d="M 8 2 L 9.5 6.2 L 14 6.2 L 10.4 8.8 L 11.7 13 L 8 10.6 L 4.3 13 L 5.6 8.8 L 2 6.2 L 6.5 6.2 Z" fill="#d8a83a" stroke="#1a1611" stroke-width="0.6" stroke-linejoin="round"/></svg></div>
+      <div class="t">Sheriff's Office<span class="tag">&#x2605;</span></div>
+
+      <div class="n">15</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="1.5" y="7" width="13" height="6" rx="1" fill="#d8a83a" stroke="#1a1611" stroke-width="0.5"/><rect x="2.5" y="8" width="2" height="2" fill="#2a3038"/><rect x="5" y="8" width="2" height="2" fill="#2a3038"/><rect x="7.5" y="8" width="2" height="2" fill="#2a3038"/><rect x="10" y="8" width="2" height="2" fill="#2a3038"/><rect x="12.5" y="8" width="1.5" height="2" fill="#2a3038"/><circle cx="4" cy="13.5" r="1.2" fill="#1a1611"/><circle cx="12" cy="13.5" r="1.2" fill="#1a1611"/></svg></div>
+      <div class="t">Bus</div>
+
+      <div class="n">16</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="9" width="10" height="6" fill="#7a5640" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,9 7,9 6,5 4,5" fill="#3a2820" stroke="#1a1611" stroke-width="0.5"/><polygon points="9,9 14,9 13,6 10,8" fill="#3a2820" stroke="#1a1611" stroke-width="0.5"/><line x1="7" y1="9" x2="9" y2="9" stroke="#1a1611" stroke-width="0.4"/><circle cx="6" cy="12" r="0.6" fill="#3a2820"/><circle cx="10" cy="13" r="0.5" fill="#3a2820"/></svg></div>
+      <div class="t">Matthews' Home<span class="tag">&#x2605;</span></div>
+
+      <div class="n">17</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="-1" width="4.5" height="3" fill="#a83a2a" stroke="#1a1611" stroke-width="0.4"/><text x="5.3" y="1.2" font-size="1.8" fill="#f0e6c8" text-anchor="middle" font-family="Georgia, serif" font-weight="bold">DINER</text><line x1="5.3" y1="2" x2="5.3" y2="9" stroke="#1a1611" stroke-width="0.6"/><rect x="2" y="9" width="12" height="6" fill="#b07a3a" stroke="#1a1611" stroke-width="0.5"/><path d="M2 9 Q8 4 14 9" fill="#cdc6b4" stroke="#1a1611" stroke-width="0.5"/><rect x="3" y="11" width="10" height="2" fill="#1a1611" opacity="0.5"/></svg></div>
+      <div class="t">Diner</div>
+
+      <div class="n">18</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="8" width="10" height="7" fill="#8a6a48" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,8 14,8 12,4 4,4" fill="#4a3024" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="11" width="2" height="4" fill="#2a1810"/></svg></div>
+      <div class="t">Myers' Home</div>
+    </div>
   </details>
 
   <details class="panel narration-panel" id="narration-panel" style="display:none;">

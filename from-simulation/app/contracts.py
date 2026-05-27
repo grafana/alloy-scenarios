@@ -701,51 +701,78 @@ PHASE_TO_NUM = {Phase.DAY: 0, Phase.DUSK: 1, Phase.NIGHT: 2, Phase.DAWN: 3}
 # ---------------------------------------------------------------------------
 
 
+# 18 town buildings + the Lighthouse (separate clearing). 5 talisman-protected.
+# Coordinates match the hand-drawn Fromville map (viewBox 0 0 1000 700).
 BUILDING_LAYOUT: List[Tuple[str, str, float, float, int, bool, str]] = [
     # (id, name, x, y, footprint, has_talisman, role_tag)
-    ("sheriff_house", "Sheriff's House", 350, 360, 4, True, "sheriff"),
-    ("matthews_house", "Matthews House", 520, 380, 5, True, "matthews"),
-    ("church", "Church", 430, 310, 6, True, "church"),
-    ("diner", "Diner", 580, 330, 4, False, "diner"),
-    ("clinic", "Clinic", 470, 420, 4, True, "clinic"),
-    ("camper", "Boyd's Camper", 300, 420, 2, False, "camper"),
-    ("colony_house", "Colony House", 780, 180, 10, True, "colony"),
-    ("lighthouse", "Lighthouse", 500, 560, 1, False, "lighthouse"),
+    ("colony_house",     "Colony House",            385, 420, 10, True,  "colony"),
+    ("green_house",      "Green House",             418, 400,  3, False, "house"),
+    ("shed",             "Shed",                    442, 388,  1, False, "shed"),
+    ("clinic",           "Clinic",                  478, 402,  4, True,  "clinic"),
+    ("root_cellar",      "Root Cellar",             495, 432,  2, False, "cellar"),
+    ("choosing_stone",   "Choosing Ceremony Stone", 390, 470,  0, False, "stone"),
+    ("church",           "Church",                  385, 510,  6, True,  "church"),
+    ("grey_house",       "Grey House",              420, 490,  3, False, "house"),
+    ("blue_house",       "Blue House",              440, 490,  3, False, "house"),
+    ("pool",             "Pool",                    462, 478,  0, False, "pool"),
+    ("lius_home",        "Liu's Home",              478, 462,  4, False, "house"),
+    ("bar",              "Bar",                     510, 458,  3, False, "bar"),
+    ("barn",             "Barn",                    555, 454,  5, False, "barn"),
+    ("sheriff_office",   "Sheriff's Office",        490, 510,  4, True,  "sheriff"),
+    ("abandoned_bus",    "Abandoned Bus",           460, 538,  0, False, "wreck"),
+    ("matthews_home",    "Matthews' Home",          430, 545,  5, True,  "matthews"),
+    ("diner",            "Diner",                   405, 530,  4, False, "diner"),
+    ("myers_home",       "Myers' Home",             382, 552,  3, False, "house"),
+    # Lighthouse lives in its own clearing south-west of town.
+    ("lighthouse",       "Lighthouse",              140, 585,  1, False, "lighthouse"),
 ]
 
-# Faraway Trees scattered around the forest perimeter
+# Faraway / Bottle Trees scattered around the surrounding land.
+# Tree 1 (Boyd / Sara), Tree 2 (Victor / Ethan), Tree 3 (south).
 FARAWAY_TREES: List[Tuple[float, float]] = [
-    (80, 120),
-    (920, 150),
-    (60, 560),
-    (940, 580),
-    (500, 40),
+    (560, 55),
+    (735, 485),
+    (575, 660),
 ]
 
-# Forest-edge spawn points for creatures (inner edge of forest ring)
+# Creature spawn points — 16 around a ring centred on the town cluster
+# (cx=465, cy=475, rx=220, ry=165), matching the generated wedges in the
+# hand-drawn map's spawn-toggle overlay.
+import math as _math
+_RING_CX, _RING_CY, _RING_RX, _RING_RY = 465.0, 475.0, 220.0, 165.0
 FOREST_SPAWN_POINTS: List[Tuple[float, float]] = [
-    (140, 110), (300, 90), (500, 85), (700, 95), (860, 130),
-    (920, 280), (940, 430), (900, 580),
-    (700, 620), (500, 640), (300, 625), (130, 590),
-    (90, 440), (70, 290), (180, 200), (820, 220),
+    (
+        _RING_CX + _math.cos((i / 16.0) * _math.tau - _math.pi / 2) * _RING_RX,
+        _RING_CY + _math.sin((i / 16.0) * _math.tau - _math.pi / 2) * _RING_RY,
+    )
+    for i in range(16)
 ]
+del _math, _RING_CX, _RING_CY, _RING_RX, _RING_RY
 
-# NPC "intake" points — where new arrivals appear from the forest
+# NPC arrival points — the S-curve road enters from the west, leaves to the
+# south-east, and has a spur into town. New arrivals appear at road edges.
 NPC_INTAKE_POINTS: List[Tuple[float, float]] = [
-    (140, 350), (860, 350), (500, 90), (500, 620),
+    (20, 210),    # west end of the road, off-map entry
+    (760, 720),   # south-east end of the road, off-map exit
+    (240, 320),   # along the road between the two
+    (565, 540),   # spur into town from the south
 ]
 
-# Yellow Man visible-march path (sequence of waypoints)
+# Yellow Man visible-march path — west to east along the road through town.
 YELLOW_MARCH_PATH: List[Tuple[float, float]] = [
-    (90, 350), (250, 360), (400, 380), (520, 380),
-    (680, 360), (800, 320), (900, 280),
+    (0, 200), (160, 280), (240, 320), (395, 405),
+    (555, 405), (575, 425), (565, 555), (720, 690),
 ]
 
-# Bus path — drives in along the dirt road, parks near the diner, drives out the other way.
+# Bus path — drives in along the S-curve, parks just off the spur near the
+# diner (NOT the abandoned wreck, which is a static map feature), drives out.
 BUS_PATH_IN: List[Tuple[float, float]] = [
-    (90, 320), (200, 330), (340, 340), (480, 340), (570, 340),
+    (-20, 200), (80, 240), (240, 320), (395, 405), (520, 410),
 ]
-BUS_PARK: Tuple[float, float] = (600, 330)  # next to the diner
+BUS_PARK: Tuple[float, float] = (520, 425)   # on the road spur near the diner
 BUS_PATH_OUT: List[Tuple[float, float]] = [
-    (600, 330), (720, 320), (840, 290), (920, 250),
+    (520, 425), (575, 425), (565, 555), (720, 690), (760, 720),
 ]
+
+# Lighthouse direct-coord alias (lighthouse.py and bus.py read this).
+LIGHTHOUSE_XY: Tuple[float, float] = (140.0, 585.0)
