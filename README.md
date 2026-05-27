@@ -63,6 +63,7 @@ These scenarios show distributed tracing with OpenTelemetry and Tempo.
 | Scenario | Description |
 | -------- | ----------- |
 | [Distributed tracing](trace-delivery/) | Learn distributed tracing through a sofa delivery workflow from order to doorstep. |
+| [From simulation](from-simulation/) | A self-running "mini universe" of the MGM+ series _From_. Autonomous characters, day/night cycle, creatures, Yellow Man imposter mode, and a perpetual village-wipe loop — emits a rich, story-shaped telemetry stream. |
 | [Game of tracing](game-of-tracing/) | Play an interactive strategy game that teaches distributed tracing, sampling, and service graphs. |
 | [OpenTelemetry basic tracing](otel-basic-tracing/) | Collect and visualize OpenTelemetry traces with Alloy and Tempo. |
 | [OpenTelemetry service graphs](otel-tracing-service-graphs/) | Generate service graphs with the Alloy `servicegraph` connector. |

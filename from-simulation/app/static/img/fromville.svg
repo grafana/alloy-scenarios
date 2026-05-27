@@ -1,0 +1,356 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 1000 700"
+  width="1000"
+  height="700"
+  font-family="Georgia, 'Times New Roman', serif"
+>
+  <title>Fromville</title>
+  <desc>
+    Hand-drawn-feel map of Fromville. Outer forest ring, dirt road oval,
+    town center buildings per BUILDING_LAYOUT, Colony House on a hilltop, the
+    lighthouse in a southern clearing, and five Faraway Trees with dangling
+    bottles along the forest perimeter.
+  </desc>
+
+  <!-- ============================== defs ============================== -->
+  <defs>
+    <radialGradient id="ground" cx="50%" cy="55%" r="65%">
+      <stop offset="0%" stop-color="#3a3320" />
+      <stop offset="55%" stop-color="#28241a" />
+      <stop offset="100%" stop-color="#16140e" />
+    </radialGradient>
+
+    <pattern id="forestNoise" patternUnits="userSpaceOnUse" width="40" height="40">
+      <rect width="40" height="40" fill="#0c1a0c" />
+      <circle cx="6" cy="10" r="3" fill="#143918" opacity="0.6" />
+      <circle cx="20" cy="22" r="4" fill="#0e2a12" opacity="0.7" />
+      <circle cx="32" cy="8" r="2" fill="#1a4422" opacity="0.5" />
+      <circle cx="28" cy="32" r="3" fill="#0a200d" opacity="0.8" />
+      <circle cx="10" cy="30" r="2" fill="#173a1c" opacity="0.6" />
+    </pattern>
+
+    <radialGradient id="hilltop" cx="50%" cy="60%" r="60%">
+      <stop offset="0%" stop-color="#3d3a2b" />
+      <stop offset="100%" stop-color="#1c1a14" stop-opacity="0" />
+    </radialGradient>
+
+    <radialGradient id="lightclearing" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#4a4232" />
+      <stop offset="100%" stop-color="#1c1a14" stop-opacity="0" />
+    </radialGradient>
+
+    <radialGradient id="bottleGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#cda74d" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#cda74d" stop-opacity="0" />
+    </radialGradient>
+
+    <filter id="rough" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3" />
+      <feDisplacementMap in="SourceGraphic" scale="1.5" />
+    </filter>
+
+    <!-- A reusable tree silhouette for the forest ring -->
+    <symbol id="tree-tiny" viewBox="0 0 20 24">
+      <path d="M10 1 L3 14 L7 14 L1 22 L19 22 L13 14 L17 14 Z" fill="#0d2b13" />
+      <rect x="9" y="22" width="2" height="2" fill="#241608" />
+    </symbol>
+
+    <!-- A Faraway Tree: taller, gnarled, with dangling bottles -->
+    <symbol id="faraway-tree" viewBox="0 0 80 120">
+      <!-- glow -->
+      <circle cx="40" cy="60" r="55" fill="url(#bottleGlow)" />
+      <!-- trunk -->
+      <path
+        d="M38 118 Q34 92 36 70 Q30 50 40 30 Q50 50 44 70 Q46 92 42 118 Z"
+        fill="#1d1206"
+        stroke="#0a0603"
+        stroke-width="1"
+      />
+      <!-- canopy -->
+      <path
+        d="M10 50 Q20 10 40 5 Q60 10 70 50 Q60 60 50 50 Q45 70 40 50 Q35 70 30 50 Q20 60 10 50 Z"
+        fill="#0a1f0c"
+        stroke="#1b3a1f"
+        stroke-width="0.8"
+      />
+      <!-- bottles -->
+      <g stroke="#7b6a3a" stroke-width="0.6">
+        <line x1="22" y1="46" x2="22" y2="62" />
+        <line x1="32" y1="40" x2="32" y2="58" />
+        <line x1="44" y1="42" x2="44" y2="64" />
+        <line x1="56" y1="44" x2="56" y2="60" />
+        <line x1="64" y1="48" x2="64" y2="66" />
+      </g>
+      <g fill="#3a5c47" stroke="#cda74d" stroke-width="0.4">
+        <ellipse cx="22" cy="66" rx="2.4" ry="3.6" />
+        <ellipse cx="32" cy="62" rx="2.4" ry="3.6" />
+        <ellipse cx="44" cy="68" rx="2.4" ry="3.6" />
+        <ellipse cx="56" cy="64" rx="2.4" ry="3.6" />
+        <ellipse cx="64" cy="70" rx="2.4" ry="3.6" />
+      </g>
+    </symbol>
+  </defs>
+
+  <!-- ============================== ground ============================== -->
+  <rect x="0" y="0" width="1000" height="700" fill="url(#ground)" />
+
+  <!-- Outer forest ring: dense pattern band around the perimeter -->
+  <g id="forest-ring">
+    <!-- top band -->
+    <rect x="0" y="0" width="1000" height="85" fill="url(#forestNoise)" />
+    <!-- bottom band -->
+    <rect x="0" y="600" width="1000" height="100" fill="url(#forestNoise)" />
+    <!-- left band -->
+    <rect x="0" y="0" width="120" height="700" fill="url(#forestNoise)" />
+    <!-- right band -->
+    <rect x="880" y="0" width="120" height="700" fill="url(#forestNoise)" />
+
+    <!-- Irregular tree clusters bleeding inward -->
+    <g opacity="0.95">
+      <use href="#tree-tiny" x="130" y="60" width="20" height="24" />
+      <use href="#tree-tiny" x="180" y="40" width="22" height="26" />
+      <use href="#tree-tiny" x="240" y="65" width="20" height="24" />
+      <use href="#tree-tiny" x="320" y="50" width="22" height="26" />
+      <use href="#tree-tiny" x="400" y="60" width="20" height="24" />
+      <use href="#tree-tiny" x="470" y="48" width="24" height="28" />
+      <use href="#tree-tiny" x="560" y="55" width="20" height="24" />
+      <use href="#tree-tiny" x="630" y="62" width="22" height="26" />
+      <use href="#tree-tiny" x="710" y="50" width="20" height="24" />
+      <use href="#tree-tiny" x="780" y="68" width="22" height="26" />
+      <use href="#tree-tiny" x="840" y="48" width="20" height="24" />
+
+      <use href="#tree-tiny" x="100" y="160" width="20" height="24" />
+      <use href="#tree-tiny" x="80" y="240" width="22" height="26" />
+      <use href="#tree-tiny" x="105" y="330" width="20" height="24" />
+      <use href="#tree-tiny" x="85" y="420" width="22" height="26" />
+      <use href="#tree-tiny" x="110" y="500" width="20" height="24" />
+
+      <use href="#tree-tiny" x="880" y="170" width="22" height="26" />
+      <use href="#tree-tiny" x="900" y="260" width="20" height="24" />
+      <use href="#tree-tiny" x="880" y="350" width="22" height="26" />
+      <use href="#tree-tiny" x="900" y="440" width="20" height="24" />
+      <use href="#tree-tiny" x="880" y="520" width="22" height="26" />
+
+      <use href="#tree-tiny" x="160" y="610" width="22" height="26" />
+      <use href="#tree-tiny" x="250" y="630" width="20" height="24" />
+      <use href="#tree-tiny" x="340" y="615" width="22" height="26" />
+      <use href="#tree-tiny" x="430" y="625" width="20" height="24" />
+      <use href="#tree-tiny" x="520" y="615" width="22" height="26" />
+      <use href="#tree-tiny" x="610" y="630" width="20" height="24" />
+      <use href="#tree-tiny" x="700" y="612" width="22" height="26" />
+      <use href="#tree-tiny" x="780" y="630" width="20" height="24" />
+    </g>
+  </g>
+
+  <!-- ============================== road loop ============================== -->
+  <g id="road">
+    <ellipse
+      cx="500"
+      cy="380"
+      rx="320"
+      ry="180"
+      fill="none"
+      stroke="#46381f"
+      stroke-width="22"
+      stroke-linecap="round"
+      opacity="0.85"
+    />
+    <ellipse
+      cx="500"
+      cy="380"
+      rx="320"
+      ry="180"
+      fill="none"
+      stroke="#5a4729"
+      stroke-width="14"
+      stroke-dasharray="2 14"
+      opacity="0.65"
+    />
+    <!-- Side path up to the Colony House hilltop -->
+    <path
+      d="M760 320 Q790 250 780 200"
+      fill="none"
+      stroke="#46381f"
+      stroke-width="14"
+      stroke-linecap="round"
+      opacity="0.8"
+    />
+    <!-- Side path down to the lighthouse clearing -->
+    <path
+      d="M500 540 Q500 555 500 560"
+      fill="none"
+      stroke="#46381f"
+      stroke-width="12"
+      stroke-linecap="round"
+      opacity="0.75"
+    />
+  </g>
+
+  <!-- ============================== Colony House hilltop ============================== -->
+  <g id="colony-hilltop">
+    <ellipse cx="780" cy="200" rx="110" ry="60" fill="url(#hilltop)" />
+    <!-- Victorian Colony House @ (780, 180) -->
+    <g transform="translate(780,180)">
+      <!-- glow rune (talisman) -->
+      <g class="talisman">
+        <circle r="46" fill="none" stroke="#cda74d" stroke-width="0.6" opacity="0.45" />
+        <path
+          d="M -38 0 L -32 -6 L -28 0 L -32 6 Z M 38 0 L 32 -6 L 28 0 L 32 6 Z M 0 -38 L -6 -32 L 0 -28 L 6 -32 Z M 0 38 L -6 32 L 0 28 L 6 32 Z"
+          fill="#cda74d"
+          opacity="0.55"
+        />
+      </g>
+      <!-- main body -->
+      <rect x="-44" y="-6" width="88" height="38" fill="#2c241a" stroke="#0a0805" stroke-width="1.2" />
+      <!-- roof -->
+      <path d="M -52 -6 L 0 -36 L 52 -6 Z" fill="#3a2f1f" stroke="#0a0805" stroke-width="1.2" />
+      <!-- tower -->
+      <rect x="-10" y="-30" width="20" height="20" fill="#2c241a" stroke="#0a0805" stroke-width="1" />
+      <path d="M -12 -30 L 0 -46 L 12 -30 Z" fill="#3a2f1f" stroke="#0a0805" stroke-width="1" />
+      <!-- windows -->
+      <rect x="-34" y="2" width="10" height="12" fill="#c8a14a" opacity="0.7" />
+      <rect x="-8" y="2" width="10" height="12" fill="#c8a14a" opacity="0.7" />
+      <rect x="18" y="2" width="10" height="12" fill="#c8a14a" opacity="0.7" />
+      <rect x="-4" y="18" width="8" height="14" fill="#241406" />
+      <!-- label -->
+      <text x="0" y="58" text-anchor="middle" fill="#cda74d" font-size="11" letter-spacing="1">
+        COLONY HOUSE
+      </text>
+    </g>
+  </g>
+
+  <!-- ============================== Lighthouse clearing ============================== -->
+  <g id="lighthouse-area">
+    <ellipse cx="500" cy="560" rx="70" ry="36" fill="url(#lightclearing)" />
+    <g transform="translate(500,560)">
+      <!-- base -->
+      <rect x="-7" y="-4" width="14" height="22" fill="#1f1c14" stroke="#0a0805" stroke-width="1" />
+      <!-- tower -->
+      <path d="M -9 -4 L -5 -32 L 5 -32 L 9 -4 Z" fill="#d3d0c4" stroke="#0a0805" stroke-width="1" />
+      <!-- stripes -->
+      <rect x="-7" y="-26" width="14" height="4" fill="#8a1c1c" />
+      <rect x="-7" y="-14" width="14" height="4" fill="#8a1c1c" />
+      <!-- lamp room -->
+      <rect x="-7" y="-40" width="14" height="8" fill="#1f1c14" stroke="#0a0805" stroke-width="1" />
+      <circle cx="0" cy="-36" r="3" fill="#f4d77a" />
+      <!-- cap -->
+      <path d="M -8 -40 L 0 -48 L 8 -40 Z" fill="#3a2f1f" stroke="#0a0805" stroke-width="1" />
+      <text x="0" y="30" text-anchor="middle" fill="#9a8c64" font-size="9" letter-spacing="1">
+        LIGHTHOUSE
+      </text>
+    </g>
+  </g>
+
+  <!-- ============================== Town center buildings ============================== -->
+  <!-- Coordinates match BUILDING_LAYOUT in contracts.py -->
+
+  <!-- Sheriff's House (350, 360) talisman -->
+  <g class="building" transform="translate(350,360)">
+    <g class="talisman">
+      <circle r="30" fill="none" stroke="#cda74d" stroke-width="0.5" opacity="0.35" />
+      <path d="M -22 0 L 0 -22 L 22 0 L 0 22 Z" fill="none" stroke="#cda74d" stroke-width="0.8" opacity="0.55" />
+    </g>
+    <rect x="-22" y="-14" width="44" height="22" fill="#3a2f20" stroke="#0a0805" stroke-width="1" />
+    <path d="M -26 -14 L 0 -28 L 26 -14 Z" fill="#4a3a26" stroke="#0a0805" stroke-width="1" />
+    <rect x="-4" y="-4" width="8" height="12" fill="#241406" />
+    <rect x="-16" y="-8" width="6" height="6" fill="#c8a14a" opacity="0.6" />
+    <rect x="10" y="-8" width="6" height="6" fill="#c8a14a" opacity="0.6" />
+    <text x="0" y="22" text-anchor="middle" fill="#cda74d" font-size="9">SHERIFF</text>
+  </g>
+
+  <!-- Matthews House (520, 380) talisman -->
+  <g class="building" transform="translate(520,380)">
+    <g class="talisman">
+      <circle r="32" fill="none" stroke="#cda74d" stroke-width="0.5" opacity="0.35" />
+      <path d="M -22 0 L 0 -22 L 22 0 L 0 22 Z" fill="none" stroke="#cda74d" stroke-width="0.8" opacity="0.55" />
+    </g>
+    <rect x="-24" y="-14" width="48" height="22" fill="#3a2f20" stroke="#0a0805" stroke-width="1" />
+    <path d="M -28 -14 L 0 -30 L 28 -14 Z" fill="#4a3a26" stroke="#0a0805" stroke-width="1" />
+    <rect x="-4" y="-4" width="8" height="12" fill="#241406" />
+    <rect x="-18" y="-8" width="6" height="6" fill="#c8a14a" opacity="0.6" />
+    <rect x="12" y="-8" width="6" height="6" fill="#c8a14a" opacity="0.6" />
+    <text x="0" y="22" text-anchor="middle" fill="#cda74d" font-size="9">MATTHEWS</text>
+  </g>
+
+  <!-- Church (430, 310) talisman -->
+  <g class="building" transform="translate(430,310)">
+    <g class="talisman">
+      <circle r="34" fill="none" stroke="#cda74d" stroke-width="0.5" opacity="0.45" />
+      <path d="M 0 -28 L 0 14 M -10 -10 L 10 -10" stroke="#cda74d" stroke-width="0.8" opacity="0.7" />
+    </g>
+    <rect x="-22" y="-12" width="44" height="22" fill="#2c2418" stroke="#0a0805" stroke-width="1" />
+    <path d="M -26 -12 L 0 -28 L 26 -12 Z" fill="#3a2f1f" stroke="#0a0805" stroke-width="1" />
+    <!-- steeple -->
+    <rect x="-4" y="-30" width="8" height="10" fill="#2c2418" stroke="#0a0805" stroke-width="0.6" />
+    <path d="M -5 -30 L 0 -40 L 5 -30 Z" fill="#3a2f1f" stroke="#0a0805" stroke-width="0.6" />
+    <line x1="0" y1="-44" x2="0" y2="-40" stroke="#cda74d" stroke-width="1" />
+    <line x1="-2" y1="-42" x2="2" y2="-42" stroke="#cda74d" stroke-width="1" />
+    <rect x="-3" y="-4" width="6" height="14" fill="#241406" />
+    <text x="0" y="24" text-anchor="middle" fill="#cda74d" font-size="9">CHURCH</text>
+  </g>
+
+  <!-- Diner (580, 330) — no talisman -->
+  <g class="building" transform="translate(580,330)">
+    <rect x="-22" y="-12" width="44" height="20" fill="#3a2f20" stroke="#0a0805" stroke-width="1" />
+    <path d="M -24 -12 L -24 -16 L 24 -16 L 24 -12 Z" fill="#7d5024" stroke="#0a0805" stroke-width="0.6" />
+    <rect x="-3" y="-2" width="6" height="10" fill="#241406" />
+    <rect x="-18" y="-8" width="10" height="6" fill="#f4d77a" opacity="0.75" />
+    <rect x="8" y="-8" width="10" height="6" fill="#f4d77a" opacity="0.75" />
+    <text x="0" y="22" text-anchor="middle" fill="#a89870" font-size="9">DINER</text>
+  </g>
+
+  <!-- Clinic (470, 420) talisman -->
+  <g class="building" transform="translate(470,420)">
+    <g class="talisman">
+      <circle r="28" fill="none" stroke="#cda74d" stroke-width="0.5" opacity="0.35" />
+      <path d="M -8 0 L 8 0 M 0 -8 L 0 8" stroke="#cda74d" stroke-width="0.8" opacity="0.6" />
+    </g>
+    <rect x="-20" y="-12" width="40" height="22" fill="#2e2a24" stroke="#0a0805" stroke-width="1" />
+    <path d="M -22 -12 L 0 -22 L 22 -12 Z" fill="#3a342a" stroke="#0a0805" stroke-width="1" />
+    <rect x="-3" y="-4" width="6" height="14" fill="#241406" />
+    <path d="M -3 -14 L 3 -14 M 0 -17 L 0 -11" stroke="#cda74d" stroke-width="1.4" />
+    <text x="0" y="24" text-anchor="middle" fill="#cda74d" font-size="9">CLINIC</text>
+  </g>
+
+  <!-- Boyd's Camper (300, 420) — no talisman -->
+  <g class="building" transform="translate(300,420)">
+    <rect x="-22" y="-8" width="44" height="16" rx="6" ry="6" fill="#3a3128" stroke="#0a0805" stroke-width="1" />
+    <rect x="-10" y="-4" width="8" height="6" fill="#c8a14a" opacity="0.6" />
+    <rect x="2" y="-4" width="8" height="6" fill="#c8a14a" opacity="0.6" />
+    <circle cx="-14" cy="9" r="3" fill="#16100a" />
+    <circle cx="14" cy="9" r="3" fill="#16100a" />
+    <text x="0" y="22" text-anchor="middle" fill="#a89870" font-size="9">CAMPER</text>
+  </g>
+
+  <!-- ============================== Faraway Trees ============================== -->
+  <g id="faraway-trees">
+    <use href="#faraway-tree" x="40" y="60" width="80" height="120" />
+    <use href="#faraway-tree" x="880" y="90" width="80" height="120" />
+    <use href="#faraway-tree" x="20" y="500" width="80" height="120" />
+    <use href="#faraway-tree" x="900" y="520" width="80" height="120" />
+    <use href="#faraway-tree" x="460" y="-20" width="80" height="120" />
+    <g font-size="8" fill="#3f7355" letter-spacing="1">
+      <text x="80" y="190" text-anchor="middle">faraway</text>
+      <text x="920" y="220" text-anchor="middle">faraway</text>
+      <text x="60" y="630" text-anchor="middle">faraway</text>
+      <text x="940" y="650" text-anchor="middle">faraway</text>
+      <text x="500" y="110" text-anchor="middle">faraway</text>
+    </g>
+  </g>
+
+  <!-- ============================== Town label ============================== -->
+  <g id="town-label">
+    <text
+      x="500"
+      y="685"
+      text-anchor="middle"
+      font-size="11"
+      letter-spacing="6"
+      fill="#5a4f36"
+    >
+      FROMVILLE
+    </text>
+  </g>
+</svg>

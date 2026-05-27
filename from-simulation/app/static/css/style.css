@@ -1,0 +1,464 @@
+/* ============================================================
+ * Fromville — UI styles
+ * Dark Americana / gothic dread theme. Sans-serif body,
+ * serif accents in HUD chips. Panels are scrollable.
+ * ============================================================ */
+
+:root {
+  --bg-0: #08080a;
+  --bg-1: #11121a;
+  --bg-2: #181a24;
+  --bg-3: #20232f;
+  --line: #2a2d3a;
+  --text: #cfd1da;
+  --muted: #8a8e9c;
+  --warn: #c8a14a;
+  --crit: #b94747;
+  --ok: #5a8a5a;
+
+  --char: #f3e3c2;        /* warm cream */
+  --npc: #8a8e9c;          /* muted grey */
+  --creature: #c44141;     /* blood red */
+  --boy-in-white: #f6f3e2; /* luminous */
+  --man-in-yellow: #d8b340;
+  --anghkooey: #6c4a90;
+  --faraway-tree: #3f9b8a;
+  --talisman: #cda74d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-0);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  height: 100%;
+}
+
+body.theme-dread {
+  background:
+    radial-gradient(ellipse at top, #1a1525 0%, #08080a 60%) fixed,
+    var(--bg-0);
+  min-height: 100vh;
+}
+
+/* ============================== topbar HUD ============================== */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: linear-gradient(180deg, rgba(20, 18, 32, 0.95), rgba(8, 8, 12, 0.95));
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  gap: 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.brand-mark {
+  font-family: "Georgia", serif;
+  font-size: 22px;
+  letter-spacing: 6px;
+  color: var(--talisman);
+}
+.brand-sub {
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hud {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.hud-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  min-height: 28px;
+}
+.hud-label {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.hud-value {
+  font-family: "Georgia", serif;
+  font-size: 13px;
+  color: var(--text);
+}
+.hud-badge {
+  display: inline-block;
+  background: var(--bg-3);
+  color: var(--talisman);
+  border: 1px solid var(--talisman);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.hud-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+}
+.phase-day { background: rgba(218, 192, 121, 0.18); color: #f5e3a8; border-color: #6a5524; }
+.phase-dusk { background: rgba(180, 88, 56, 0.2); color: #f0b48a; border-color: #6e3a24; }
+.phase-night { background: rgba(40, 36, 80, 0.45); color: #b8b1ff; border-color: #3a3460; }
+.phase-dawn { background: rgba(120, 92, 130, 0.25); color: #e7c4ed; border-color: #5a3b66; }
+
+.yellow-visible_march {
+  background: rgba(216, 179, 64, 0.18);
+  border-color: var(--man-in-yellow);
+  color: var(--man-in-yellow);
+}
+.yellow-imposter {
+  background: rgba(216, 179, 64, 0.12);
+  border-color: var(--man-in-yellow);
+  color: #f4d77a;
+  animation: pulse-yellow 1.8s ease-in-out infinite;
+}
+.yellow-dormant { opacity: 0.4; }
+@keyframes pulse-yellow {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; box-shadow: 0 0 8px rgba(216, 179, 64, 0.6); }
+}
+
+.bar {
+  position: relative;
+  width: 80px;
+  height: 6px;
+  background: var(--bg-3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.bar-fill {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  background: linear-gradient(90deg, #5a8a5a, #cda74d);
+  transition: width 600ms ease-out;
+}
+.bar-text {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ============================== layout ============================== */
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 12px;
+  padding: 12px;
+  height: calc(100vh - 56px);
+}
+
+.map-pane {
+  position: relative;
+  background: #0a0a0e;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.6);
+}
+
+#world {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.side-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* ============================== panels ============================== */
+.panel {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.panel > summary {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+  list-style: none;
+  user-select: none;
+}
+.panel > summary::-webkit-details-marker { display: none; }
+.panel > summary::after {
+  content: "−";
+  float: right;
+  color: var(--talisman);
+}
+.panel:not([open]) > summary::after { content: "+"; }
+.panel > *:not(summary) {
+  padding: 8px 12px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+/* scrollbars */
+.panel > *:not(summary)::-webkit-scrollbar,
+.side-pane::-webkit-scrollbar {
+  width: 8px;
+}
+.panel > *:not(summary)::-webkit-scrollbar-track,
+.side-pane::-webkit-scrollbar-track {
+  background: transparent;
+}
+.panel > *:not(summary)::-webkit-scrollbar-thumb,
+.side-pane::-webkit-scrollbar-thumb {
+  background: var(--bg-3);
+  border-radius: 4px;
+}
+
+/* ============================== event log ============================== */
+.event-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+.event-log li {
+  padding: 4px 0;
+  border-bottom: 1px dotted var(--line);
+  display: grid;
+  grid-template-columns: 60px 110px 1fr;
+  gap: 6px;
+  align-items: baseline;
+}
+.event-log .ev-tick {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.event-log .ev-type {
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--talisman);
+}
+.event-log .ev-detail {
+  color: var(--text);
+  word-break: break-word;
+}
+.event-log li.sev-warn .ev-type { color: var(--warn); }
+.event-log li.sev-crit .ev-type { color: var(--crit); }
+.event-log li.sev-crit .ev-detail { color: #f6c5c5; }
+
+.event-log .ev-type.t-creature_spawn,
+.event-log .ev-type.t-creature_breach,
+.event-log .ev-type.t-hypnosis_attempt { color: var(--creature); }
+.event-log .ev-type.t-boy_in_white { color: var(--boy-in-white); }
+.event-log .ev-type.t-anghkooey_chant { color: var(--anghkooey); }
+.event-log .ev-type.t-yellow_appearance,
+.event-log .ev-type.t-yellow_imposter_join,
+.event-log .ev-type.t-yellow_imposter_acted { color: var(--man-in-yellow); }
+.event-log .ev-type.t-village_wipe,
+.event-log .ev-type.t-village_reseed { color: var(--crit); font-weight: 700; }
+
+/* ============================== roster ============================== */
+.roster-summary {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.roster-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  max-height: 120px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.roster-list li {
+  padding: 3px 8px;
+  cursor: pointer;
+  border-bottom: 1px dotted var(--line);
+}
+.roster-list li:hover { background: var(--bg-2); }
+.roster-list li.selected { background: var(--bg-3); }
+.roster-detail {
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 12px;
+  min-height: 60px;
+}
+.roster-detail h4 {
+  margin: 0 0 6px 0;
+  font-family: "Georgia", serif;
+  color: var(--talisman);
+}
+.roster-detail .kv {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.roster-detail .kv dt { color: var(--muted); }
+.roster-detail .kv dd { margin: 0; word-break: break-word; }
+.roster-empty { color: var(--muted); font-style: italic; }
+
+/* ============================== stats ============================== */
+.stats {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+.stats dt {
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+.stats dd {
+  margin: 0;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================== narration ============================== */
+.narration {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: "Georgia", serif;
+  font-size: 12px;
+  font-style: italic;
+  color: #d8d0bd;
+}
+.narration li {
+  padding: 6px 0;
+  border-bottom: 1px dotted var(--line);
+}
+
+/* ============================== entities (SVG dots) ============================== */
+#entities circle {
+  cursor: pointer;
+  transition: cx 500ms linear, cy 500ms linear, r 250ms ease, opacity 400ms ease;
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 0.6;
+}
+#entities circle:hover {
+  stroke: var(--talisman);
+  stroke-width: 1.4;
+}
+#entities .char       { fill: var(--char); }
+#entities .npc        { fill: var(--npc); }
+#entities .creature   { fill: var(--creature); }
+#entities .boy-in-white {
+  fill: var(--boy-in-white);
+  filter: drop-shadow(0 0 4px rgba(246, 243, 226, 0.8));
+}
+#entities .man-in-yellow {
+  fill: var(--man-in-yellow);
+  filter: drop-shadow(0 0 4px rgba(216, 179, 64, 0.6));
+}
+#entities .anghkooey  { fill: var(--anghkooey); }
+#entities .faraway-tree { fill: var(--faraway-tree); opacity: 0.85; }
+
+#entities text.label {
+  font-size: 8px;
+  fill: var(--muted);
+  pointer-events: none;
+  text-anchor: middle;
+}
+
+/* talisman runes (drawn into the SVG itself) — pulse */
+.talisman {
+  animation: rune-glow 6s ease-in-out infinite;
+  transform-origin: center;
+}
+@keyframes rune-glow {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.95; }
+}
+
+/* lighthouse glow class — toggled by lighting.js when phase != DAY */
+#lighthouse-area.lit circle[fill="#f4d77a"] {
+  filter: drop-shadow(0 0 6px rgba(244, 215, 122, 0.95));
+}
+
+/* lighting overlay rectangle — transition the alpha smoothly */
+#lighting rect {
+  transition: fill 1000ms linear;
+  pointer-events: none;
+}
+
+/* ============================== cycle-reset overlay ============================== */
+.cycle-reset {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.96);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 1;
+  transition: opacity 1800ms ease;
+}
+.cycle-reset.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.cycle-reset-inner {
+  text-align: center;
+}
+.cycle-reset-title {
+  font-family: "Georgia", serif;
+  color: var(--crit);
+  font-size: 42px;
+  letter-spacing: 8px;
+  text-shadow: 0 0 12px rgba(185, 71, 71, 0.6);
+}
+.cycle-reset-sub {
+  margin-top: 12px;
+  color: #c0a070;
+  font-size: 14px;
+  letter-spacing: 4px;
+}
+
+.hidden { display: none !important; }

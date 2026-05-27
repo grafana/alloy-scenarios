@@ -1,0 +1,110 @@
+{% extends "layout.html" %}
+
+{% block title %}Fromville — Live{% endblock %}
+
+{% block hud %}
+<div class="hud">
+  <div class="hud-cell clock">
+    <span class="hud-label">Clock</span>
+    <span id="hud-clock" class="hud-value">D0 06:00 DAY</span>
+  </div>
+  <div class="hud-cell phase">
+    <span class="hud-label">Phase</span>
+    <span id="hud-phase" class="hud-chip phase-day">DAY</span>
+  </div>
+  <div class="hud-cell cycle">
+    <span class="hud-label">Cycle</span>
+    <span id="hud-cycle" class="hud-badge">1</span>
+  </div>
+  <div class="hud-cell food">
+    <span class="hud-label">Food</span>
+    <div class="bar"><div id="hud-food-fill" class="bar-fill"></div></div>
+    <span id="hud-food-text" class="bar-text">100 / 200</span>
+  </div>
+  <div class="hud-cell farm">
+    <span class="hud-label">Farm</span>
+    <div class="bar"><div id="hud-farm-fill" class="bar-fill"></div></div>
+    <span id="hud-farm-text" class="bar-text">100%</span>
+  </div>
+  <div class="hud-cell yellow">
+    <span id="hud-yellow" class="hud-chip yellow-dormant hidden">DORMANT</span>
+  </div>
+</div>
+{% endblock %}
+
+{% block main %}
+<section class="map-pane">
+  <svg
+    id="world"
+    viewBox="0 0 1000 700"
+    preserveAspectRatio="xMidYMid meet"
+    role="img"
+    aria-label="Fromville map"
+  >
+    <image
+      href="{{ url_for('static', filename='img/fromville.svg') }}"
+      x="0"
+      y="0"
+      width="1000"
+      height="700"
+    />
+    <g id="overlays"></g>
+    <g id="lighting"></g>
+    <g id="entities"></g>
+  </svg>
+</section>
+
+<aside class="side-pane">
+  <details class="panel" open>
+    <summary>Event Log</summary>
+    <ol id="event-log" class="event-log"></ol>
+  </details>
+
+  <details class="panel" open>
+    <summary>Roster</summary>
+    <div class="roster">
+      <div class="roster-summary" id="roster-summary">
+        <span class="roster-count" data-pool="char">0 chars</span>
+        <span class="roster-count" data-pool="npc">0 NPCs</span>
+        <span class="roster-count" data-pool="creature">0 creatures</span>
+      </div>
+      <ul id="roster-list" class="roster-list"></ul>
+      <div id="roster-detail" class="roster-detail">
+        <div class="roster-empty">Click any dot on the map to inspect.</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="panel" open>
+    <summary>Stats</summary>
+    <dl id="stats" class="stats">
+      <dt>Tick</dt><dd id="stat-tick">0</dd>
+      <dt>Cycle</dt><dd id="stat-cycle">1</dd>
+      <dt>Village wipes</dt><dd id="stat-wipes">0</dd>
+      <dt>Lighting</dt><dd id="stat-lighting">1.000</dd>
+      <dt>Food</dt><dd id="stat-food">100 / 200</dd>
+      <dt>Farm health</dt><dd id="stat-farm">100%</dd>
+      <dt>Characters</dt><dd id="stat-chars">0</dd>
+      <dt>NPCs</dt><dd id="stat-npcs">0</dd>
+      <dt>Creatures</dt><dd id="stat-creatures">0</dd>
+      <dt>Yellow Man</dt><dd id="stat-yellow">DORMANT</dd>
+    </dl>
+  </details>
+
+  <details class="panel narration-panel" id="narration-panel" style="display:none;">
+    <summary>Narration</summary>
+    <ol id="narration" class="narration"></ol>
+  </details>
+</aside>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.FROM_SIM = {
+    llmEnabled: {{ 'true' if llm_enabled else 'false' }},
+  };
+</script>
+<script src="{{ url_for('static', filename='js/lighting.js') }}"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/socket.js') }}"></script>
+{% endblock %}
