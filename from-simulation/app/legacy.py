@@ -95,6 +95,10 @@ _TEMPLATES: Dict[str, List[str]] = {
         "{npc} opened the door at {building}. Not knowing what they did.",
         "{npc} unlocked the {building} from the inside. Fear made them do it.",
     ],
+    "npc_promoted": [
+        "We found a name for {new_name}. {reason}.",
+        "{new_name} did something we will remember. {reason}.",
+    ],
     "destroy_music_box_called": [
         "The Father called a meeting. Sara had told them where to take it.",
         "We voted to destroy the box. Most of us, anyway.",
@@ -135,6 +139,15 @@ def record(world: World, key: str, **slots: Any) -> None:
             burned=0.0,
         )
     )
+    # v5 — persist immediately to the durable journal table. Journal records
+    # are small + rare, so we don't bother buffering them.
+    if getattr(world, "memory", None) is not None:
+        try:
+            world.memory.record_journal_fragment(
+                world, world.legacy.journal_fragments[-1]
+            )
+        except Exception:
+            pass
     world.emit(
         Event(
             tick=world.tick_count,

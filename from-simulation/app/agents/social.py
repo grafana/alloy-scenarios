@@ -144,6 +144,22 @@ def adjust_trust(world: World, a_id: str, b_id: str, delta: float, reason: str) 
         subject=a_id, detail=f"{a_id}<->{b_id} {delta:+.2f} ({reason}) -> {new:.2f}",
         severity="info",
     ))
+    # v5 — persist the trust shift to memory for both parties.
+    if world.memory is not None:
+        try:
+            world.memory.record_character_memory(
+                world, a_id, "trust_shift",
+                subject=b_id, detail=f"{delta:+.2f} {reason}",
+            )
+        except Exception:
+            pass
+        try:
+            world.memory.record_character_memory(
+                world, b_id, "trust_shift",
+                subject=a_id, detail=f"{delta:+.2f} {reason}",
+            )
+        except Exception:
+            pass
 
 
 # Role-pair compatibility hints — feeds the conversation pairing on top of trust.
@@ -448,6 +464,18 @@ def _resolve_meeting(world: World, pm: _PendingMeeting) -> None:
         severity="warn" if pm.topic == "imposter_suspicion" else "info",
     ))
 
+    # v5 — record a per-attendee memory row for the outcome.
+    if world.memory is not None and decision in ("agree", "disagree"):
+        kind = "meeting_agree" if decision == "agree" else "meeting_disagree"
+        for a in attendees:
+            try:
+                world.memory.record_character_memory(
+                    world, a.id, kind,
+                    subject=pm.topic, detail=pm.venue_id,
+                )
+            except Exception:
+                pass
+
     # Trust deltas across the attendee graph.
     if decision in ("agree", "disagree") and len(attendees) >= 2:
         delta = 0.05 if decision == "agree" else -0.10
@@ -477,6 +505,17 @@ def _resolve_meeting(world: World, pm: _PendingMeeting) -> None:
                 tick=world.tick_count, type="argument",
                 subject=a.id, detail=f"after {pm.topic}",
             ))
+            # v5 — argument memory for each fighter, naming an opponent.
+            if world.memory is not None:
+                opponents = [x for x in arguer_ids if x != a.id]
+                opp = opponents[0] if opponents else pm.topic
+                try:
+                    world.memory.record_character_memory(
+                        world, a.id, "argument",
+                        subject=opp, detail=pm.topic,
+                    )
+                except Exception:
+                    pass
         else:
             a.state = State.WANDERING
             a.state_since_tick = world.tick_count
@@ -568,5 +607,19 @@ def _drive_conversations(world: World) -> None:
                     tick=world.tick_count, type="conversation",
                     subject=a.id, detail=f"with {b.id}",
                 ))
+                # v5 — record a conversation memory row for both sides.
+                if world.memory is not None:
+                    try:
+                        world.memory.record_character_memory(
+                            world, a.id, "conversation", subject=b.id,
+                        )
+                    except Exception:
+                        pass
+                    try:
+                        world.memory.record_character_memory(
+                            world, b.id, "conversation", subject=a.id,
+                        )
+                    except Exception:
+                        pass
                 adjust_trust(world, a.id, b.id, 0.03, "conversation")
                 break

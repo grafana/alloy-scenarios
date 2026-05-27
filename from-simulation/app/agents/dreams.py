@@ -287,6 +287,17 @@ def tick_dreams(world: World) -> None:
                         severity="info",
                     )
                 )
+                # v5 — record the prophecy as a character memory row so it
+                # can later bias the dreamer's behaviour through recall.
+                if world.memory is not None:
+                    try:
+                        world.memory.record_character_memory(
+                            world, dream.character_id, "prophecy_heard",
+                            subject="ruins",
+                            detail=dream.lines[0] if dream.lines else line,
+                        )
+                    except Exception:
+                        pass
 
 
 # ---------------------------------------------------------------------------

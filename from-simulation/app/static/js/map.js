@@ -326,10 +326,39 @@
       return;
     }
     // Default: NPC dot.
-    const entry = ensureShape(item.id, "circle", "npc", { r: 6 });
+    // v5: NPC default — promoted sub-mains get a larger circle + a chevron;
+    // tombstoned ones render with a fading "✝" glyph for ~30 ticks.
+    const isSubMain = item.is_sub_main === true;
+    const isDead = (item.status === "DEAD");
+    const r = isSubMain ? 7.5 : 6;
+    const klass = isSubMain ? (isDead ? "npc sub-main tombstone" : "npc sub-main") : "npc";
+    const entry = ensureShape(item.id, "circle", klass, { r });
     if (entry) {
       entry.el.setAttribute("cx", x);
       entry.el.setAttribute("cy", y);
+      // Keep the class fresh in case status flips between ticks (alive -> tombstone).
+      entry.el.setAttribute("class", klass);
+    }
+    if (isSubMain) {
+      // chevron marker: a tiny "^" rendered as a polyline 8 px above the dot.
+      const chevId = item.id + "::chev";
+      const chev = ensureShape(chevId, "polyline", isDead ? "sub-main-chev tombstone" : "sub-main-chev", {
+        points: "-3,-12 0,-16 3,-12",
+      });
+      if (chev) chev.el.setAttribute("transform", `translate(${x} ${y})`);
+      seenIds.add(chevId);
+      // Tombstone cross glyph for dead sub-mains.
+      if (isDead) {
+        const xId = item.id + "::cross";
+        const cross = ensureShape(xId, "text", "tombstone-cross", {});
+        if (cross) {
+          cross.el.setAttribute("x", x);
+          cross.el.setAttribute("y", y - 18);
+          cross.el.setAttribute("text-anchor", "middle");
+          cross.el.textContent = "✝";
+        }
+        seenIds.add(xId);
+      }
     }
   }
 

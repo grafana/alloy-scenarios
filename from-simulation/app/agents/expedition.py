@@ -28,6 +28,7 @@ from typing import List, Optional, Tuple
 
 from contracts import (
     Event,
+    Item,
     Phase,
     Role,
     RUINS_XY,
@@ -365,6 +366,15 @@ def tick_expeditions(world: World) -> None:
             _walk_party(world, exp, RUINS_XY, DEPART_SPEED)
             d = math.hypot(ref.x - RUINS_XY[0], ref.y - RUINS_XY[1])
             if d <= MUSIC_BOX_DESTROY_RADIUS:
+                # v5 — once the carrier has reached the ruins, decrement their
+                # inventory so memory + UI see the box leaving them. Music box
+                # destruction itself is handled by Agent A. Guarded so we only
+                # decrement once per arrival.
+                if isinstance(ref, Character) and ref._inv_has(Item.MUSIC_BOX.value):
+                    try:
+                        ref._inv_add(Item.MUSIC_BOX.value, -1, world)
+                    except Exception:
+                        pass
                 # Arrived. Hold for one tick to let A's destroyer fire.
                 # When the carrier is cleared by A, fold the expedition.
                 if world.music_box_carrier is None or world.music_box_phase == "DORMANT":
@@ -453,6 +463,19 @@ def tick_expeditions(world: World) -> None:
                 and world.agents[mid].status == Status.ACTIVE
             ]
             haul = FOOD_REWARD * (len(survivors) / max(1, 1 + len(exp.member_ids)))
+            # v5 — route the haul through the leader's inventory so the memory
+            # layer sees a pickup/drop pair (interpreted as a "delivery"). We
+            # then bump the engine-owned ``food_supply`` directly. The k value
+            # is the integer haul; any rounding residue is dropped on the
+            # floor since food_supply already holds the float.
+            leader = world.agents.get(exp.leader_id)
+            k = max(0, int(round(haul)))
+            if isinstance(leader, Character) and k > 0:
+                try:
+                    leader._inv_add(Item.FOOD.value, +k, world)
+                    leader._inv_add(Item.FOOD.value, -k, world)
+                except Exception:
+                    pass
             # We do not own world.food_supply, but the brief implies we may raise it
             # when an expedition completes. Cap by capacity.
             try:

@@ -126,6 +126,16 @@ class YellowMode(str, enum.Enum):
     IMPOSTER = "IMPOSTER"
 
 
+class Item(str, enum.Enum):
+    """v5 — canonical inventory items characters and NPCs can hold."""
+    FOOD = "food"
+    MUSIC_BOX = "music_box"
+    CLUE = "clue"
+    JOURNAL_PAGE = "journal_page"
+    TORCH = "torch"
+    TALISMAN_FRAGMENT = "talisman_fragment"
+
+
 # ---------------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------------
@@ -275,6 +285,16 @@ EVENT_TYPES = {
     "steal_event",
     "worms_passed",
     "ballerina_vision",
+    # v5 — memory + inventory + promotion
+    "item_picked_up",
+    "item_dropped",
+    "item_used",
+    "item_transferred",
+    "npc_promoted",
+    "sub_main_died",
+    "memory_recall",
+    "db_pruned",
+    "memory_hydrated",
 }
 
 
@@ -423,6 +443,12 @@ class Config:
     npc_sanity_break_prob: float = 0.04
     house_cooling_off_ticks: int = 800
     npc_breach_death_prob: float = 0.30
+    # v5 — SQLite memory + promotion
+    db_path: str = "/data/from.db"
+    memory_cycle_window: int = 50
+    memory_flush_every_ticks: int = 60
+    memory_recall_window_ticks: int = 1200
+    npc_promotion_score_threshold: float = 1.0
 
     @classmethod
     def from_env(cls, getenv: Callable[[str, Optional[str]], Optional[str]]) -> "Config":
@@ -485,6 +511,11 @@ class Config:
             npc_sanity_break_prob=_f("NPC_SANITY_BREAK_PROB", 0.04),
             house_cooling_off_ticks=_i("HOUSE_COOLING_OFF_TICKS", 800),
             npc_breach_death_prob=_f("NPC_BREACH_DEATH_PROB", 0.30),
+            db_path=_s("FROM_DB_PATH", "/data/from.db"),
+            memory_cycle_window=_i("MEMORY_CYCLE_WINDOW", 50),
+            memory_flush_every_ticks=_i("MEMORY_FLUSH_EVERY_TICKS", 60),
+            memory_recall_window_ticks=_i("MEMORY_RECALL_WINDOW_TICKS", 1200),
+            npc_promotion_score_threshold=_f("NPC_PROMOTION_SCORE_THRESHOLD", 1.0),
         )
 
 
@@ -597,12 +628,16 @@ class World:
     worms_infected: Set[str] = field(default_factory=set)  # agent ids
     rhyme_heard: List[str] = field(default_factory=list)  # rhyme lines surfaced so far
 
+    # --- v5: SQLite memory + sub-main NPC promotion ---
+    memory: Optional[Any] = None  # storage.Memory; attached by app.py at boot
+    sub_mains: Set[str] = field(default_factory=set)  # npc ids that have been promoted
+
     @property
     def cycle_number(self) -> int:
         return self.village_wipes + 1
 
     def emit(self, event: Event) -> None:
-        """Append to the rolling log AND mirror to telemetry counter.
+        """Append to the rolling log, mirror to telemetry, persist to memory.
 
         All subagents must use this rather than touching `events` directly.
         """
@@ -615,6 +650,13 @@ class World:
             self.events.append(event)
         if self.telemetry is not None:
             self.telemetry.counter_inc("from_sim_events_total", 1.0, {"type": tag})
+        # v5 — persist to SQLite via Memory (if attached). Memory swallows
+        # its own errors so a busted DB never kills a tick.
+        if self.memory is not None:
+            try:
+                self.memory.record_event(self, event)
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -625,15 +667,21 @@ class World:
 def _enrich_agent(agent: Agent, world: World) -> Dict[str, Any]:
     """Decorate the bare agent dict with cross-cycle fields known only to World.
 
-    Currently adds a ``drift`` bool for named characters who have any non-zero
-    entry in ``world.legacy.personality_drift``. Outsiders already expose
-    ``backstory`` / ``goal`` via their own to_dict; we don't override those.
+    Adds:
+      * ``drift`` bool for named characters with non-zero personality drift.
+      * ``is_sub_main`` for promoted NPCs (v5).
+      * ``inventory`` summary (item id → count) for characters and sub-mains.
     """
     d = agent.to_dict()
     name = getattr(agent, "name", None)
     if name and getattr(agent, "kind", None) == AgentKind.CHARACTER:
         deltas = world.legacy.personality_drift.get(name)
         d["drift"] = bool(deltas) and any(abs(v) > 1e-6 for v in deltas.values())
+    if agent.id in world.sub_mains:
+        d["is_sub_main"] = True
+    inv = getattr(agent, "inventory", None)
+    if isinstance(inv, dict) and inv:
+        d["inventory"] = {k: v for k, v in inv.items() if v}
     return d
 
 
@@ -705,6 +753,10 @@ def snapshot_dict(world: World) -> Dict[str, Any]:
             "rhyme": list(world.rhyme_heard),
             "worms_count": len(world.worms_infected),
         },
+        "memory": {
+            "db_attached": world.memory is not None,
+            "sub_mains_alive": len(world.sub_mains),
+        },
         "buildings": [
             {
                 "id": b.id,
@@ -774,6 +826,11 @@ class Metric:
     HOUSES_COOLING_OFF = "from_sim_houses_cooling_off"              # gauge
     NPC_HOMES_FULL = "from_sim_npc_homes_full"                      # gauge
     WORMS_INFECTED = "from_sim_worms_infected"                      # gauge
+    # v5
+    MEMORY_ROWS = "from_sim_memory_rows"                            # gauge: rows in character_memory
+    SUB_MAINS_ALIVE = "from_sim_sub_mains_alive"                    # gauge
+    SUB_MAINS_DEAD_TOTAL = "from_sim_sub_mains_dead_total"          # gauge cumulative
+    INVENTORY_ITEMS = "from_sim_inventory_items"                    # gauge: total items held
 
 
 PHASE_TO_NUM = {Phase.DAY: 0, Phase.DUSK: 1, Phase.NIGHT: 2, Phase.DAWN: 3}

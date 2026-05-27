@@ -59,6 +59,7 @@ from agents import bus as _bus                 # C v2: tick_bus + clear_outsider
 from agents import music_box as _music_box     # A v4: tick_music_box
 from agents import cooling_off as _cooling_off # A v4: tick_cooling_off
 from agents import npc_problems as _npc_problems  # C v4: tick_npc_problems
+from agents import promotion as _promotion        # C v5: tick_promotion
 from time_cycle import phase_for, update_lighting
 from world import reset_world
 
@@ -228,6 +229,9 @@ class Simulation:
         # reaping so the deaths and displacements it creates land same-tick.
         _npc_problems.tick_npc_problems(world)
         _population.tick_population(world)
+        # C v5: promotion sweep runs immediately after population reaping so
+        # we never promote a corpse and the sub-main gauge stays honest.
+        _promotion.tick_promotion(world)
         # A v4: music box runs between population and yellow_man so a wipe-y
         # cool-off sweep happens before yellow re-evaluates the talisman map.
         _music_box.tick_music_box(world)
@@ -249,6 +253,14 @@ class Simulation:
 
         # 7) Gauges + counters.
         self._emit_metrics(world)
+
+        # 7b) v5 — drain Memory buffers if it's time. Swallow exceptions so a
+        # DB hiccup never kills a tick.
+        if world.memory is not None:
+            try:
+                world.memory.tick_flush(world)
+            except Exception:
+                pass
 
         # 8) Broadcast.
         self._broadcast(world)

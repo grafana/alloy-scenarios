@@ -870,6 +870,38 @@ svg#world.dream-mode {
   50%      { opacity: 0.95; }
 }
 
+/* ----- v5: sub-main NPCs and tombstones --------------------------------- */
+#entities circle.sub-main {
+  fill: #b8946c;                /* warmer than the base NPC grey */
+  stroke: #d8a83a;              /* gold ring so they read as "promoted" */
+  stroke-width: 1.4;
+  filter: drop-shadow(0 0 3px rgba(216, 168, 58, 0.55));
+}
+#entities .sub-main-chev {
+  fill: none;
+  stroke: #d8a83a;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+#entities .tombstone {
+  opacity: 0.55;
+  animation: tombstoneFade 2s ease-out forwards;
+}
+#entities .tombstone-cross {
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 11px;
+  fill: #d8cfb4;
+  opacity: 0.85;
+  pointer-events: none;
+  animation: tombstoneFade 2s ease-out forwards;
+}
+@keyframes tombstoneFade {
+  0%   { opacity: 0.9; }
+  100% { opacity: 0.0; }
+}
+
 /* ----- Township Index panel ----- */
 #township-index .index-list {
   font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;

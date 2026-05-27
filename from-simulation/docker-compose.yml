@@ -104,9 +104,18 @@ services:
       - YELLOW_APPEARANCE_DAYS_MAX=10
       - YELLOW_IMPOSTER_PROB=0.7
       - YELLOW_DEADLINE_TICKS=1500
+      # v5 — SQLite memory
+      - FROM_DB_PATH=/data/from.db
+      - MEMORY_CYCLE_WINDOW=50
+      - MEMORY_FLUSH_EVERY_TICKS=60
+      - MEMORY_RECALL_WINDOW_TICKS=1200
+      - NPC_PROMOTION_SCORE_THRESHOLD=1.0
       - LOG_LEVEL=INFO
+    volumes:
+      - from-data:/data
     depends_on:
       - alloy
 
 volumes:
   pyroscope-data:
+  from-data:

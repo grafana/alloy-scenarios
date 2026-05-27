@@ -32,6 +32,7 @@ from contracts import (
     AgentKind,
     BUILDING_LAYOUT,
     Event,
+    Item,
     MarkerClass,
     Phase,
     Role,
@@ -298,6 +299,53 @@ class Character(Agent):
 
         # Cross-cycle bookkeeping
         self._obituary_written: bool = False
+        # v5 — passive event observation (avoid recording the same event twice).
+        self._last_observed_event_tick: int = -10_000
+
+    # ----------------------------------------------------------- v5 inventory
+    def _inv_has(self, item: str) -> bool:
+        """True if this character is carrying at least one of ``item``."""
+        try:
+            return int(self.inventory.get(item, 0)) > 0
+        except Exception:
+            return False
+
+    def _inv_add(self, item: str, delta: int, world: World) -> int:
+        """Adjust inventory, persist to memory, and emit pickup/drop events.
+
+        Returns the new quantity. ``delta`` may be negative to drop. Quantity
+        is clamped at zero — callers should check ``_inv_has`` before
+        attempting a drop.
+        """
+        try:
+            cur = int(self.inventory.get(item, 0))
+        except Exception:
+            cur = 0
+        new = max(0, cur + int(delta))
+        if new == 0:
+            self.inventory.pop(item, None)
+        else:
+            self.inventory[item] = new
+        # v5 — record via memory if attached.
+        if world.memory is not None:
+            try:
+                world.memory.record_inventory_change(
+                    world, self.id, item, int(delta), new,
+                )
+            except Exception:
+                pass
+        # Emit a canonical event so other subsystems see the transfer.
+        if delta > 0:
+            world.emit(Event(
+                tick=world.tick_count, type="item_picked_up",
+                subject=self.id, detail=f"{item} x{int(delta)} (have {new})",
+            ))
+        elif delta < 0:
+            world.emit(Event(
+                tick=world.tick_count, type="item_dropped",
+                subject=self.id, detail=f"{item} x{abs(int(delta))} (have {new})",
+            ))
+        return new
 
     # ------------------------------------------------------------------ tick
     def tick(self, world: World) -> None:
@@ -329,6 +377,9 @@ class Character(Agent):
 
         # ---- Awareness: bump for nearby yellow-touched NPCs --------------
         self._update_awareness(world)
+
+        # ---- v5: passive observation of recent breach events --------------
+        self._observe_recent_events(world)
 
         # ---- Sticky / pinned states --------------------------------------
         if self.state == State.MEETING and world.tick_count < self.meeting_until_tick:
@@ -537,7 +588,143 @@ class Character(Agent):
                     break
             if not boosted:
                 out.append((State.EXPEDITION, 3.0))
+        # v5: nudge from SQLite memory before returning.
+        out = self._apply_memory_bias_list(out, world)
         return out
+
+    # ----------------------------------------------------------- v5 memory
+    def _apply_memory_bias_list(
+        self, menu: List[Tuple[State, float]], world: World,
+    ) -> List[Tuple[State, float]]:
+        """Bias a (state, weight) list by recent character_memory rows.
+
+        Wraps :meth:`_apply_memory_bias` so callers can keep menu as a list of
+        tuples (the format the LLM/weighted-choice expects). Falls through
+        without error if memory is missing or malformed.
+        """
+        if world.memory is None or not menu:
+            return menu
+        weights: Dict[State, float] = {s: w for s, w in menu}
+        try:
+            biased = self._apply_memory_bias(weights, world)
+        except Exception:
+            return menu
+        return [(s, biased.get(s, w)) for s, w in menu]
+
+    def _apply_memory_bias(
+        self, weights: Dict[State, float], world: World,
+    ) -> Dict[State, float]:
+        """Multiplier-style bias from this character's recent memory.
+
+        Pulls in argument / breach / meeting rows for the configured recall
+        window and scales relevant state weights. Carrying a music box also
+        boosts EXPEDITION via the memory channel so v4 carrier behaviour
+        survives even when the engine's transient ``music_box_carrier`` flag
+        is briefly cleared.
+        """
+        if world.memory is None:
+            return weights
+        cfg = world.config
+        recall_window = int(getattr(cfg, "memory_recall_window_ticks", 1200))
+
+        try:
+            recent_args = world.memory.recall_for(
+                world, self.id,
+                kinds={"argument", "meeting_disagree"},
+                lookback_ticks=recall_window,
+            )
+        except Exception:
+            recent_args = []
+        if recent_args:
+            if State.ARGUING in weights:
+                weights[State.ARGUING] *= 1.30
+            if State.CONVERSING in weights:
+                weights[State.CONVERSING] *= 0.60
+
+        try:
+            recent_breaches = world.memory.recall_for(
+                world, self.id,
+                kinds={"breach_observed"},
+                lookback_ticks=1500,
+            )
+        except Exception:
+            recent_breaches = []
+        if recent_breaches:
+            if State.SHELTERING in weights:
+                weights[State.SHELTERING] *= 0.50
+
+        try:
+            positive_meetings = world.memory.recall_for(
+                world, self.id,
+                kinds={"meeting_agree", "recognized"},
+                lookback_ticks=1500,
+            )
+        except Exception:
+            positive_meetings = []
+        if positive_meetings and len(positive_meetings) >= 2:
+            if State.MEETING in weights:
+                weights[State.MEETING] *= 1.20
+
+        # Carrying a music box — reinforce v4 carrier behaviour via memory.
+        if self._inv_has(Item.MUSIC_BOX.value):
+            if State.EXPEDITION in weights:
+                weights[State.EXPEDITION] *= 3.0
+
+        return weights
+
+    # ----------------------------------------------------------- v5 observe
+    def _observe_recent_events(self, world: World) -> None:
+        """Record a ``breach_observed`` memory if a creature_breach happened nearby.
+
+        We peek at the tail of ``world.events`` and use a ``_last_observed_event_tick``
+        guard so we never write the same observation twice.
+        """
+        if world.memory is None:
+            return
+        events = world.events
+        if events is None:
+            return
+        try:
+            recent = list(events)[-5:]
+        except Exception:
+            return
+        for evt in recent:
+            try:
+                if evt.tick <= self._last_observed_event_tick:
+                    continue
+                if evt.type != "creature_breach":
+                    continue
+            except Exception:
+                continue
+            # Locate the building involved. Subject may be the building id
+            # (npc_problems.py path) or the creature id (creatures.py path,
+            # in which case the building name lives in the detail).
+            building_id: Optional[str] = None
+            subj = getattr(evt, "subject", "") or ""
+            if subj in world.buildings:
+                building_id = subj
+            else:
+                detail = (getattr(evt, "detail", "") or "").lower()
+                for bid, b in world.buildings.items():
+                    if b.name.lower() in detail:
+                        building_id = bid
+                        break
+            # Skip if we can't locate the building.
+            if building_id is None:
+                continue
+            b = world.buildings.get(building_id)
+            if b is None:
+                continue
+            d = math.hypot(self.x - b.x, self.y - b.y)
+            if d > 200.0:
+                continue
+            try:
+                world.memory.record_character_memory(
+                    world, self.id, "breach_observed", subject=building_id,
+                )
+            except Exception:
+                pass
+            self._last_observed_event_tick = evt.tick
 
     # Words inside a prophecy payload that hint at a state being warned against.
     _PROPHECY_WARNINGS: Dict[str, List[State]] = {

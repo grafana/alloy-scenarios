@@ -95,6 +95,17 @@ def _trigger_break(world: World, npc: NPC, building: Building) -> None:
     )
     legacy.record(world, "npc_sanity_break", npc=npc.name, building=building.name)
 
+    # v5: bump the breaker's notability — unlocking a talisman door is the
+    # kind of thing the village will remember, even (especially) if they
+    # don't survive the night. The promotion tick will pick this up next
+    # pass; if the death roll below kills them, that's fine — they get
+    # remembered posthumously via the sub_main_died/tombstone path.
+    try:
+        from agents.promotion import bump_notability
+        bump_notability(npc, 0.8, "unlocked the door at " + building.id)
+    except Exception:
+        pass
+
     # 3) Emit a creature_breach so v2's hash-mark distillation picks it up.
     world.emit(
         Event(

@@ -293,6 +293,15 @@ def _begin_carry(world: World, box: MusicBox, agent: Any) -> None:
         pass
     world.music_box_carrier = getattr(agent, "id", None)
     world.worms_infected.add(getattr(agent, "id", ""))
+    # v5: NPC carriers earn a big notability bump — picking up the box is
+    # the most legendary thing an unnamed villager can do. Skip mains
+    # (they keep their canon names) and outsiders.
+    if getattr(agent, "kind", None) == AgentKind.NPC:
+        try:
+            from agents.promotion import bump_notability
+            bump_notability(agent, 1.5, "picked up the music box")
+        except Exception:
+            pass
     world.music_box_phase = "TOUCH"
     world.music_box_phase_until_tick = world.tick_count + cfg.music_box_phase_ticks
     line = "They touch."
@@ -756,6 +765,14 @@ def _tick_worms_passing(world: World) -> None:
             except ValueError:
                 pass
             world.worms_infected.discard(aid)
+            # v5: NPC killers earn a notability bump — killing a creature
+            # with the worms is the kind of thing the village will remember.
+            if getattr(agent, "kind", None) == AgentKind.NPC:
+                try:
+                    from agents.promotion import bump_notability
+                    bump_notability(agent, 0.6, "killed a creature with the worms")
+                except Exception:
+                    pass
             world.emit(
                 Event(
                     tick=world.tick_count,

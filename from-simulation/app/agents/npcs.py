@@ -223,6 +223,15 @@ class NPC(Agent):
         # Last day we flushed the daily contribution summary, so we only emit
         # the npc_contribution event once per sim-day.
         self._last_summary_day: int = -1
+        # v5 — promotion to sub-main. ``is_sub_main`` flips True once the
+        # NPC crosses ``config.npc_promotion_score_threshold``; the snapshot
+        # enricher also tags any id in ``world.sub_mains`` for the frontend.
+        self.is_sub_main: bool = False
+        self.notability_score: float = 0.0
+        self._last_promotion_reason: str = ""
+        # v5 — tombstone window for sub-mains. When >0, _reap_dead leaves the
+        # corpse in world.agents until world.tick_count reaches it.
+        self._tombstone_until_tick: int = 0
 
     # ---------------------------------------------------------------- API
 
@@ -238,6 +247,11 @@ class NPC(Agent):
                 "target_x": round(self.target_x, 2),
                 "target_y": round(self.target_y, 2),
                 "home_id": self.home_id,
+                # v5 — promotion + tombstone (mostly for debug, but the
+                # frontend tombstone marker keys off the status + the
+                # contracts._enrich_agent ``is_sub_main`` tag).
+                "is_sub_main": self.is_sub_main,
+                "notability_score": round(self.notability_score, 2),
             }
         )
         return d

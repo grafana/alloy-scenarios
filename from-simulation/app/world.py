@@ -120,6 +120,16 @@ def reset_world(world: World) -> None:
     world.music_box_carrier = None
     world.worms_infected.clear()
     world.rhyme_heard.clear()
+
+    # v5 — sub_mains persist across wipes (they're tracked in SQLite forever);
+    # in-memory set survives this reset. Memory handle stays attached too.
+    # If memory is attached, log the new cycle's start + prune the old.
+    if world.memory is not None:
+        try:
+            world.memory.start_cycle(world)
+            world.memory.prune_old_cycles(world)
+        except Exception:
+            pass
     # Bus: preserve next_arrival_cycle counter (so the cadence persists), reset
     # the rest. If we just left a cycle whose number IS the scheduled arrival,
     # the bus tick logic will activate after rebuild.

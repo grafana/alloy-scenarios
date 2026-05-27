@@ -74,6 +74,22 @@ def _build_app() -> tuple[Flask, SocketIO, Any, Any, SimTelemetry]:
     # it via ``world.llm_decider``.
     world.llm_decider = LLMDecider(config, telemetry)
     world.llm_decider.attach_world(world)
+
+    # v5 — SQLite-backed Memory. Optional: if the DB can't be opened (e.g. the
+    # /data volume is read-only) we log and run the simulation without
+    # persistence, identical to the v4 behaviour. Hydration MUST happen before
+    # ``build_characters`` so any restored personality drift applies on rebuild.
+    from storage import Memory  # local import — avoids hard fail if the file
+                                # is missing from a stripped-down image
+    try:
+        world.memory = Memory.open(config.db_path)
+        world.memory.hydrate(world)
+    except Exception:
+        telemetry.get_logger().exception(
+            "memory init failed; continuing without persistence"
+        )
+        world.memory = None
+
     # Populate the named cast before the simulation starts ticking so the
     # first snapshot the browser receives already shows the village.
     build_characters(world)
@@ -151,6 +167,13 @@ def _build_app() -> tuple[Flask, SocketIO, Any, Any, SimTelemetry]:
                 simulation.stop()
         except Exception:
             log.exception("simulation stop failed")
+        # v5 — drain memory buffers and close the SQLite handle before the
+        # process exits so the last few ticks aren't lost.
+        try:
+            if getattr(world, "memory", None) is not None:
+                world.memory.close()
+        except Exception:
+            log.exception("memory close failed")
         try:
             telemetry.shutdown()
         except Exception:

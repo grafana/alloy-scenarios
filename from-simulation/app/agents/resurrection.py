@@ -104,6 +104,16 @@ def tick_resurrection(world: World) -> None:
                 if world.recognition_counts[r.id] >= world.config.recognition_threshold:
                     r.status = Status.ACTIVE
                     world.recognition_counts.pop(r.id, None)
+                    # v5 — record a "recognized" memory row from the
+                    # recogniser's perspective. ``other`` is the recognising
+                    # active character; the returner is the subject.
+                    if world.memory is not None:
+                        try:
+                            world.memory.record_character_memory(
+                                world, other.id, "recognized", subject=r.id,
+                            )
+                        except Exception:
+                            pass
                     # Re-apply accumulated drift to the live object so the
                     # character that walks back in matches what the next cycle
                     # would seed.

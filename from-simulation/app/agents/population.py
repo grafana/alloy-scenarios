@@ -85,8 +85,20 @@ def spawn_npc(world: World) -> NPC:
     return npc
 
 
+_TOMBSTONE_TICKS = 30
+
+
 def _reap_dead(world: World) -> int:
-    """Remove dead NPCs from ``world.agents``. Returns count reaped."""
+    """Remove dead NPCs from ``world.agents``. Returns count reaped.
+
+    v5: sub-mains get a 30-tick tombstone window. We mark them with
+    ``_tombstone_until_tick`` on the first sighting (firing ``sub_main_died``
+    + memory hook + clearing the home's occupants); subsequent reap passes
+    skip them until the tick clock catches up, at which point they're fully
+    removed. ``world.sub_mains`` is NEVER cleared — the lookup must survive
+    so the snapshot's ``is_sub_main: True`` tag still applies for any
+    retroactive debug/inspection.
+    """
     dead_ids: List[str] = []
     for a in world.agents.values():
         if getattr(a, "kind", None) != AgentKind.NPC:
@@ -94,10 +106,73 @@ def _reap_dead(world: World) -> int:
         if getattr(a, "status", Status.ACTIVE) == Status.DEAD:
             dead_ids.append(a.id)
 
+    reaped = 0
     for nid in dead_ids:
+        agent = world.agents.get(nid)
+        if agent is None:
+            continue
+        is_sub_main = nid in world.sub_mains
+        tombstone = int(getattr(agent, "_tombstone_until_tick", 0) or 0)
+
+        # First-pass handling for any death.
+        if is_sub_main and tombstone == 0:
+            # Start the 30-tick tombstone. Fire sub_main_died + clear home,
+            # but DO NOT remove from world.agents — the frontend will render
+            # the fading marker until the window elapses.
+            name = getattr(agent, "name", nid)
+            cause = getattr(agent, "death_cause", "unknown")
+            try:
+                agent._tombstone_until_tick = world.tick_count + _TOMBSTONE_TICKS
+            except Exception:
+                pass
+            home_id = getattr(agent, "home_id", None)
+            if home_id is not None:
+                building = world.buildings.get(home_id)
+                if building is not None:
+                    building.occupants.discard(nid)
+            world.yellow_touched_npcs.discard(nid)
+            # Memory hook — best-effort. Memory swallows its own errors but we
+            # still guard so a missing attribute doesn't blow up the reap.
+            if world.memory is not None:
+                try:
+                    world.memory.mark_sub_main_dead(world, nid, cause)
+                except Exception:
+                    pass
+            world.emit(
+                Event(
+                    tick=world.tick_count,
+                    type="sub_main_died",
+                    subject=nid,
+                    detail=f"{name} died ({cause})",
+                    severity="crit",
+                )
+            )
+            try:
+                from agents.promotion import _record_sub_main_death
+                _record_sub_main_death(1)
+            except Exception:
+                pass
+            # Still emit npc_death so existing consumers (legacy hash marks,
+            # creature attribution, etc.) keep working.
+            world.emit(
+                Event(
+                    tick=world.tick_count,
+                    type="npc_death",
+                    subject=nid,
+                    detail=f"{name} did not survive the night",
+                    severity="warn",
+                )
+            )
+            # NB: NOT removed from world.agents — wait for the tombstone tick.
+            continue
+
+        if is_sub_main and world.tick_count < tombstone:
+            # Still inside the tombstone window — leave the corpse on the map.
+            continue
+
+        # Regular (non-sub-main) death OR sub-main whose tombstone has elapsed.
         agent = world.agents.pop(nid, None)
         name = getattr(agent, "name", nid) if agent is not None else nid
-        # v4: clear them from their home's occupant set.
         home_id = getattr(agent, "home_id", None) if agent is not None else None
         if home_id is not None:
             building = world.buildings.get(home_id)
@@ -105,16 +180,20 @@ def _reap_dead(world: World) -> int:
                 building.occupants.discard(nid)
         # If this NPC was puppeted, drop the touch — they're gone.
         world.yellow_touched_npcs.discard(nid)
-        world.emit(
-            Event(
-                tick=world.tick_count,
-                type="npc_death",
-                subject=nid,
-                detail=f"{name} did not survive the night",
-                severity="warn",
+        if not is_sub_main:
+            # Sub-mains already emitted npc_death + sub_main_died on the first
+            # pass; don't double-emit when the tombstone clears.
+            world.emit(
+                Event(
+                    tick=world.tick_count,
+                    type="npc_death",
+                    subject=nid,
+                    detail=f"{name} did not survive the night",
+                    severity="warn",
+                )
             )
-        )
-    return len(dead_ids)
+        reaped += 1
+    return reaped
 
 
 def clear_npcs(world: World) -> None:
