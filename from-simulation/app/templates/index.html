@@ -15,6 +15,11 @@
   <div class="hud-cell cycle">
     <span class="hud-label">Cycle</span>
     <span id="hud-cycle" class="hud-badge">1</span>
+    <span id="hud-fragments" class="hud-fragments" title="journal fragments preserved">&#x1F4DC; 0 fragments</span>
+  </div>
+  <div class="hud-cell witnessed">
+    <span class="hud-label">Witnessed</span>
+    <span id="hud-cycles-witnessed" class="hud-witnessed">Cycle 1 of all that has ever been</span>
   </div>
   <div class="hud-cell food">
     <span class="hud-label">Food</span>
@@ -94,6 +99,24 @@
   <details class="panel narration-panel" id="narration-panel" style="display:none;">
     <summary>Narration</summary>
     <ol id="narration" class="narration"></ol>
+  </details>
+
+  <details class="panel" id="journal">
+    <summary>Khatri's Journal</summary>
+    <ol id="journal-list" class="journal-list"></ol>
+  </details>
+
+  <details class="panel" id="lighthouse-voice" style="display:none;">
+    <summary>Voice from the Lighthouse</summary>
+    <ol id="lighthouse-voice-list" class="lighthouse-voice-list"></ol>
+  </details>
+
+  <details class="panel" id="bus-panel" style="display:none;">
+    <summary>The Bus</summary>
+    <div class="bus-body">
+      <div id="bus-countdown" class="bus-countdown">—</div>
+      <ul id="bus-passengers" class="bus-passengers"></ul>
+    </div>
   </details>
 </aside>
 {% endblock %}

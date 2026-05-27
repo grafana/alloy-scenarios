@@ -33,6 +33,7 @@ from contracts import (
     World,
 )
 
+import legacy
 from agents.characters import Character
 
 
@@ -91,11 +92,61 @@ def _get_awareness_cooldowns(world: World) -> Dict[str, int]:
 
 
 # ---------------------------------------------------------------------------
-# Compatibility
+# Trust graph
 # ---------------------------------------------------------------------------
 
 
-# Role-pair compatibility hints — symmetric, default 1.0.
+def _trust_initialised(world: World) -> bool:
+    return bool(getattr(world, "_trust_initialised", False))
+
+
+def _initialise_trust(world: World) -> None:
+    """Seed every ordered pair of agents with the configured baseline once."""
+    baseline = world.config.trust_baseline
+    ids = list(world.agents.keys())
+    for i in range(len(ids)):
+        for j in range(len(ids)):
+            if i == j:
+                continue
+            key = (ids[i], ids[j])
+            if key not in world.trust:
+                world.trust[key] = baseline
+    world._trust_initialised = True  # type: ignore[attr-defined]
+
+
+def trust_for(world: World, a_id: str, b_id: str) -> float:
+    """Symmetric trust score in [0,1] between two agents.
+
+    Falls back to ``config.trust_baseline`` when the pair has no history.
+    The matrix is lazily initialised on first call.
+    """
+    if a_id == b_id:
+        return 0.0
+    if not _trust_initialised(world):
+        _initialise_trust(world)
+    baseline = world.config.trust_baseline
+    return world.trust.get((a_id, b_id), baseline)
+
+
+def adjust_trust(world: World, a_id: str, b_id: str, delta: float, reason: str) -> None:
+    """Apply a symmetric trust delta between two ids, clamped to [0,1]."""
+    if a_id == b_id or not a_id or not b_id:
+        return
+    if not _trust_initialised(world):
+        _initialise_trust(world)
+    baseline = world.config.trust_baseline
+    cur = world.trust.get((a_id, b_id), baseline)
+    new = max(0.0, min(1.0, cur + delta))
+    world.trust[(a_id, b_id)] = new
+    world.trust[(b_id, a_id)] = new
+    world.emit(Event(
+        tick=world.tick_count, type="trust_shift",
+        subject=a_id, detail=f"{a_id}<->{b_id} {delta:+.2f} ({reason}) -> {new:.2f}",
+        severity="info",
+    ))
+
+
+# Role-pair compatibility hints — feeds the conversation pairing on top of trust.
 _ROLE_COMPAT: Dict[frozenset, float] = {
     frozenset({Role.SHERIFF, Role.DEPUTY}): 1.8,
     frozenset({Role.SHERIFF, Role.LEADER_COLONY}): 1.4,
@@ -108,17 +159,6 @@ _ROLE_COMPAT: Dict[frozenset, float] = {
     frozenset({Role.INVESTIGATOR, Role.SEER}): 1.4,
     frozenset({Role.INVESTIGATOR, Role.LEADER_COLONY}): 0.7,
 }
-
-
-def compatibility(a: Character, b: Character) -> float:
-    """Score how likely two characters are to strike up a conversation."""
-    if a is b:
-        return 0.0
-    base = _ROLE_COMPAT.get(frozenset({a.role, b.role}), 1.0)
-    social = 0.5 * (a.personality.get("social", 0.5) + b.personality.get("social", 0.5))
-    # Paranoia depresses social inclination.
-    paranoia = 0.5 * (a.personality.get("paranoid", 0.5) + b.personality.get("paranoid", 0.5))
-    return base * (0.4 + 1.2 * social) * (1.1 - 0.5 * paranoia)
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +243,7 @@ def _check_awareness_triggers(world: World) -> None:
         )
 
 
-def _attend_roll(world: World, ch: Character, topic: str) -> bool:
+def _attend_roll(world: World, ch: Character, topic: str, caller_id: Optional[str] = None) -> bool:
     if ch.status != Status.ACTIVE:
         return False
     if ch.state in (State.SLEEPING, State.EXPEDITION, State.HYPNOTIZED, State.IRRATIONAL):
@@ -216,6 +256,11 @@ def _attend_roll(world: World, ch: Character, topic: str) -> bool:
         base += 0.4 * ch.personality.get("paranoid", 0.5)
     if topic == "food_supply":
         base += 0.3 * ch.personality.get("leader", 0.3)
+    # Trust in the caller skews willingness to show up.
+    if caller_id and caller_id != ch.id:
+        t = trust_for(world, ch.id, caller_id)
+        # Centred around baseline so neutral trust is a no-op.
+        base += (t - world.config.trust_baseline) * 0.5
     return world.rng.random() < min(0.95, base)
 
 
@@ -236,7 +281,7 @@ def _drive_pending_meetings(world: World) -> None:
         # Gather attendees the first tick after proposal.
         if not pm.attendees and world.tick_count == pm.started_tick + 1:
             for ch in _characters(world):
-                if _attend_roll(world, ch, pm.topic):
+                if _attend_roll(world, ch, pm.topic, caller_id=pm.caller_id):
                     pm.attendees.append(ch.id)
                     _pin_to_meeting(world, ch, pm.deadline_tick, pm.venue_id)
             # Ensure caller is present.
@@ -281,16 +326,20 @@ def _resolve_meeting(world: World, pm: _PendingMeeting) -> None:
 
     if pm.topic == "imposter_suspicion":
         accused = payload.get("accused_npc_id")
-        # Tally guilt scores: each attendee contributes their awareness of the accused.
+        # Tally guilt scores: each attendee contributes their awareness of the
+        # accused, weighted by how much they trust the caller (the accuser).
         guilt_yes = 0.0
         guilt_no = 0.0
+        guilty_voters: List[str] = []
         for a in attendees:
             score = float(a.awareness.get(accused, 0.0))
             paranoid = a.personality.get("paranoid", 0.5)
+            trust_w = trust_for(world, a.id, pm.caller_id) if a.id != pm.caller_id else 1.0
             # Paranoid attendees tip toward guilty even with thin evidence.
-            vote_yes = score + (paranoid - 0.5) * 2.0
+            vote_yes = (score + (paranoid - 0.5) * 2.0) * (0.5 + trust_w)
             if vote_yes > 0:
                 guilt_yes += vote_yes
+                guilty_voters.append(a.id)
             else:
                 guilt_no += -vote_yes + 0.5
         guilty = guilt_yes > guilt_no
@@ -304,6 +353,34 @@ def _resolve_meeting(world: World, pm: _PendingMeeting) -> None:
             detail=f"accused={accused} guilty={guilty}",
             severity="warn" if guilty else "info",
         ))
+        # Trust consequences for the verdict.
+        if guilty:
+            # Check whether the accusation was correct — accused must be a
+            # current Yellow tendril for the vote to be "right".
+            tendrils = set(world.yellow_active.tendrils or [])
+            disguised = world.yellow_active.disguised_as
+            if disguised:
+                tendrils.add(disguised)
+            correct = accused in tendrils
+            venue = world.buildings.get(pm.venue_id)
+            venue_name = venue.name if venue is not None else pm.venue_id
+            if correct:
+                # A genuine banishment — journal it.
+                world.emit(Event(
+                    tick=world.tick_count, type="imposter_banished",
+                    subject=pm.caller_id, detail=f"{accused} banished from {venue_name}",
+                    severity="warn",
+                ))
+                legacy.record(world, "imposter_banished", building=venue_name)
+            else:
+                # Witch-hunt: punish trust toward the accuser for everyone who
+                # voted guilty.
+                for voter_id in guilty_voters:
+                    if voter_id != pm.caller_id:
+                        adjust_trust(
+                            world, voter_id, pm.caller_id,
+                            -0.25, "innocent_npc_vote",
+                        )
     elif pm.topic == "food_supply":
         # Leaders + brave folk push for expedition.
         push = sum(0.5 * a.personality.get("leader", 0.3)
@@ -340,6 +417,15 @@ def _resolve_meeting(world: World, pm: _PendingMeeting) -> None:
         severity="warn" if pm.topic == "imposter_suspicion" else "info",
     ))
 
+    # Trust deltas across the attendee graph.
+    if decision in ("agree", "disagree") and len(attendees) >= 2:
+        delta = 0.05 if decision == "agree" else -0.10
+        reason = f"meeting_{decision}:{pm.topic}"
+        ids = [a.id for a in attendees]
+        for i in range(len(ids)):
+            for j in range(i + 1, len(ids)):
+                adjust_trust(world, ids[i], ids[j], delta, reason)
+
     # Release attendees from State.MEETING; on disagreement, flip a few to ARGUING.
     if decision == "disagree" and len(attendees) >= 2:
         n_arg = min(2, len(attendees))
@@ -347,6 +433,7 @@ def _resolve_meeting(world: World, pm: _PendingMeeting) -> None:
     else:
         arguers = []
     arg_set = {a.id for a in arguers}
+    arguer_ids = list(arg_set)
     for a in attendees:
         a.meeting_until_tick = 0
         if a.id in arg_set:
@@ -363,6 +450,10 @@ def _resolve_meeting(world: World, pm: _PendingMeeting) -> None:
             a.state = State.WANDERING
             a.state_since_tick = world.tick_count
             a.target = None
+    # Pairwise trust hit for the arguers.
+    for i in range(len(arguer_ids)):
+        for j in range(i + 1, len(arguer_ids)):
+            adjust_trust(world, arguer_ids[i], arguer_ids[j], -0.15, "argument")
 
     # Clear awareness for the accused once a verdict has landed.
     if pm.topic == "imposter_suspicion":
@@ -420,7 +511,13 @@ def _drive_conversations(world: World) -> None:
             d = math.hypot(a.x - b.x, a.y - b.y)
             if d > CONVERSATION_RADIUS:
                 continue
-            score = compatibility(a, b)
+            # Blend trust with the role-compat hint and social personality.
+            base = _ROLE_COMPAT.get(frozenset({a.role, b.role}), 1.0)
+            social = 0.5 * (a.personality.get("social", 0.5) + b.personality.get("social", 0.5))
+            paranoia = 0.5 * (a.personality.get("paranoid", 0.5) + b.personality.get("paranoid", 0.5))
+            t = trust_for(world, a.id, b.id)
+            # Centre trust around 0.5 so neutral is a no-op; max ~2x weighting.
+            score = base * (0.4 + 1.2 * social) * (1.1 - 0.5 * paranoia) * (0.5 + 2.0 * t)
             if world.rng.random() < 0.05 * score:
                 until = world.tick_count + CONVERSATION_DURATION_TICKS
                 pairs[a.id] = (b.id, until)
@@ -440,4 +537,5 @@ def _drive_conversations(world: World) -> None:
                     tick=world.tick_count, type="conversation",
                     subject=a.id, detail=f"with {b.id}",
                 ))
+                adjust_trust(world, a.id, b.id, 0.03, "conversation")
                 break

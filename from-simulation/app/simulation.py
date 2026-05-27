@@ -53,6 +53,9 @@ from agents import supernatural as _supernatural
 from agents import characters as _characters  # B: tick_societies + build_characters
 from agents import population as _population   # C: tick_population + clear_npcs
 from agents import yellow_man as _yellow_man   # C: tick_yellow + reset_yellow_scheduling
+from agents import dreams as _dreams           # A v2: tick_dreams + fire_due_prophecies
+from agents import lighthouse as _lighthouse   # A v2: tick_lighthouse
+from agents import bus as _bus                 # C v2: tick_bus + clear_outsiders
 from time_cycle import phase_for, update_lighting
 from world import reset_world
 
@@ -211,12 +214,17 @@ class Simulation:
         # Fear runs first so anyone who died from a paranormal break this tick
         # gets reaped by the population/resurrection passes below.
         _fear.propagate(world)
+        # A v2: dream lifecycle BEFORE tick_societies so B sees DREAMING flips.
+        _dreams.tick_dreams(world)
         # Agent B: social rituals, resurrection countdown, expedition lifecycle.
         _characters.tick_societies(world)
-        # Agent C: NPC arrivals/deaths, then Yellow Man (consumes any vote
-        # outcomes Agent B just produced inside tick_societies).
+        # Agent C: bus arrivals/departures FIRST so survivors boarding are
+        # gone before NPC reaping; then NPC arrivals/deaths; then Yellow Man.
+        _bus.tick_bus(world)
         _population.tick_population(world)
         _yellow_man.tick_yellow(world)
+        # A v2: lighthouse runs AFTER yellow so a wipe can't race a call.
+        _lighthouse.tick_lighthouse(world)
         # Back to Agent A: food drains, dusk creature spawn, dumb supernaturals.
         _food.tick(world)
         _creatures.maybe_spawn(world)  # reads world.last_phase before we bump it
@@ -224,6 +232,10 @@ class Simulation:
 
         # 6) Bump last_phase now that maybe_spawn has consumed the edge.
         world.last_phase = world.time.phase
+
+        # 6b) Fire any prophecies whose moment has come, AFTER all the
+        # systems that might satisfy a trigger have run this tick.
+        _dreams.fire_due_prophecies(world)
 
         # 7) Gauges + counters.
         self._emit_metrics(world)
@@ -300,6 +312,21 @@ class Simulation:
             sanity_avg = 0.0
         tele.gauge_set(Metric.FEAR_AVG, fear_avg)
         tele.gauge_set(Metric.SANITY_AVG, sanity_avg)
+
+        # v2 gauges — dreams, lighthouse, legacy.
+        tele.gauge_set(Metric.DREAMS_ACTIVE, float(len(world.active_dreams)))
+        tele.gauge_set(
+            Metric.LIGHTHOUSE_VOICE_ACTIVE,
+            1.0 if world.lighthouse_voice_active else 0.0,
+        )
+        tele.gauge_set(
+            Metric.LEGACY_JOURNAL_FRAGMENTS,
+            float(len(world.legacy.journal_fragments)),
+        )
+        tele.gauge_set(
+            Metric.LEGACY_CYCLES_WITNESSED,
+            float(world.legacy.cycles_witnessed),
+        )
 
     def _broadcast(self, world: World) -> None:
         # Prefer the registered emitter (decoupled from any transport); fall

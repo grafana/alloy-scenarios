@@ -21,7 +21,9 @@ from typing import Dict
 
 from contracts import Event, Status, World
 
+import legacy
 from agents.characters import Character, respawn_character
+from agents.social import adjust_trust
 
 
 RECOGNITION_RADIUS = 40.0
@@ -96,12 +98,31 @@ def tick_resurrection(world: World) -> None:
                     subject=r.id, detail=f"by {other.id} "
                     f"({world.recognition_counts[r.id]}/{world.config.recognition_threshold})",
                 ))
+                # Recognition rebuilds trust between the returner and the
+                # townsfolk who keep noticing them.
+                adjust_trust(world, r.id, other.id, 0.20, "recognition")
                 if world.recognition_counts[r.id] >= world.config.recognition_threshold:
                     r.status = Status.ACTIVE
                     world.recognition_counts.pop(r.id, None)
+                    # Re-apply accumulated drift to the live object so the
+                    # character that walks back in matches what the next cycle
+                    # would seed.
+                    drift = world.legacy.personality_drift.get(r.name, {})
+                    if drift:
+                        for trait, delta in drift.items():
+                            cur = r.personality.get(trait, 0.5)
+                            r.personality[trait] = max(0.0, min(1.0, cur + delta))
+                        world.emit(Event(
+                            tick=world.tick_count, type="personality_drift",
+                            subject=r.id,
+                            detail=f"on restore, applied {drift}",
+                            severity="info",
+                        ))
                     world.emit(Event(
                         tick=world.tick_count, type="char_restored",
                         subject=r.id, detail=f"{r.name} is recognised and restored",
                         severity="info",
                     ))
+                    # Journal: a homecoming completed.
+                    legacy.record(world, "homecoming", name=r.name)
                 break  # one bump per tick is plenty

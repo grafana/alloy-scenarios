@@ -21,13 +21,16 @@ import random
 from contracts import (
     BUILDING_LAYOUT,
     Building,
+    BusState,
     Config,
+    Legacy,
     Phase,
     SimTime,
     World,
     YellowState,
 )
 from events import make_event_buffer
+from legacy import distill_legacy_from
 
 
 def _apply_building_layout(world: World) -> None:
@@ -78,11 +81,16 @@ def reset_world(world: World) -> None:
     increments the wipe counter, and clears the ``pending_reset`` flag.
     Engine time is reset to D0 06:00 of a fresh cycle.
 
-    Owner-of-field discipline: we intentionally clear ``world.agents``,
-    ``yellow_touched_npcs``, and ``meeting_outcomes`` here because the reset is
-    the one moment the engine is allowed to bulldoze cross-slice state — every
-    other tick those dicts/lists are owned by B/C.
+    v2: ``world.legacy`` and ``world.bus.next_arrival_cycle`` SURVIVE the wipe.
+    Before bulldozing, we ``distill_legacy_from(world)`` — that scans the dying
+    cycle's events and applies the marks/drift/fragment-burning to the Legacy.
+    Pending prophecies for the next cycle survive too.
     """
+    # 1) Distill the lessons of this cycle into the Legacy BEFORE the wipe.
+    distill_legacy_from(world)
+
+    # 2) Bump the legacy counter once per wipe.
+    world.legacy.cycles_witnessed += 1
     world.village_wipes += 1
     world.pending_reset = False
 
@@ -98,6 +106,17 @@ def reset_world(world: World) -> None:
     world.yellow_active = YellowState()
     world.expedition_authorised = False
     world.expedition_active = False
+
+    # v2 — transient state cleared, persistent state preserved.
+    world.trust = {}  # baseline gets re-seeded by Agent B on character build
+    world.active_dreams.clear()
+    world.lighthouse_called = None
+    world.lighthouse_voice_active = False
+    # Bus: preserve next_arrival_cycle counter (so the cadence persists), reset
+    # the rest. If we just left a cycle whose number IS the scheduled arrival,
+    # the bus tick logic will activate after rebuild.
+    preserved_next = world.bus.next_arrival_cycle
+    world.bus = BusState(next_arrival_cycle=preserved_next)
 
     # Engine state
     world.food_supply = 100.0

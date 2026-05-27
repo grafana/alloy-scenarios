@@ -51,6 +51,22 @@
       <feDisplacementMap in="SourceGraphic" scale="1.5" />
     </filter>
 
+    <!-- CRT-scanline filter for the lighthouse-voice radio panel (referenced from CSS) -->
+    <filter id="crt" x="0%" y="0%" width="100%" height="100%">
+      <feFlood flood-color="#0a1e10" flood-opacity="0" result="bg" />
+      <feTurbulence type="fractalNoise" baseFrequency="0.0 1.6" numOctaves="1" seed="7" result="noise" />
+      <feColorMatrix in="noise" type="matrix"
+        values="0 0 0 0 0
+                0 0 0 0 0.65
+                0 0 0 0 0.4
+                0 0 0 0.18 0" result="scanlines" />
+      <feComposite in="scanlines" in2="SourceGraphic" operator="in" result="lines" />
+      <feMerge>
+        <feMergeNode in="SourceGraphic" />
+        <feMergeNode in="lines" />
+      </feMerge>
+    </filter>
+
     <!-- A reusable tree silhouette for the forest ring -->
     <symbol id="tree-tiny" viewBox="0 0 20 24">
       <path d="M10 1 L3 14 L7 14 L1 22 L19 22 L13 14 L17 14 Z" fill="#0d2b13" />
@@ -186,6 +202,44 @@
       stroke-linecap="round"
       opacity="0.75"
     />
+
+    <!-- v2: bus-road continuations.
+         West: dirt road slips through the forest edge and joins the dirt loop near (188, 340).
+         East: an exit road leaves the loop near (812, 340) and curls out into the eastern forest. -->
+    <g id="bus-road">
+      <path
+        d="M 70 320 Q 130 325 188 340"
+        fill="none"
+        stroke="#46381f"
+        stroke-width="18"
+        stroke-linecap="round"
+        opacity="0.82"
+      />
+      <path
+        d="M 70 320 Q 130 325 188 340"
+        fill="none"
+        stroke="#5a4729"
+        stroke-width="12"
+        stroke-dasharray="2 14"
+        opacity="0.6"
+      />
+      <path
+        d="M 812 340 Q 870 300 940 250"
+        fill="none"
+        stroke="#46381f"
+        stroke-width="18"
+        stroke-linecap="round"
+        opacity="0.82"
+      />
+      <path
+        d="M 812 340 Q 870 300 940 250"
+        fill="none"
+        stroke="#5a4729"
+        stroke-width="12"
+        stroke-dasharray="2 14"
+        opacity="0.6"
+      />
+    </g>
   </g>
 
   <!-- ============================== Colony House hilltop ============================== -->

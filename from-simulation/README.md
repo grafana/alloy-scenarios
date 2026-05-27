@@ -66,6 +66,17 @@ All variables are optional — defaults are in `docker-compose.yml` and `app/con
 | `OTEL_EXPORTER_OTLP_ENDPOINT`     | `http://alloy:4318`    | OTLP/HTTP endpoint for logs + metrics                  |
 | `PYROSCOPE_SERVER_ADDRESS`        | `http://alloy:9999`    | Pyroscope push endpoint                                |
 | `SERVICE_NAME`                    | `from-sim`             | Resource service.name attribute                        |
+| `PERSONALITY_DRIFT_RATE`          | `0.04`                 | How fast a survivor's personality traits drift per cycle |
+| `JOURNAL_FRAGMENT_SURVIVAL_PROB`  | `0.6`                  | Per-fragment chance a journal line survives a wipe     |
+| `DREAM_TRIGGER_SANITY_THRESHOLD`  | `40.0`                 | Sanity ceiling below which a sleeping character may dream |
+| `DREAM_TRIGGER_PROB`              | `0.08`                 | Per-eligible-sleep chance of starting a dream          |
+| `DREAM_DURATION_TICKS`            | `30`                   | How long a single dream lasts                          |
+| `BUS_ARRIVAL_CYCLE_INTERVAL`      | `5`                    | Cycles between bus arrivals                            |
+| `BUS_STAY_TICKS`                  | `1440`                 | Ticks the bus parks in town before departing           |
+| `YELLOW_HYDRA_MIN`                | `2`                    | Minimum simultaneous Yellow Man tendrils in IMPOSTER mode |
+| `YELLOW_HYDRA_MAX`                | `3`                    | Maximum simultaneous Yellow Man tendrils               |
+| `LIGHTHOUSE_CALL_TICK_FRAC`       | `0.4`                  | Fraction of NIGHT after which the lighthouse may call  |
+| `TRUST_BASELINE`                  | `0.5`                  | Initial pairwise trust value between characters        |
 
 ### Optional LLM narration
 
@@ -85,6 +96,39 @@ Without a key the simulation runs in pure deterministic mode and the **Narration
 > - `img/fromville-map.png` — full UI with day phase
 > - `img/fromville-night.png` — UI with night phase and creature breach
 > - `img/grafana-overview.png` — Grafana dashboard view
+
+## v2 features
+
+The second iteration adds cross-cycle memory, dreams, outsiders, and the lighthouse — six surfaces visible in the Fromville UI in addition to everything from v1.
+
+### Khatri's Journal (right column, sepia panel)
+
+Each cycle, characters jot fragments of village history into a shared Legacy. When the town falls and a new cycle begins, a fraction of fragments survive (controlled by `JOURNAL_FRAGMENT_SURVIVAL_PROB`) — their text is preserved but increasingly "burned": the higher a fragment's `burned` value, the more transparent its line in the journal panel. The HUD also surfaces `cycles_witnessed` ("Cycle N of all that has ever been") and a small "fragments" indicator.
+
+### Building hash marks
+
+Every time a creature breaches a building, a tally mark is etched into Legacy under that building's id. The UI renders up to twelve tally lines (groups of four with a diagonal slash) at the building's southeast corner; anything beyond twelve is summarised as "+N". These marks survive village wipes, so a building's scar count grows across cycles.
+
+### The Bus and Outsiders
+
+Periodically (every `BUS_ARRIVAL_CYCLE_INTERVAL` cycles) a yellow school bus drives in along the western dirt road, parks near the diner, and drops off "outsider" agents who pursue their own backstory goals for `BUS_STAY_TICKS` ticks before the bus departs east. Outsiders render as pale-gold dots with a "+" glyph above them; while the bus is in town, a yellow-bordered Bus panel lists each passenger with their backstory snippet and a countdown to the next arrival cycle. The SVG map gains continuation dirt-road segments at both edges so the bus path looks like it joins the existing oval.
+
+### Yellow Man hydra (tendrils)
+
+The Yellow Man is no longer a single imposter — in IMPOSTER mode he is now a small set of NPCs (between `YELLOW_HYDRA_MIN` and `YELLOW_HYDRA_MAX`). Every member of `payload.yellow.tendrils` gets a slow-pulsing mustard ring; the disguise leader (`yellow.disguised_as`) gets a brighter, faster ring. The town must identify all of them before the deadline.
+
+### Dreams and dream-mode
+
+When a sleeping character's sanity is below `DREAM_TRIGGER_SANITY_THRESHOLD`, they may begin to dream (`DREAM_TRIGGER_PROB` per eligible tick). Each active dream renders a small green-serif dialog box next to the dreamer with the latest one or two visitor lines, and the whole map shifts into "dream mode" — a hue-rotated, desaturated tint that returns to normal when no dreams are active. Dream lines that match certain trigger events become prophecies in Legacy that may fire one cycle later.
+
+### Lighthouse call
+
+Late in NIGHT (after `LIGHTHOUSE_CALL_TICK_FRAC` of the phase), the lighthouse may call a single character: they receive a slow aqua pulsing ring on the map and bias toward walking down to the lighthouse. When the call is active and the lighthouse's voice is heard, the "Voice from the Lighthouse" panel becomes visible — a black-background monospace radio that prints the rolling last ten `lighthouse_voice` event details with a CRT-style scanline twitch.
+
+### Stability notes for v2 UI
+
+- All v2 panels read snapshot fields **only**: `payload.legacy`, `payload.dreams`, `payload.bus`, `payload.lighthouse`, `payload.yellow.tendrils`. No new client/server contract is required beyond `snapshot_dict`.
+- The dream overlay, hash-mark groups, ring overlays, bus group, and outsider glyphs are all reused between ticks — they are created on demand and torn down only when the corresponding world state stops emitting them, so per-tick render cost stays near v1.
 
 ## Repository
 

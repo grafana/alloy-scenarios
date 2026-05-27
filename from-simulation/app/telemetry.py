@@ -43,7 +43,22 @@ from opentelemetry.sdk.metrics.view import View
 import pyroscope
 from pyroscope.otel import PyroscopeSpanProcessor
 
-from contracts import Config, SimTelemetry as SimTelemetryProtocol
+from contracts import Config, Metric, SimTelemetry as SimTelemetryProtocol
+
+
+# v2 — gauges we know exist from the engine and want present at startup, even
+# before the first tick fires (so dashboards don't show "no data" on a fresh
+# process). Counters auto-register on first inc; observable gauges only show
+# up once ``_ensure_gauge`` has been called for them at least once.
+_V2_GAUGE_NAMES = (
+    Metric.DREAMS_ACTIVE,
+    Metric.LIGHTHOUSE_VOICE_ACTIVE,
+    Metric.LEGACY_JOURNAL_FRAGMENTS,
+    Metric.LEGACY_CYCLES_WITNESSED,
+    Metric.OUTSIDERS_ACTIVE,
+    Metric.YELLOW_TENDRILS,
+    Metric.TRUST_AVG,
+)
 
 
 def _http_to_grpc(http_endpoint: str) -> str:
@@ -80,6 +95,9 @@ class SimTelemetry(SimTelemetryProtocol):
         self._setup_tracing()
         self._setup_metrics()
         self._setup_profiling()
+        # Pre-register v2 gauges so they appear in /v1/metrics from tick 0.
+        for _name in _V2_GAUGE_NAMES:
+            self._ensure_gauge(_name)
 
     # ------------------------------------------------------------------ logs
     def _setup_logging(self, level_name: str) -> None:

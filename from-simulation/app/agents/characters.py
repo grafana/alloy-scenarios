@@ -44,6 +44,8 @@ from contracts import (
 from agents.base import distance, move_toward  # type: ignore  # noqa: F401
 from agents.states import TRANSITION_TABLE  # type: ignore  # noqa: F401
 
+import legacy
+
 
 # ---------------------------------------------------------------------------
 # Tuning knobs
@@ -283,9 +285,21 @@ class Character(Agent):
         self.expedition_role: Optional[str] = None  # "leader" | "member" | None
         self.target: Optional[Tuple[float, float]] = None
 
+        # Cross-cycle bookkeeping
+        self._obituary_written: bool = False
+
     # ------------------------------------------------------------------ tick
     def tick(self, world: World) -> None:
-        if self.status in (Status.DEAD, Status.ABSENT):
+        if self.status == Status.DEAD:
+            # First DEAD-status tick: write an obituary into the journal.
+            if not self._obituary_written:
+                self._obituary_written = True
+                try:
+                    legacy.record(world, "char_death", name=self.name)
+                except Exception:
+                    pass
+            return
+        if self.status == Status.ABSENT:
             return
 
         # ---- Drives & sanity ---------------------------------------------
@@ -372,6 +386,7 @@ class Character(Agent):
         phase = world.time.phase
         tod = TOD_MULT.get(phase, {})
         priority = set(ROLE_PRIORITY.get(self.role, []))
+        prophecy_mult = self._prophecy_bias(world)
 
         out: List[Tuple[State, float]] = []
         # TRANSITION_TABLE entries are (next_state, base_weight, tod_multipliers)
@@ -391,9 +406,70 @@ class Character(Agent):
                     w *= 1.0 + (factor - 1.0) * val
             if next_state in priority:
                 w *= ROLE_BONUS
+            # Prophecy bias — pending prophecies mentioning this character.
+            w *= prophecy_mult.get(next_state, 1.0)
             if w > 0:
                 out.append((next_state, w))
         return out
+
+    # Words inside a prophecy payload that hint at a state being warned against.
+    _PROPHECY_WARNINGS: Dict[str, List[State]] = {
+        "door": [State.PATROLLING, State.SHELTERING],
+        "sleep through": [State.SLEEPING, State.SHELTERING],
+        "do not sleep": [State.SLEEPING],
+        "do not pray": [State.PRAYING],
+        "stay inside": [State.PATROLLING, State.WANDERING],
+        "leave": [State.SHELTERING, State.SLEEPING],
+    }
+
+    _ROLE_HINTS: Dict[Role, List[str]] = {
+        Role.SHERIFF: ["sheriff"],
+        Role.DEPUTY: ["deputy"],
+        Role.LEADER_COLONY: ["leader", "colony"],
+        Role.ENGINEER: ["engineer"],
+        Role.CARETAKER: ["caretaker", "nurse"],
+        Role.BRIDGE: ["bridge"],
+        Role.INVESTIGATOR: ["investigator"],
+        Role.PRIEST: ["priest", "father"],
+        Role.SEER: ["seer"],
+        Role.CHILD: ["child"],
+    }
+
+    def _prophecy_bias(self, world: World) -> Dict[State, float]:
+        """Return per-state multipliers from pending prophecies that mention us.
+
+        Heuristic: any prophecy whose payload substring-matches this character's
+        name or a role keyword applies; +20% to states named in the payload,
+        -50% on states the prophecy 'warns against' (via ``_PROPHECY_WARNINGS``).
+        Does NOT consume the prophecy — Agent A's ``fire_due_prophecies`` does
+        that on the proper trigger.
+        """
+        legacy_obj = getattr(world, "legacy", None)
+        if legacy_obj is None:
+            return {}
+        prophecies = getattr(legacy_obj, "pending_prophecies", None)
+        if not prophecies:
+            return {}
+        name_lower = self.name.lower()
+        role_keywords = self._ROLE_HINTS.get(self.role, [])
+        mult: Dict[State, float] = {}
+        for p in prophecies:
+            payload = (getattr(p, "payload", "") or "").lower()
+            if not payload:
+                continue
+            mentions_me = name_lower in payload or any(k in payload for k in role_keywords)
+            if not mentions_me:
+                continue
+            # +20% on states whose name appears in the payload.
+            for s in State:
+                if s.value.lower() in payload:
+                    mult[s] = mult.get(s, 1.0) * 1.2
+            # -50% on warned-against states.
+            for trigger, states in self._PROPHECY_WARNINGS.items():
+                if trigger in payload:
+                    for s in states:
+                        mult[s] = mult.get(s, 1.0) * 0.5
+        return mult
 
     def _precondition_ok(self, s: State, world: World) -> bool:
         # Multi-agent states are entered by the social loop, not by self.tick().
@@ -549,8 +625,21 @@ def _building_xy(building_id: str) -> Tuple[float, float]:
     return (500.0, 350.0)
 
 
+def _personality_with_drift(world: World, seed: "_Seed") -> Dict[str, float]:
+    """Apply accumulated legacy drift to a seed's personality (clamped [0,1])."""
+    base = dict(seed.personality)
+    deltas = world.legacy.personality_drift.get(seed.name, {}) if world.legacy else {}
+    for trait, dv in deltas.items():
+        base[trait] = max(0.0, min(1.0, base.get(trait, 0.5) + dv))
+    return base
+
+
 def build_characters(world: World) -> None:
-    """Instantiate every seeded character and register in ``world.agents``."""
+    """Instantiate every seeded character and register in ``world.agents``.
+
+    Applies any accumulated legacy drift to each personality before
+    construction so reborn characters carry their previous-cycle scars.
+    """
     for seed in CHARACTER_SEEDS:
         x, y = _building_xy(seed.dwelling_id)
         # Small jitter so they don't all overlap at spawn.
@@ -560,7 +649,7 @@ def build_characters(world: World) -> None:
             name=seed.name,
             dwelling_id=seed.dwelling_id,
             role=seed.role,
-            personality=seed.personality,
+            personality=_personality_with_drift(world, seed),
             schedule=seed.schedule,
             x=x, y=y,
         )
@@ -571,7 +660,11 @@ def build_characters(world: World) -> None:
 
 
 def respawn_character(world: World, name: str) -> None:
-    """Re-instantiate a character at a forest intake point with status RETURNING."""
+    """Re-instantiate a character at a forest intake point with status RETURNING.
+
+    Applies any accumulated legacy drift (``world.legacy.personality_drift``) to
+    the seed personality before instantiating. Each trait is clamped to [0,1].
+    """
     seed = next((s for s in CHARACTER_SEEDS if s.name == name), None)
     if seed is None:
         return
@@ -579,11 +672,19 @@ def respawn_character(world: World, name: str) -> None:
     ix, iy = world.rng.choice(NPC_INTAKE_POINTS)
     ix += world.rng.uniform(-15.0, 15.0)
     iy += world.rng.uniform(-15.0, 15.0)
+
+    # Apply legacy drift to the seed personality.
+    personality = dict(seed.personality)
+    drift = world.legacy.personality_drift.get(name, {}) if world.legacy else {}
+    for trait, delta in drift.items():
+        cur = personality.get(trait, 0.5)
+        personality[trait] = max(0.0, min(1.0, cur + delta))
+
     c = Character(
         name=seed.name,
         dwelling_id=seed.dwelling_id,
         role=seed.role,
-        personality=seed.personality,
+        personality=personality,
         schedule=seed.schedule,
         x=ix, y=iy,
     )

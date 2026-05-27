@@ -462,3 +462,237 @@ body.theme-dread {
 }
 
 .hidden { display: none !important; }
+
+/* ============================================================
+ * v2 additions — legacy hash marks, bus, outsiders, tendrils,
+ * lighthouse-called, dream mode, journal / voice / bus panels.
+ * ============================================================ */
+
+/* HUD: cycles_witnessed badge + fragments indicator */
+.hud-fragments {
+  margin-left: 8px;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: #c0a070;
+  font-variant-numeric: tabular-nums;
+}
+.hud-witnessed {
+  font-family: "Georgia", serif;
+  font-style: italic;
+  font-size: 11px;
+  color: #c0a070;
+  letter-spacing: 0.5px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Hash-mark tallies above breached buildings */
+.hash-marks line {
+  stroke: #1c1610;
+  stroke-width: 1;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+.hash-marks .hash-overflow,
+text.hash-overflow {
+  fill: #2a1d12;
+  font-size: 8px;
+  font-family: "Georgia", serif;
+}
+
+/* Bus — yellow rect, black windows, soft drop shadow */
+.bus {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
+  transition: transform 800ms ease-out;
+}
+.bus .bus-body-rect {
+  fill: #e9c93d;
+  stroke: #1c1304;
+  stroke-width: 1.2;
+}
+.bus .bus-window {
+  fill: #0a0a10;
+  stroke: #1c1304;
+  stroke-width: 0.5;
+}
+.bus .bus-door {
+  fill: #6c5320;
+  stroke: #1c1304;
+  stroke-width: 0.5;
+}
+.bus .bus-wheel {
+  fill: #0a0805;
+  stroke: #1c1304;
+  stroke-width: 0.6;
+}
+
+/* Outsiders — pale-gold circle slightly larger than NPC, with "+" glyph above */
+#entities circle.outsider {
+  fill: #d9c486;
+  r: 5.5;
+  stroke: rgba(80, 60, 20, 0.7);
+  stroke-width: 0.8;
+}
+.outsider-glyph {
+  fill: #e8d9a4;
+  font-size: 9px;
+  font-family: "Georgia", serif;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* Yellow Man tendrils — mustard pulsing ring */
+#overlays circle.tendril {
+  stroke: #c2a23f;
+  stroke-width: 1.4;
+  opacity: 0.7;
+  r: 9;
+  animation: tendril-pulse 2.2s ease-in-out infinite;
+}
+#overlays circle.tendril-leader {
+  stroke: #f4d77a;
+  stroke-width: 2;
+  opacity: 0.9;
+  r: 10;
+  animation: tendril-pulse 1.6s ease-in-out infinite;
+  filter: drop-shadow(0 0 5px rgba(244, 215, 122, 0.7));
+}
+@keyframes tendril-pulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
+}
+
+/* Lighthouse-called — slow aqua pulse */
+#overlays circle.called {
+  stroke: #6bd3d1;
+  stroke-width: 1.6;
+  opacity: 0.8;
+  r: 11;
+  fill: none;
+  animation: called-pulse 3.2s ease-in-out infinite;
+  filter: drop-shadow(0 0 6px rgba(107, 211, 209, 0.6));
+}
+@keyframes called-pulse {
+  0%, 100% { opacity: 0.35; r: 10; }
+  50%      { opacity: 0.9;  r: 13; }
+}
+
+/* Dream-mode — washes the whole SVG in a hue-rotated, desaturated tint */
+svg#world {
+  transition: filter 1000ms ease;
+}
+svg#world.dream-mode {
+  filter: hue-rotate(80deg) saturate(0.6) brightness(0.85);
+}
+
+/* Dream dialog text — green serif, faded edges */
+.dream-dialog text {
+  font-family: "Georgia", serif;
+  font-size: 9px;
+  fill: #8edc9c;
+  opacity: 0.85;
+  text-shadow: 0 0 4px rgba(60, 100, 60, 0.4);
+  paint-order: stroke;
+  stroke: rgba(8, 16, 8, 0.85);
+  stroke-width: 0.6;
+}
+
+/* Roster drift indicator */
+.roster-list li.drifted {
+  color: #e7c4ed;
+  font-style: italic;
+}
+
+/* ============================== Journal panel ============================== */
+#journal {
+  background: #2a2014;
+  border-color: #5a4528;
+}
+#journal > summary {
+  background: #3a2c18;
+  color: #e7c98a;
+  border-bottom-color: #5a4528;
+}
+.journal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: "Georgia", "Times New Roman", serif;
+  font-style: italic;
+  font-size: 12px;
+  color: #efe2bf;
+}
+.journal-list li {
+  padding: 5px 0;
+  border-bottom: 1px dotted #5a4528;
+  line-height: 1.4;
+}
+
+/* ============================== Lighthouse voice panel ============================== */
+#lighthouse-voice {
+  background: #02100a;
+  border-color: #1f6240;
+}
+#lighthouse-voice > summary {
+  background: #051a10;
+  color: #6bd3a1;
+  border-bottom-color: #1f6240;
+}
+.lighthouse-voice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: "Courier New", "Menlo", monospace;
+  font-size: 12px;
+  color: #6bd3a1;
+  letter-spacing: 1.2px;
+  text-shadow: 0 0 3px rgba(107, 211, 161, 0.4);
+}
+.lighthouse-voice-list li {
+  padding: 4px 0;
+  border-bottom: 1px dotted #1f6240;
+  animation: crt-twitch 4s steps(20, end) infinite;
+}
+@keyframes crt-twitch {
+  0%, 92%, 100% { letter-spacing: 1.2px; }
+  93%           { letter-spacing: 2.2px; opacity: 0.8; }
+  95%           { letter-spacing: 0.8px; opacity: 1; }
+}
+
+/* ============================== Bus panel ============================== */
+#bus-panel {
+  border-color: #c2a23f;
+}
+#bus-panel > summary {
+  background: #1f1a08;
+  color: #f4d77a;
+  border-bottom-color: #c2a23f;
+}
+.bus-countdown {
+  font-family: "Georgia", serif;
+  font-size: 12px;
+  color: #f4d77a;
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+.bus-passengers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+.bus-passengers li {
+  padding: 4px 0;
+  border-bottom: 1px dotted var(--line);
+}
+.bus-passengers li strong { color: var(--char); }
+.bus-passengers li .bus-back {
+  color: var(--muted);
+  font-style: italic;
+}
+.bus-passengers li.bus-empty {
+  color: var(--muted);
+  font-style: italic;
+}

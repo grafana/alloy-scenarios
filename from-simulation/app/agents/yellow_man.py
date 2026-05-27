@@ -153,7 +153,13 @@ def _distance(ax: float, ay: float, bx: float, by: float) -> float:
 
 
 def _start_appearance(world: World) -> None:
-    """Decide IMPOSTER vs VISIBLE_MARCH and arm the deadline."""
+    """Decide IMPOSTER vs VISIBLE_MARCH and arm the deadline.
+
+    v2: in IMPOSTER mode we now pick ``[yellow_hydra_min, yellow_hydra_max]``
+    distinct NPC tendrils. ``disguised_as`` points at the "leader" tendril
+    (the most visible one); ``tendrils`` lists all of them. OUTSIDERS are
+    excluded from the disguise pool — only plain NPCs can be hijacked.
+    """
     cfg = world.config
     rng = world.rng
     ya = world.yellow_active
@@ -169,11 +175,28 @@ def _start_appearance(world: World) -> None:
             # No NPC to wear -> fall back to a visible march.
             _begin_march(world)
             return
-        target = rng.choice(npcs)
+
+        # Decide how many tendrils, clamped to the available NPC count.
+        hydra_min = max(1, cfg.yellow_hydra_min)
+        hydra_max = max(hydra_min, cfg.yellow_hydra_max)
+        n_hydra = rng.randint(hydra_min, hydra_max)
+        n_hydra = max(1, min(n_hydra, len(npcs)))
+
+        chosen = rng.sample(npcs, n_hydra)
+        tendril_ids = [n.id for n in chosen]
+        leader_id = tendril_ids[0]
+
         ya.mode = YellowMode.IMPOSTER
-        ya.disguised_as = target.id
-        # Touched, definitionally.
-        world.yellow_touched_npcs.add(target.id)
+        ya.disguised_as = leader_id
+        ya.tendrils = list(tendril_ids)
+        # Track the initial hydra count so banishments can shorten the deadline
+        # proportionally. Stored via setattr because YellowState's dataclass
+        # is owned by contracts.py and we don't add fields unilaterally.
+        setattr(ya, "_initial_hydra", n_hydra)
+
+        # All tendrils are touched definitionally.
+        for tid in tendril_ids:
+            world.yellow_touched_npcs.add(tid)
     else:
         _begin_march(world)
         return
@@ -187,7 +210,10 @@ def _start_appearance(world: World) -> None:
             tick=world.tick_count,
             type="yellow_appearance",
             subject="yellow_man",
-            detail=f"mode={ya.mode.value} disguised_as={ya.disguised_as}",
+            detail=(
+                f"mode={ya.mode.value} disguised_as={ya.disguised_as} "
+                f"tendrils={len(ya.tendrils)}"
+            ),
             severity="warn",
         )
     )
@@ -201,6 +227,16 @@ def _start_appearance(world: World) -> None:
                 severity="warn",
             )
         )
+        for tid in ya.tendrils:
+            world.emit(
+                Event(
+                    tick=world.tick_count,
+                    type="yellow_tendril_added",
+                    subject=tid,
+                    detail=f"tendril count now {len(ya.tendrils)}",
+                    severity="warn",
+                )
+            )
 
 
 def _begin_march(world: World) -> None:
@@ -241,6 +277,13 @@ def _end_appearance(world: World, reason: str) -> None:
     ya.deadline_tick = 0
     ya.started_at_tick = 0
     ya.path_index = 0
+    ya.tendrils.clear()
+    # Drop the hydra-count sentinel.
+    if hasattr(ya, "_initial_hydra"):
+        try:
+            delattr(ya, "_initial_hydra")
+        except AttributeError:
+            pass
     # Touched set persists across appearances by design (per spec).
     _schedule_next_appearance(world)
 
@@ -311,6 +354,29 @@ def _find_disguise(world: World) -> Optional[NPC]:
     if isinstance(a, NPC) and a.status == Status.ACTIVE:
         return a
     return None
+
+
+def _live_tendrils(world: World) -> List[NPC]:
+    """Return the list of currently-living tendril NPCs.
+
+    Side-effect: prunes ``ya.tendrils`` of any ids that no longer point to an
+    active NPC (the underlying agent may have been reaped between ticks).
+    """
+    ya = world.yellow_active
+    out: List[NPC] = []
+    pruned: List[str] = []
+    for tid in list(ya.tendrils):
+        a = world.agents.get(tid)
+        if isinstance(a, NPC) and a.status == Status.ACTIVE:
+            out.append(a)
+        else:
+            pruned.append(tid)
+    if pruned:
+        ya.tendrils = [t for t in ya.tendrils if t not in pruned]
+        # Keep ``disguised_as`` consistent — promote a survivor if the leader fell.
+        if ya.disguised_as in pruned:
+            ya.disguised_as = ya.tendrils[0] if ya.tendrils else None
+    return out
 
 
 def _children(world: World) -> List[Any]:
@@ -394,17 +460,27 @@ def _consult_llm(world: World, npc: NPC) -> Optional[str]:
 
 
 def _tick_imposter(world: World) -> None:
-    npc = _find_disguise(world)
-    if npc is None:
-        # Our disguise died or vanished — abort silently and reschedule.
+    """Hydra-aware imposter tick.
+
+    Every live tendril gets the subtle fear bias each tick. To keep behaviour
+    legible (and not have every tendril simultaneously LURE_OUTSIDE on one tick),
+    we pick a single random tendril each tick to apply an imposter action to.
+    """
+    tendrils = _live_tendrils(world)
+    if not tendrils:
+        # Every tendril is dead/missing — abort silently and reschedule.
         _end_appearance(world, "disguise_lost")
         return
 
-    # Bias the imposter NPC: add subtle extra fear so it reads "off".
-    npc.fear = min(1.0, npc.fear + 0.0005)
+    # Subtle fear bias on every tendril — they all read slightly "off".
+    for t in tendrils:
+        t.fear = min(1.0, t.fear + 0.0005)
+
+    # Pick one tendril to act through this tick.
+    actor = world.rng.choice(tendrils)
 
     # Pick an action: LLM if available, else weighted random.
-    action = _consult_llm(world, npc)
+    action = _consult_llm(world, actor)
     if action is None:
         rng = world.rng
         # Phase-aware weighting.
@@ -423,7 +499,7 @@ def _tick_imposter(world: World) -> None:
             action = None
 
     if action is not None:
-        _apply_imposter_action(world, npc, action)
+        _apply_imposter_action(world, actor, action)
 
 
 # ---------------------------------------------------------------------------
@@ -445,6 +521,15 @@ def _consume_meeting_outcomes(world: World) -> None:
 
 
 def _handle_suspicion(world: World, mo: MeetingOutcome) -> None:
+    """Hydra-aware vote handling.
+
+    v2 rules:
+        * Not guilty           -> just log it (unchanged).
+        * Guilty + a tendril   -> banish that tendril; shorten deadline
+                                  proportionally; if no tendrils remain, the
+                                  whole imposter is banished (sanity bump).
+        * Guilty + not tendril -> innocent dies; fear spike; Yellow stays.
+    """
     ya = world.yellow_active
     accused = mo.payload.get("accused_npc_id")
     guilty = bool(mo.payload.get("guilty"))
@@ -462,38 +547,65 @@ def _handle_suspicion(world: World, mo: MeetingOutcome) -> None:
         )
         return
 
-    # Guilty + accusation matches our disguise -> banished.
-    if accused is not None and ya.mode == YellowMode.IMPOSTER and accused == ya.disguised_as:
-        # Bump sanity on every character (+5 scaled to a 0..1 sanity is huge,
-        # so we treat the "5" as a percent boost = +0.05).
-        for a in world.agents.values():
-            if getattr(a, "kind", None) == AgentKind.CHARACTER:
-                cur = getattr(a, "sanity", None)
-                if cur is not None:
-                    try:
-                        a.sanity = min(1.0, float(cur) + 0.05)
-                    except Exception:
-                        pass
-        # Kill the now-exposed impostor NPC.
+    # Guilty + the accused is one of our tendrils -> tendril banished.
+    if (
+        accused is not None
+        and ya.mode == YellowMode.IMPOSTER
+        and accused in ya.tendrils
+    ):
+        # Remove the tendril.
+        ya.tendrils = [t for t in ya.tendrils if t != accused]
+        # Kill the now-exposed tendril NPC.
         npc = world.agents.get(accused)
         if npc is not None:
             try:
                 npc.status = Status.DEAD
             except Exception:
                 pass
+
         world.emit(
             Event(
                 tick=world.tick_count,
-                type="imposter_banished",
+                type="yellow_tendril_banished",
                 subject=accused,
-                detail="The village named him true and he could not stay",
-                severity="info",
+                detail=f"tendrils remaining: {len(ya.tendrils)}",
+                severity="warn",
             )
         )
-        _end_appearance(world, "banished")
+
+        # Shorten the deadline proportionally to initial hydra size.
+        initial = int(getattr(ya, "_initial_hydra", max(1, len(ya.tendrils) + 1)))
+        if initial > 0:
+            shrink = world.config.yellow_deadline_ticks // initial
+            ya.deadline_tick = max(world.tick_count + 1, ya.deadline_tick - shrink)
+
+        # If the leader fell, promote a survivor.
+        if accused == ya.disguised_as:
+            ya.disguised_as = ya.tendrils[0] if ya.tendrils else None
+
+        # If no tendrils remain, the whole imposter is banished.
+        if not ya.tendrils:
+            for a in world.agents.values():
+                if getattr(a, "kind", None) == AgentKind.CHARACTER:
+                    cur = getattr(a, "sanity", None)
+                    if cur is not None:
+                        try:
+                            a.sanity = min(1.0, float(cur) + 0.05)
+                        except Exception:
+                            pass
+            world.emit(
+                Event(
+                    tick=world.tick_count,
+                    type="imposter_banished",
+                    subject=accused,
+                    detail="The last tendril fell — the village named him true",
+                    severity="info",
+                )
+            )
+            _end_appearance(world, "banished")
         return
 
-    # Guilty but they got the wrong person -> kill the innocent + fear spike.
+    # Guilty but they got someone outside the hydra -> kill the innocent + fear spike.
     if accused is not None and accused in world.agents:
         innocent = world.agents[accused]
         try:
@@ -586,6 +698,11 @@ def tick_yellow(world: World) -> None:
             Metric.YELLOW_ACTIVE,
             0.0 if ya.mode == YellowMode.DORMANT else 1.0,
             {"mode": ya.mode.value},
+        )
+        # v2 hydra count — 0 when not in IMPOSTER mode.
+        world.telemetry.gauge_set(
+            Metric.YELLOW_TENDRILS,
+            float(len(ya.tendrils)),
         )
 
 

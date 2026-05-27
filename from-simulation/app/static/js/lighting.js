@@ -67,6 +67,67 @@
     }
   }
 
+  // ---------------------------------------------------------- v2: dream overlay
+  // character_id -> <g class="dream-dialog">
+  const dreamDialogs = new Map();
+
+  function renderDreamOverlay(payload) {
+    const world = document.getElementById("world");
+    const overlays = document.getElementById("overlays");
+    if (!world || !overlays) return;
+    const dreams = Array.isArray(payload.dreams) ? payload.dreams : [];
+    if (dreams.length === 0) {
+      world.classList.remove("dream-mode");
+      for (const [, g] of dreamDialogs) g.remove();
+      dreamDialogs.clear();
+      return;
+    }
+    world.classList.add("dream-mode");
+
+    // Build an id -> {x, y} lookup from the agents in this snapshot.
+    const agentXY = new Map();
+    for (const a of (payload.agents || [])) {
+      if (a && a.id) agentXY.set(a.id, { x: a.x, y: a.y });
+    }
+
+    const seen = new Set();
+    for (const d of dreams) {
+      if (!d || !d.character_id) continue;
+      const pos = agentXY.get(d.character_id);
+      if (!pos) continue;
+      seen.add(d.character_id);
+      let g = dreamDialogs.get(d.character_id);
+      if (!g) {
+        g = document.createElementNS(SVG_NS, "g");
+        g.setAttribute("class", "dream-dialog");
+        g.setAttribute("pointer-events", "none");
+        overlays.appendChild(g);
+        dreamDialogs.set(d.character_id, g);
+      }
+      // Position dialog just above and to the right of the dreaming dot.
+      const ox = (pos.x || 0) + 12;
+      const oy = (pos.y || 0) - 18;
+      g.setAttribute("transform", `translate(${ox}, ${oy})`);
+      // Show the latest 1-2 lines.
+      while (g.firstChild) g.removeChild(g.firstChild);
+      const lines = (Array.isArray(d.lines) ? d.lines : []).slice(-2);
+      lines.forEach((line, i) => {
+        const t = document.createElementNS(SVG_NS, "text");
+        t.setAttribute("x", 0);
+        t.setAttribute("y", i * 10);
+        t.textContent = String(line || "").slice(0, 80);
+        g.appendChild(t);
+      });
+    }
+    // Cull dialogs for dreams that have ended this tick.
+    for (const [id, g] of dreamDialogs) {
+      if (!seen.has(id)) {
+        g.remove();
+        dreamDialogs.delete(id);
+      }
+    }
+  }
+
   window.addEventListener("from:tick", (e) => {
     const payload = e.detail || {};
     const rect = ensureOverlay();
@@ -76,5 +137,6 @@
     }
     const phase = (payload.time && payload.time.phase) || "DAY";
     updateLighthouseGlow(phase);
+    renderDreamOverlay(payload);
   });
 })();

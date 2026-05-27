@@ -68,6 +68,10 @@ class State(str, enum.Enum):
     # NPC mini-FSM
     WORKING = "WORKING"
     SOCIALIZING = "SOCIALIZING"
+    # v2 additions
+    DREAMING = "DREAMING"
+    CALLED = "CALLED"        # heard the lighthouse — biases toward LIGHTHOUSE
+    OUTSIDER_GOAL = "OUTSIDER_GOAL"  # outsiders pursuing their backstory goal
 
 
 class Role(str, enum.Enum):
@@ -96,6 +100,7 @@ class AgentKind(str, enum.Enum):
     NPC = "npc"
     CREATURE = "creature"
     SUPERNATURAL = "supernatural"
+    OUTSIDER = "outsider"
 
 
 class MarkerClass(str, enum.Enum):
@@ -106,6 +111,8 @@ class MarkerClass(str, enum.Enum):
     MAN_IN_YELLOW = "man-in-yellow"
     ANGHKOOEY = "anghkooey"
     FARAWAY_TREE = "faraway-tree"
+    OUTSIDER = "outsider"
+    BUS = "bus"
 
 
 class YellowMode(str, enum.Enum):
@@ -208,6 +215,33 @@ EVENT_TYPES = {
     "food_low",
     # LLM
     "llm_decision",
+    # v2 — cross-cycle memory
+    "journal_entry",
+    "journal_fragment_found",
+    "journal_page_burns",
+    "personality_drift",
+    "hash_mark_added",
+    # v2 — trust
+    "trust_shift",
+    # v2 — dreams
+    "dream_begin",
+    "dream_line",
+    "dream_end",
+    "prophecy_set",
+    "prophecy_fired",
+    # v2 — bus + outsiders
+    "bus_arrival",
+    "bus_depart",
+    "outsider_joined",
+    "outsider_left",
+    "outsider_died",
+    # v2 — yellow hydra
+    "yellow_tendril_added",
+    "yellow_tendril_banished",
+    # v2 — lighthouse
+    "lighthouse_call",
+    "lighthouse_enter",
+    "lighthouse_voice",
 }
 
 
@@ -215,10 +249,71 @@ EVENT_TYPES = {
 class YellowState:
     """State of an active Man in Yellow appearance. Owned by Agent C."""
     mode: YellowMode = YellowMode.DORMANT
-    disguised_as: Optional[str] = None  # npc id when in IMPOSTER mode
+    disguised_as: Optional[str] = None  # npc id when in IMPOSTER mode (the "leader" tendril)
     started_at_tick: int = 0
     deadline_tick: int = 0  # absolute tick; >0 only when active
     path_index: int = 0  # for visible-march mode
+    tendrils: List[str] = field(default_factory=list)  # v2: hydra mode — all imposter NPC ids
+
+
+# ---------------------------------------------------------------------------
+# v2 — cross-cycle memory, dreams, bus, lighthouse
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class JournalFragment:
+    """One line of village history. Lives in Legacy; partially survives wipes."""
+    cycle_recorded: int
+    text: str
+    burned: float = 0.0  # 0=pristine, 1=unreadable
+
+
+@dataclass
+class Prophecy:
+    """A cryptic line set in a dream that may come true 1 cycle later."""
+    set_at_cycle: int
+    fires_at_cycle: int
+    trigger: str  # canonical event-type or pseudo-event key
+    payload: str  # the line the dream visitor spoke
+
+
+@dataclass
+class Dream:
+    """Transient — one active dream per sleeping low-sanity character."""
+    character_id: str
+    started_at_tick: int
+    duration: int  # ticks
+    lines: List[str] = field(default_factory=list)
+    visitor: str = "self"  # "boy_in_white" | "anghkooey" | "self"
+
+
+@dataclass
+class BusState:
+    """Bus arrival schedule. ``next_arrival_cycle`` survives wipes."""
+    next_arrival_cycle: int = 5
+    active: bool = False
+    arrival_tick: int = 0
+    departure_tick: int = 0
+    passengers: List[str] = field(default_factory=list)  # outsider ids currently in town
+    path_index: int = 0  # along YELLOW_MARCH_PATH-like waypoints (reused for bus path)
+    x: float = 0.0
+    y: float = 0.0
+
+
+@dataclass
+class Legacy:
+    """The one thing the universe remembers across wipes.
+
+    ``reset_world`` preserves this object; everything else is bulldozed.
+    """
+    journal_fragments: List[JournalFragment] = field(default_factory=list)
+    building_breach_marks: Dict[str, int] = field(default_factory=dict)  # building_id -> count
+    personality_drift: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    # char_name -> {trait_name: delta}, accumulated forever
+    deaths_by_creature: Dict[str, int] = field(default_factory=dict)
+    cycles_witnessed: int = 0  # incremented once per village_wipe
+    pending_prophecies: List[Prophecy] = field(default_factory=list)
 
 
 @dataclass
@@ -265,6 +360,23 @@ class Config:
     pyroscope_endpoint: str = "http://alloy:9999"
     service_name: str = "from-sim"
     log_level: str = "INFO"
+    # v2 — cross-cycle memory + drift
+    personality_drift_rate: float = 0.04
+    journal_fragment_survival_prob: float = 0.6
+    # v2 — dreams
+    dream_trigger_sanity_threshold: float = 40.0
+    dream_trigger_prob: float = 0.08
+    dream_duration_ticks: int = 30
+    # v2 — bus
+    bus_arrival_cycle_interval: int = 5
+    bus_stay_ticks: int = 1440
+    # v2 — yellow hydra
+    yellow_hydra_min: int = 2
+    yellow_hydra_max: int = 3
+    # v2 — lighthouse
+    lighthouse_call_tick_frac: float = 0.4
+    # v2 — trust
+    trust_baseline: float = 0.5
 
     @classmethod
     def from_env(cls, getenv: Callable[[str, Optional[str]], Optional[str]]) -> "Config":
@@ -305,6 +417,17 @@ class Config:
             pyroscope_endpoint=_s("PYROSCOPE_SERVER_ADDRESS", "http://alloy:9999"),
             service_name=_s("SERVICE_NAME", "from-sim"),
             log_level=_s("LOG_LEVEL", "INFO"),
+            personality_drift_rate=_f("PERSONALITY_DRIFT_RATE", 0.04),
+            journal_fragment_survival_prob=_f("JOURNAL_FRAGMENT_SURVIVAL_PROB", 0.6),
+            dream_trigger_sanity_threshold=_f("DREAM_TRIGGER_SANITY_THRESHOLD", 40.0),
+            dream_trigger_prob=_f("DREAM_TRIGGER_PROB", 0.08),
+            dream_duration_ticks=_i("DREAM_DURATION_TICKS", 30),
+            bus_arrival_cycle_interval=_i("BUS_ARRIVAL_CYCLE_INTERVAL", 5),
+            bus_stay_ticks=_i("BUS_STAY_TICKS", 1440),
+            yellow_hydra_min=_i("YELLOW_HYDRA_MIN", 2),
+            yellow_hydra_max=_i("YELLOW_HYDRA_MAX", 3),
+            lighthouse_call_tick_frac=_f("LIGHTHOUSE_CALL_TICK_FRAC", 0.4),
+            trust_baseline=_f("TRUST_BASELINE", 0.5),
         )
 
 
@@ -400,6 +523,14 @@ class World:
     llm_decider: Optional[Any] = None  # llm.decider.LLMDecider when ANTHROPIC_API_KEY is set
     narrations: List[Dict[str, str]] = field(default_factory=list)  # rolling window of LLM reasons
 
+    # --- v2: cross-cycle memory, dreams, bus, lighthouse, trust ---
+    legacy: "Legacy" = field(default_factory=lambda: Legacy())  # persists through wipes
+    trust: Dict[Tuple[str, str], float] = field(default_factory=dict)  # (id_a, id_b) -> [0,1]
+    active_dreams: List[Dream] = field(default_factory=list)
+    bus: BusState = field(default_factory=BusState)
+    lighthouse_called: Optional[str] = None  # char id when a call is active
+    lighthouse_voice_active: bool = False
+
     @property
     def cycle_number(self) -> int:
         return self.village_wipes + 1
@@ -425,6 +556,21 @@ class World:
 # ---------------------------------------------------------------------------
 
 
+def _enrich_agent(agent: Agent, world: World) -> Dict[str, Any]:
+    """Decorate the bare agent dict with cross-cycle fields known only to World.
+
+    Currently adds a ``drift`` bool for named characters who have any non-zero
+    entry in ``world.legacy.personality_drift``. Outsiders already expose
+    ``backstory`` / ``goal`` via their own to_dict; we don't override those.
+    """
+    d = agent.to_dict()
+    name = getattr(agent, "name", None)
+    if name and getattr(agent, "kind", None) == AgentKind.CHARACTER:
+        deltas = world.legacy.personality_drift.get(name)
+        d["drift"] = bool(deltas) and any(abs(v) > 1e-6 for v in deltas.values())
+    return d
+
+
 def snapshot_dict(world: World) -> Dict[str, Any]:
     """The shape SocketIO emits as a 'tick' event. Frontend (Agent D) renders this.
 
@@ -448,11 +594,42 @@ def snapshot_dict(world: World) -> Dict[str, Any]:
         "yellow": {
             "mode": world.yellow_active.mode.value,
             "disguised_as": world.yellow_active.disguised_as,
+            "tendrils": list(world.yellow_active.tendrils),
             "deadline_in": max(0, world.yellow_active.deadline_tick - world.tick_count)
             if world.yellow_active.deadline_tick
             else 0,
         },
         "narration": list(world.narrations)[-10:],
+        "legacy": {
+            "cycles_witnessed": world.legacy.cycles_witnessed,
+            "journal_fragments": [
+                {"text": j.text, "burned": round(j.burned, 2), "cycle": j.cycle_recorded}
+                for j in world.legacy.journal_fragments[-12:]
+            ],
+            "building_breach_marks": dict(world.legacy.building_breach_marks),
+            "pending_prophecies": len(world.legacy.pending_prophecies),
+        },
+        "dreams": [
+            {"character_id": d.character_id, "lines": list(d.lines),
+             "visitor": d.visitor, "duration_left": max(0, d.duration - (world.tick_count - d.started_at_tick))}
+            for d in world.active_dreams
+        ],
+        "bus": {
+            "active": world.bus.active,
+            "passengers": list(world.bus.passengers),
+            "next_arrival_cycle": world.bus.next_arrival_cycle,
+            "x": round(world.bus.x, 2),
+            "y": round(world.bus.y, 2),
+            "departure_in_ticks": (
+                max(0, world.bus.departure_tick - world.tick_count)
+                if world.bus.active and world.bus.departure_tick
+                else 0
+            ),
+        },
+        "lighthouse": {
+            "called": world.lighthouse_called,
+            "voice_active": world.lighthouse_voice_active,
+        },
         "buildings": [
             {
                 "id": b.id,
@@ -466,7 +643,7 @@ def snapshot_dict(world: World) -> Dict[str, Any]:
             }
             for b in world.buildings.values()
         ],
-        "agents": [a.to_dict() for a in world.agents.values()],
+        "agents": [_enrich_agent(a, world) for a in world.agents.values()],
         "creatures": [c.to_dict() for c in world.creatures],
         "supernaturals": [s.to_dict() for s in world.supernaturals],
         "events": [
@@ -506,6 +683,14 @@ class Metric:
     SANITY_AVG = "from_sim_sanity_avg"                # gauge
     VILLAGE_WIPES_TOTAL = "from_sim_village_wipes_total"  # counter
     YELLOW_ACTIVE = "from_sim_yellow_active"          # gauge 0/1, attr: mode
+    # v2 metrics
+    LEGACY_JOURNAL_FRAGMENTS = "from_sim_legacy_journal_fragments"  # gauge
+    LEGACY_CYCLES_WITNESSED = "from_sim_legacy_cycles_witnessed"    # gauge
+    OUTSIDERS_ACTIVE = "from_sim_outsiders_active"                  # gauge
+    YELLOW_TENDRILS = "from_sim_yellow_tendrils"                    # gauge
+    LIGHTHOUSE_VOICE_ACTIVE = "from_sim_lighthouse_voice_active"    # gauge 0/1
+    DREAMS_ACTIVE = "from_sim_dreams_active"                        # gauge
+    TRUST_AVG = "from_sim_trust_avg"                                # gauge
 
 
 PHASE_TO_NUM = {Phase.DAY: 0, Phase.DUSK: 1, Phase.NIGHT: 2, Phase.DAWN: 3}
@@ -554,4 +739,13 @@ NPC_INTAKE_POINTS: List[Tuple[float, float]] = [
 YELLOW_MARCH_PATH: List[Tuple[float, float]] = [
     (90, 350), (250, 360), (400, 380), (520, 380),
     (680, 360), (800, 320), (900, 280),
+]
+
+# Bus path — drives in along the dirt road, parks near the diner, drives out the other way.
+BUS_PATH_IN: List[Tuple[float, float]] = [
+    (90, 320), (200, 330), (340, 340), (480, 340), (570, 340),
+]
+BUS_PARK: Tuple[float, float] = (600, 330)  # next to the diner
+BUS_PATH_OUT: List[Tuple[float, float]] = [
+    (600, 330), (720, 320), (840, 290), (920, 250),
 ]

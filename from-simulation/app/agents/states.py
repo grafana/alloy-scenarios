@@ -202,4 +202,11 @@ TRANSITION_TABLE: Dict[State, List[Transition]] = {
         (State.GOSSIPING, 1.0, _DAY_ONLY),
         (State.SHELTERING, 1.0, _DUSK_NIGHT),
     ],
+    # v2 — dreaming decays back to sleeping; the engine's dreams.tick owns
+    # the actual lifecycle but we register a transition so the generic FSM
+    # never deadlocks if a character is sampled mid-dream.
+    State.DREAMING: [
+        (State.SLEEPING, 4.0, _ANYTIME),
+        (State.DREAMING, 1.0, _ANYTIME),
+    ],
 }
