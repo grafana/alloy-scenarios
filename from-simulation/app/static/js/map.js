@@ -301,6 +301,22 @@
       }
       return;
     }
+    if (mc === "music-box") {
+      // small ornate gold box with soft pulsing glow
+      const entry = ensureShape(item.id, "rect", "music-box", {
+        x: -6, y: -4, width: 12, height: 8, rx: 1,
+      });
+      if (entry) entry.el.setAttribute("transform", `translate(${x} ${y})`);
+      return;
+    }
+    if (mc === "cicada") {
+      const entry = ensureShape(item.id, "circle", "cicada", { r: 1.6 });
+      if (entry) {
+        entry.el.setAttribute("cx", x);
+        entry.el.setAttribute("cy", y);
+      }
+      return;
+    }
     if (item.kind === "outsider" || mc === "outsider") {
       const entry = ensureShape(item.id, "circle", "outsider", { r: 7 });
       if (entry) {
@@ -512,6 +528,42 @@
       li.textContent = typeof line === "string" ? line : (line && line.text) || "";
       list.appendChild(li);
     });
+  }
+
+  // ---------------------------------------------------------- v4: cooling-off haze
+  const coolingMarkers = new Map();
+  function renderCoolingOff(buildings) {
+    const overlays = $("overlays");
+    if (!overlays) return;
+    const live = new Set();
+    for (const b of buildings) {
+      if (!b || !b.id) continue;
+      const cooling = (b.cooling_off || 0) > 0 || b.protected === false && b.has_talisman;
+      if (!cooling) continue;
+      live.add(b.id);
+      let entry = coolingMarkers.get(b.id);
+      if (!entry) {
+        const g = document.createElementNS(SVG_NS, "g");
+        g.setAttribute("class", "cooling-off");
+        const haze = document.createElementNS(SVG_NS, "rect");
+        haze.setAttribute("x", -22);
+        haze.setAttribute("y", -22);
+        haze.setAttribute("width", 44);
+        haze.setAttribute("height", 44);
+        haze.setAttribute("rx", 4);
+        g.appendChild(haze);
+        overlays.appendChild(g);
+        entry = { group: g };
+        coolingMarkers.set(b.id, entry);
+      }
+      entry.group.setAttribute("transform", `translate(${b.x || 0} ${b.y || 0})`);
+    }
+    for (const [id, entry] of coolingMarkers) {
+      if (!live.has(id)) {
+        entry.group.remove();
+        coolingMarkers.delete(id);
+      }
+    }
   }
 
   // ---------------------------------------------------------- v2: hash marks
@@ -829,6 +881,7 @@
     const buildings = Array.isArray(payload.buildings) ? payload.buildings : [];
     const legacy = payload.legacy || {};
     renderHashMarks(buildings, legacy.building_breach_marks);
+    renderCoolingOff(buildings);
     renderBus(payload.bus);
 
     updateHud(payload);

@@ -109,18 +109,44 @@ def _already_dreaming(world: World, char_id: str) -> bool:
     return any(d.character_id == char_id for d in world.active_dreams)
 
 
+_BALLERINA_LINES: List[str] = [
+    "The ballerina turned and her mouth was full of worms.",
+    "She danced, and the music wound back to its beginning.",
+    "Twirl me, said the ballerina.",
+    "The cicadas were already inside the dream.",
+    "She told me the rhyme was older than the town.",
+]
+
+
 def _pick_visitor(world: World) -> str:
-    r = world.rng.random()
-    if r < 0.45:
-        return "boy_in_white"
-    if r < 0.80:
-        return "anghkooey"
-    return "self"
+    # When the Music Box is awake, the ballerina haunts dreams alongside the
+    # boy/anghkooey/self options. She gets a flat 50% slice of the pool when
+    # active; otherwise she's 0%.
+    ballerina_active = getattr(world, "music_box_phase", "DORMANT") != "DORMANT"
+    weights = [
+        ("boy_in_white", 0.45),
+        ("anghkooey", 0.35),
+        ("self", 0.20),
+    ]
+    if ballerina_active:
+        # Renormalise the original three to share the remaining 50%, ballerina = 50%.
+        weights = [
+            ("boy_in_white", 0.225),
+            ("anghkooey", 0.175),
+            ("self", 0.100),
+            ("ballerina", 0.500),
+        ]
+    options = [v for v, _ in weights]
+    probs = [w for _, w in weights]
+    return world.rng.choices(options, weights=probs, k=1)[0]
 
 
-def _generate_lines(world: World, count: int) -> List[str]:
-    # Choose ``count`` distinct lines from the pool.
-    pool = list(_DREAM_LINES)
+def _generate_lines(world: World, count: int, visitor: str = "self") -> List[str]:
+    # Choose ``count`` distinct lines from the pool. Ballerina has her own pool.
+    if visitor == "ballerina":
+        pool = list(_BALLERINA_LINES)
+    else:
+        pool = list(_DREAM_LINES)
     world.rng.shuffle(pool)
     return pool[: max(1, count)]
 
@@ -159,7 +185,7 @@ def tick_dreams(world: World) -> None:
 
         visitor = _pick_visitor(world)
         n_lines = rng.randint(2, 4)
-        lines = _generate_lines(world, n_lines)
+        lines = _generate_lines(world, n_lines, visitor)
         dream = Dream(
             character_id=agent.id,
             started_at_tick=world.tick_count,
@@ -182,6 +208,16 @@ def tick_dreams(world: World) -> None:
                 severity="info",
             )
         )
+        if visitor == "ballerina":
+            world.emit(
+                Event(
+                    tick=world.tick_count,
+                    type="ballerina_vision",
+                    subject=agent.id,
+                    detail=f"the ballerina enters {agent.id}'s dream",
+                    severity="warn",
+                )
+            )
 
     # 2) Progress each active dream: emit the next line on cadence, end on
     #    duration. Iterate over a snapshot since we may mutate the list.

@@ -56,6 +56,9 @@ from agents import yellow_man as _yellow_man   # C: tick_yellow + reset_yellow_s
 from agents import dreams as _dreams           # A v2: tick_dreams + fire_due_prophecies
 from agents import lighthouse as _lighthouse   # A v2: tick_lighthouse
 from agents import bus as _bus                 # C v2: tick_bus + clear_outsiders
+from agents import music_box as _music_box     # A v4: tick_music_box
+from agents import cooling_off as _cooling_off # A v4: tick_cooling_off
+from agents import npc_problems as _npc_problems  # C v4: tick_npc_problems
 from time_cycle import phase_for, update_lighting
 from world import reset_world
 
@@ -221,7 +224,14 @@ class Simulation:
         # Agent C: bus arrivals/departures FIRST so survivors boarding are
         # gone before NPC reaping; then NPC arrivals/deaths; then Yellow Man.
         _bus.tick_bus(world)
+        # C v4: NPC sanity-break unlocks the door — fires before population
+        # reaping so the deaths and displacements it creates land same-tick.
+        _npc_problems.tick_npc_problems(world)
         _population.tick_population(world)
+        # A v4: music box runs between population and yellow_man so a wipe-y
+        # cool-off sweep happens before yellow re-evaluates the talisman map.
+        _music_box.tick_music_box(world)
+        _cooling_off.tick_cooling_off(world)
         _yellow_man.tick_yellow(world)
         # A v2: lighthouse runs AFTER yellow so a wipe can't race a call.
         _lighthouse.tick_lighthouse(world)
@@ -327,6 +337,29 @@ class Simulation:
             Metric.LEGACY_CYCLES_WITNESSED,
             float(world.legacy.cycles_witnessed),
         )
+
+        # v4 — music box + cooling-off gauges.
+        box_active = (
+            1.0
+            if world.music_box_phase != "DORMANT" or world.music_box_id is not None
+            else 0.0
+        )
+        tele.gauge_set(Metric.MUSIC_BOX_ACTIVE, box_active)
+        tele.gauge_set(
+            Metric.MUSIC_BOX_PHASE,
+            float(_music_box.PHASE_NUM.get(world.music_box_phase, 0)),
+        )
+        tele.gauge_set(
+            Metric.HOUSES_COOLING_OFF,
+            float(
+                sum(
+                    1
+                    for b in world.buildings.values()
+                    if b.cooling_off_until_tick > world.tick_count
+                )
+            ),
+        )
+        tele.gauge_set(Metric.WORMS_INFECTED, float(len(world.worms_infected)))
 
     def _broadcast(self, world: World) -> None:
         # Prefer the registered emitter (decoupled from any transport); fall

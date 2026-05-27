@@ -828,6 +828,48 @@ svg#world.dream-mode {
   fill: #1a1611;
 }
 
+/* ----- v4: music box, cicada, cooling-off haze --------------------------- */
+#entities .music-box {
+  fill: #d8a83a;
+  stroke: #1a1611;
+  stroke-width: 0.8;
+  cursor: pointer;
+  filter: drop-shadow(0 0 4px rgba(216, 168, 58, 0.6));
+  animation: musicBoxPulse 2.2s ease-in-out infinite;
+  transition: transform 400ms linear;
+}
+@keyframes musicBoxPulse {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(216, 168, 58, 0.55)); }
+  50%      { filter: drop-shadow(0 0 9px rgba(216, 168, 58, 0.95)); }
+}
+
+#entities .cicada {
+  fill: #6b5b3a;
+  opacity: 0.85;
+  stroke: #1a1611;
+  stroke-width: 0.3;
+  pointer-events: none;
+  animation: cicadaTwitch 0.4s steps(2) infinite;
+}
+@keyframes cicadaTwitch {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(1px, -1px); }
+  100% { transform: translate(-1px, 0); }
+}
+
+#overlays .cooling-off rect {
+  fill: rgba(168, 58, 42, 0.18);
+  stroke: rgba(168, 58, 42, 0.55);
+  stroke-width: 0.8;
+  stroke-dasharray: 3 4;
+  pointer-events: none;
+  animation: coolingPulse 3s ease-in-out infinite;
+}
+@keyframes coolingPulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.95; }
+}
+
 /* ----- Township Index panel ----- */
 #township-index .index-list {
   font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;

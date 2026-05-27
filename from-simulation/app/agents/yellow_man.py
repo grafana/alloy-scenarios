@@ -53,6 +53,7 @@ from contracts import (
     YELLOW_MARCH_PATH,
 )
 from agents.npcs import NPC
+from agents import music_box as _music_box
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +344,7 @@ def _tick_visible_march(world: World) -> None:
 
 
 # Imposter action menu — also used as the LLM decision menu.
-_IMPOSTER_ACTIONS = ("LURK_NEAR_CHILD", "STIR_MEETING", "LIE_LOW", "LURE_OUTSIDE")
+_IMPOSTER_ACTIONS = ("LURK_NEAR_CHILD", "STIR_MEETING", "LIE_LOW", "LURE_OUTSIDE", "DROP_BOX")
 
 
 def _find_disguise(world: World) -> Optional[NPC]:
@@ -433,6 +434,25 @@ def _apply_imposter_action(world: World, npc: NPC, action: str) -> None:
                         severity="warn",
                     )
                 )
+    elif action == "DROP_BOX":
+        # v4: force-spawn the Music Box just outside the npc's current pos.
+        # No-op if a box already exists. Drop it slightly away so the imposter
+        # isn't the obvious candidate to grab it.
+        drop_xy = (
+            npc.x + rng.uniform(-30.0, 30.0),
+            npc.y + rng.uniform(-30.0, 30.0),
+        )
+        box = _music_box.force_drop(world, drop_xy)
+        if box is not None:
+            world.emit(
+                Event(
+                    tick=world.tick_count,
+                    type="yellow_imposter_acted",
+                    subject=npc.id,
+                    detail=f"left a music box at ({round(drop_xy[0],1)}, {round(drop_xy[1],1)})",
+                    severity="warn",
+                )
+            )
 
 
 def _consult_llm(world: World, npc: NPC) -> Optional[str]:
@@ -664,6 +684,19 @@ def _trigger_wipe(world: World) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _maybe_force_box_drop(world: World) -> None:
+    """v4: tiny NIGHT-only chance to gift the village a Music Box.
+
+    Active in DORMANT and IMPOSTER modes. The 0.5% per-tick roll gives roughly
+    one drop per sim-day at NIGHT. No-op if a box already exists.
+    """
+    if world.time.phase != Phase.NIGHT:
+        return
+    if world.rng.random() >= 0.005:
+        return
+    _music_box.force_drop(world, None)
+
+
 def tick_yellow(world: World) -> None:
     """Engine hook — call once per tick, AFTER agents have ticked."""
     ya = world.yellow_active
@@ -671,6 +704,7 @@ def tick_yellow(world: World) -> None:
     # Always: dormant-time taint + scheduling.
     if ya.mode == YellowMode.DORMANT:
         _maybe_taint_npcs(world)
+        _maybe_force_box_drop(world)
         # Lazily initialise the schedule the very first time we run.
         if _SCHED.next_appearance_tick == 0:
             _schedule_next_appearance(world)
@@ -686,6 +720,8 @@ def tick_yellow(world: World) -> None:
             _tick_visible_march(world)
         elif ya.mode == YellowMode.IMPOSTER:
             _tick_imposter(world)
+            # v4: in IMPOSTER mode the Yellow Man can also nudge a box drop.
+            _maybe_force_box_drop(world)
 
         # Deadline check.
         if ya.mode != YellowMode.DORMANT and world.tick_count >= ya.deadline_tick:

@@ -395,6 +395,37 @@ def _resolve_meeting(world: World, pm: _PendingMeeting) -> None:
         decision = world.rng.choices(
             ["agree", "disagree", "inconclusive"], weights=[0.5, 0.3, 0.2], k=1,
         )[0]
+    elif pm.topic == "destroy_music_box":
+        # SEER / PRIEST / INVESTIGATOR vote AGREE strongly.
+        # Worm-infected characters compulsively vote DISAGREE.
+        # Brave lean AGREE; paranoid lean DISAGREE.
+        worms = set(getattr(world, "worms_infected", set()) or set())
+        agree_w = 0.0
+        disagree_w = 0.0
+        for a in attendees:
+            if a.id in worms:
+                disagree_w += 3.0  # compulsion overrides everything
+                continue
+            if a.role in (Role.SEER, Role.PRIEST, Role.INVESTIGATOR):
+                agree_w += 2.5
+            brave = a.personality.get("brave", 0.4)
+            paranoid = a.personality.get("paranoid", 0.5)
+            agree_w += 1.0 + 1.2 * brave
+            disagree_w += 0.5 + 1.2 * paranoid
+        if agree_w > disagree_w:
+            decision = "agree"
+            world.expedition_authorised = True
+            world._expedition_is_music_box = True  # type: ignore[attr-defined]
+            # Journal it once.
+            already_logged = getattr(world, "_destroy_music_box_logged", False)
+            if not already_logged:
+                try:
+                    legacy.record(world, "destroy_music_box_called", caller="Khatri")
+                except Exception:
+                    pass
+                world._destroy_music_box_logged = True  # type: ignore[attr-defined]
+        else:
+            decision = "disagree"
     else:
         # Generic resolution — weighted by attendees' leader / social vibe.
         agree_w = sum(0.5 + 0.5 * a.personality.get("leader", 0.3) for a in attendees)

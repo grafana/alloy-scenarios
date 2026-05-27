@@ -19,17 +19,20 @@ Population spawning and death cleanup is handled by ``population.py``.
 from __future__ import annotations
 
 import math
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from contracts import (
     Agent,
     AgentKind,
+    Event,
     MarkerClass,
+    NPC_HOME_BUILDINGS,
     Phase,
     State,
     Status,
     World,
 )
+from agents.base import move_toward
 
 
 # 40 name pool — these are deliberately generic, frontier-flavoured first names.
@@ -125,6 +128,55 @@ def _talisman_door(world: World, rng) -> Optional[Tuple[float, float]]:
     return (b.x + rng.uniform(-12, 12), b.y + rng.uniform(18, 28))
 
 
+def pick_home_id(world: World, exclude: Optional[List[str]] = None) -> Optional[str]:
+    """Pick a home building id for an NPC from the talisman residential pool.
+
+    Excludes buildings currently in cooling-off (failed talisman) and any caller-
+    supplied exclude list (used when re-homing displaced NPCs after a breach so
+    they don't pick the same broken house).
+
+    Weighted: ``colony_house`` is 4x more likely than the smaller houses, so the
+    "big house" feels populated.
+    """
+    exclude_set = set(exclude or [])
+    tick = world.tick_count
+    candidates: List[str] = []
+    weights: List[int] = []
+    for bid in NPC_HOME_BUILDINGS:
+        if bid in exclude_set:
+            continue
+        b = world.buildings.get(bid)
+        if b is None:
+            continue
+        if b.cooling_off_until_tick > tick:
+            continue
+        candidates.append(bid)
+        weights.append(4 if bid == "colony_house" else 1)
+    if not candidates:
+        return None
+    return world.rng.choices(candidates, weights=weights, k=1)[0]
+
+
+def _building_id_for_role(world: World, role_tag: str) -> Optional[str]:
+    for b in world.buildings.values():
+        if b.role_tag == role_tag:
+            return b.id
+    return None
+
+
+def _personality_bucket(npc_id: str) -> str:
+    """Stable hash bucket: 50% worker, 25% socializer, 25% wanderer."""
+    # ``hash`` differs across runs in Python 3 by default, but the salted hash
+    # is stable within a process — good enough for "this NPC has a temperament"
+    # since NPC ids are themselves regenerated each cycle.
+    bucket = (sum(ord(c) for c in npc_id)) % 4
+    if bucket < 2:
+        return "worker"
+    if bucket == 2:
+        return "socializer"
+    return "wanderer"
+
+
 class NPC(Agent):
     """Unnamed villager. Owned by Agent C."""
 
@@ -145,14 +197,32 @@ class NPC(Agent):
         self.target_x = float(x)
         self.target_y = float(y)
         self.state: State = State.WORKING
+        # v4: NPCs use the 0-100 sanity/fear scale to match characters and the
+        # ``npc_sanity_break_*`` thresholds in Config.
         self.fear: float = 0.0
-        self.sanity: float = 1.0
+        self.sanity: float = 100.0
         self.status: Status = Status.ACTIVE
         self.arrived_at_tick: int = 0
         # WANDERING is forced for a few ticks when the Yellow Man marches by.
         self._wander_until_tick: int = 0
         # Re-target cooldown so we don't thrash every tick.
         self._retarget_at_tick: int = 0
+        # v4 — home binding + daily contributions.
+        self.home_id: Optional[str] = None
+        self.contribution_this_day: float = 0.0
+        self.last_contribution_tick: int = 0
+        # ``_indoors`` is True when we're currently inside our home (snapped to
+        # the building and added to its occupant set). Tracked locally so we
+        # can clean up the occupant entry when we leave.
+        self._indoors: bool = False
+        # Stable personality bucket — set lazily on first tick once we have a
+        # home id; kept here as a cache so we don't recompute every tick.
+        self._bucket: Optional[str] = None
+        # Socializer NPCs alternate between bar and diner. Toggled on retarget.
+        self._social_pref: str = "bar"
+        # Last day we flushed the daily contribution summary, so we only emit
+        # the npc_contribution event once per sim-day.
+        self._last_summary_day: int = -1
 
     # ---------------------------------------------------------------- API
 
@@ -167,6 +237,7 @@ class NPC(Agent):
                 "sanity": round(self.sanity, 2),
                 "target_x": round(self.target_x, 2),
                 "target_y": round(self.target_y, 2),
+                "home_id": self.home_id,
             }
         )
         return d
@@ -229,7 +300,10 @@ class NPC(Agent):
 
         phase = world.time.phase
         if phase == Phase.NIGHT:
-            # If we're close to a building, count as sheltering.
+            # If we're close to home (or any dwelling), count as sheltering.
+            if self._indoors:
+                self.state = State.SHELTERING
+                return
             near = _nearest_dwelling(world, self.x, self.y)
             if near is not None and _distance(self.x, self.y, near[1], near[2]) < 35:
                 self.state = State.SHELTERING
@@ -238,7 +312,11 @@ class NPC(Agent):
         elif phase == Phase.DUSK:
             self.state = State.SOCIALIZING
         else:
-            self.state = State.WORKING
+            # DAY / DAWN — socializer bucket gets SOCIALIZING, others WORKING.
+            if (self._bucket or _personality_bucket(self.id)) == "socializer":
+                self.state = State.SOCIALIZING
+            else:
+                self.state = State.WORKING
 
     def force_wander(self, until_tick: int) -> None:
         """Called by yellow_man.py when the visible march passes nearby."""
@@ -251,34 +329,179 @@ class NPC(Agent):
         if self.status != Status.ACTIVE:
             return
 
-        # (Re)pick a target if we've arrived or our cooldown ran out.
+        # ----- Ensure we have a home (and a personality bucket).
+        if self.home_id is None:
+            self.home_id = pick_home_id(world)
+        if self._bucket is None:
+            self._bucket = _personality_bucket(self.id)
+
+        # If our home went into cool-off (e.g. a sanity break happened there),
+        # drop it and try to find a new one next tick.
+        if self.home_id is not None:
+            home = world.buildings.get(self.home_id)
+            if home is not None and home.cooling_off_until_tick > world.tick_count:
+                home.occupants.discard(self.id)
+                self._indoors = False
+                self.home_id = pick_home_id(world, exclude=[self.home_id])
+
+        phase = world.time.phase
+        rng = world.rng
+        touched = self.id in world.yellow_touched_npcs
+
+        # ----- Pick / refresh the target based on phase + bucket.
         arrived = _distance(self.x, self.y, self.target_x, self.target_y) < 3.0
         if arrived or world.tick_count >= self._retarget_at_tick:
-            tx, ty = self._pick_target(world)
-            self.target_x = tx
-            self.target_y = ty
-            # 20 - 60 ticks until we re-pick, jittered per-NPC.
-            self._retarget_at_tick = world.tick_count + world.rng.randint(20, 60)
+            # Yellow-touched bias overrides everything except going home.
+            if touched and phase == Phase.DUSK:
+                tag = rng.choice(_YELLOW_TARGET_TAGS)
+                t = _building_target(world, tag)
+                if t is not None:
+                    self.target_x = t[0] + rng.uniform(-25, 25)
+                    self.target_y = t[1] + rng.uniform(10, 35)
+                else:
+                    self.target_x, self.target_y = self._home_target(world)
+            elif touched and phase == Phase.NIGHT:
+                t = _talisman_door(world, rng)
+                if t is not None:
+                    self.target_x, self.target_y = t
+                else:
+                    self.target_x, self.target_y = self._home_target(world)
+            elif phase == Phase.NIGHT or phase == Phase.DUSK:
+                # Head home for shelter (DUSK gets a head-start so they arrive
+                # before NIGHT proper).
+                self.target_x, self.target_y = self._home_target(world)
+            else:
+                # DAY / DAWN — drive by personality bucket.
+                self.target_x, self.target_y = self._day_target(world)
+
+            self._retarget_at_tick = world.tick_count + rng.randint(20, 60)
             if arrived:
                 self.arrived_at_tick = world.tick_count
 
-        # Step toward target. NPCs are deliberately slow vs creatures.
-        step = 6.0 if self.state == State.WANDERING else 3.5
-        self.x, self.y = _move_toward(self.x, self.y, self.target_x, self.target_y, step)
-
-        # FSM state mostly follows phase + position.
+        # ----- Move and update FSM state.
+        if self.state == State.WANDERING:
+            step = 6.0
+        else:
+            step = 3.5
+        # Use the canonical move_toward so future tooling can rely on it.
+        move_toward(self, self.target_x, self.target_y, step)
         self._update_state(world)
 
-        # Yellow-touched + standing near a talisman door at NIGHT subtly drains
-        # sanity for the NPC itself (a flavour effect; Agent B reads sanity from
-        # the snapshot, so this surfaces as "this newcomer seems off").
+        # ----- NIGHT shelter snap.
+        if phase == Phase.NIGHT and self.home_id is not None:
+            home = world.buildings.get(self.home_id)
+            if home is not None and _distance(self.x, self.y, home.x, home.y) < 20.0:
+                self.x = home.x
+                self.y = home.y
+                home.occupants.add(self.id)
+                self._indoors = True
+                self.state = State.SHELTERING
+            elif self._indoors:
+                # We left home (rare — but cleanup the occupants set).
+                if home is not None:
+                    home.occupants.discard(self.id)
+                self._indoors = False
+        elif self._indoors and self.home_id is not None:
+            # Phase rolled out of NIGHT — leave the home occupant set.
+            home = world.buildings.get(self.home_id)
+            if home is not None:
+                home.occupants.discard(self.id)
+            self._indoors = False
+
+        # ----- Daytime contributions.
+        if phase == Phase.DAY:
+            colony = world.buildings.get("colony_house")
+            if (
+                self.state == State.WORKING
+                and self._bucket == "worker"
+                and colony is not None
+                and _distance(self.x, self.y, colony.x, colony.y) < 80.0
+            ):
+                delta = 0.0008
+                world.farm_health = min(1.0, world.farm_health + delta)
+                self.contribution_this_day += delta
+                self.last_contribution_tick = world.tick_count
+            elif self.state == State.SOCIALIZING and self._bucket == "socializer":
+                bar = world.buildings.get("bar")
+                diner = world.buildings.get("diner")
+                near_venue = False
+                for venue in (bar, diner):
+                    if venue is not None and _distance(self.x, self.y, venue.x, venue.y) < 60.0:
+                        near_venue = True
+                        break
+                if near_venue:
+                    delta = 0.04
+                    for other in world.agents.values():
+                        if getattr(other, "kind", None) != AgentKind.CHARACTER:
+                            continue
+                        if _distance(self.x, self.y, other.x, other.y) > 60.0:
+                            continue
+                        cur = getattr(other, "sanity", None)
+                        if cur is None:
+                            continue
+                        # Characters use 0-100 scale.
+                        setattr(other, "sanity", min(100.0, cur + delta))
+                    self.contribution_this_day += delta
+                    self.last_contribution_tick = world.tick_count
+
+        # ----- Daily summary at DUSK boundary (18:00).
         if (
-            self.id in world.yellow_touched_npcs
-            and world.time.phase == Phase.NIGHT
+            world.time.hour == 18
+            and world.time.minute == 0
+            and self._last_summary_day != world.time.day
         ):
-            # Are we hovering next to a talisman building?
+            if self.contribution_this_day > 0.0:
+                world.emit(
+                    Event(
+                        tick=world.tick_count,
+                        type="npc_contribution",
+                        subject=self.id,
+                        detail=f"contributed {self.contribution_this_day:.2f}",
+                        severity="info",
+                    )
+                )
+            self.contribution_this_day = 0.0
+            self._last_summary_day = world.time.day
+
+        # ----- Yellow-touched flavour drain (kept from v1, scaled to 0-100).
+        if touched and phase == Phase.NIGHT:
             for b in world.buildings.values():
                 if b.has_talisman and _distance(self.x, self.y, b.x, b.y) < 30:
-                    self.sanity = max(0.0, self.sanity - 0.001)
-                    self.fear = min(1.0, self.fear + 0.0005)
+                    self.sanity = max(0.0, self.sanity - 0.1)
+                    self.fear = min(100.0, self.fear + 0.05)
                     break
+
+    # ----- helpers used by the new tick body --------------------------------
+
+    def _home_target(self, world: World) -> Tuple[float, float]:
+        """Where to walk at NIGHT/DUSK — toward the assigned home with jitter."""
+        if self.home_id is None:
+            # No home yet — fall back to the nearest dwelling like v1.
+            near = _nearest_dwelling(world, self.x, self.y)
+            if near is not None:
+                _, bx, by = near
+                return (bx, by)
+            return (self.x, self.y)
+        home = world.buildings.get(self.home_id)
+        if home is None:
+            return (self.x, self.y)
+        rng = world.rng
+        return (home.x + rng.uniform(-6, 6), home.y + rng.uniform(-6, 6))
+
+    def _day_target(self, world: World) -> Tuple[float, float]:
+        """DAY target driven by the personality bucket."""
+        rng = world.rng
+        bucket = self._bucket or _personality_bucket(self.id)
+        if bucket == "worker":
+            colony = world.buildings.get("colony_house")
+            if colony is not None:
+                return (colony.x + rng.uniform(-40, 40), colony.y + rng.uniform(-20, 30))
+        if bucket == "socializer":
+            # Alternate between bar and diner so the two venues stay populated.
+            self._social_pref = "diner" if self._social_pref == "bar" else "bar"
+            venue = world.buildings.get(self._social_pref)
+            if venue is not None:
+                return (venue.x + rng.uniform(-30, 30), venue.y + rng.uniform(-20, 20))
+        # Wanderer (and any fallback): drift around town centre.
+        cx, cy = 465.0, 475.0
+        return (cx + rng.uniform(-80, 80), cy + rng.uniform(-80, 80))

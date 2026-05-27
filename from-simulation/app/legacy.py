@@ -75,6 +75,30 @@ _TEMPLATES: Dict[str, List[str]] = {
         "{name} walked into the Lighthouse and did not walk out.",
         "{name} answered the Lighthouse. We heard them on the wind after.",
     ],
+    "music_box_appeared": [
+        "A music box appeared by the {location}.",
+        "Something old and gold was left for us to find.",
+    ],
+    "break_death": [
+        "{name} screamed in their sleep and broke.",
+        "{name} did not wake. The music had reached them.",
+    ],
+    "steal_event": [
+        "Three did not wake. The cicadas came.",
+        "They were taken. Their breath was still in their chests but they were not in them.",
+    ],
+    "music_box_destroyed": [
+        "{carrier} brought it back to the Dungeon. The melody stopped.",
+        "We ended it where it began. {carrier} held the torch.",
+    ],
+    "npc_sanity_break": [
+        "{npc} opened the door at {building}. Not knowing what they did.",
+        "{npc} unlocked the {building} from the inside. Fear made them do it.",
+    ],
+    "destroy_music_box_called": [
+        "The Father called a meeting. Sara had told them where to take it.",
+        "We voted to destroy the box. Most of us, anyway.",
+    ],
 }
 
 

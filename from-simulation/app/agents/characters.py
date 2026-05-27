@@ -40,6 +40,17 @@ from contracts import (
     World,
 )
 
+# v4: rhyme lines surfaced by Sara, keyed by current music box phase.
+_RHYME_LINES: Dict[str, str] = {
+    "TOUCH": "They touch — I can hear it from the ruins.",
+    "BREAK": "They break — it took Paula. Or someone. Soon.",
+    "STEAL": "They come for three. The dungeon. Take it there.",
+    "TERMINAL": "They come for three… we are too late.",
+}
+
+# v4: ~one sim day at 2 Hz; rhyme cadence for Sara.
+_RHYME_TICK_GAP = 720
+
 # Agent A's helpers — we trust the names from the brief.
 from agents.base import distance, move_toward  # type: ignore  # noqa: F401
 from agents.states import TRANSITION_TABLE  # type: ignore  # noqa: F401
@@ -302,6 +313,9 @@ class Character(Agent):
         if self.status == Status.ABSENT:
             return
 
+        # ---- v4: Sara/Khatri/Boyd music-box reactions --------------------
+        self._music_box_reaction(world)
+
         # ---- Drives & sanity ---------------------------------------------
         self.hunger = min(100.0, self.hunger + HUNGER_RATE)
         if self.state == State.SLEEPING:
@@ -367,6 +381,107 @@ class Character(Agent):
 
         self._step_toward_target(world)
 
+    # ----------------------------------------------------------- v4 helpers
+    def _music_box_reaction(self, world: World) -> None:
+        """Sara hears the Rhyme; Khatri calls a meeting; Boyd grabs the box.
+
+        All three reactions are character-role-gated and self-throttled with
+        per-instance state. None of them mutate engine-owned fields except via
+        the documented v4 contracts (``world.music_box_carrier`` / events).
+        """
+        phase = getattr(world, "music_box_phase", "DORMANT")
+
+        # ---- Sara hears the music (SEER + non-dormant box) -----------------
+        if self.role == Role.SEER and phase != "DORMANT":
+            last_tick = getattr(self, "_sara_last_rhyme_tick", -10_000)
+            last_phase = getattr(self, "_sara_last_phase", None)
+            # Find nearest music box marker (if any) within 200 px.
+            near_box = False
+            try:
+                for s in world.supernaturals:
+                    if getattr(s, "marker_class", None) == MarkerClass.MUSIC_BOX:
+                        d = math.hypot(self.x - s.x, self.y - s.y)
+                        if d <= 200.0:
+                            near_box = True
+                            break
+            except Exception:
+                near_box = False
+            phase_advanced = (phase != last_phase)
+            cadence_ok = (world.tick_count - last_tick) >= _RHYME_TICK_GAP
+            if (cadence_ok and near_box) or phase_advanced:
+                line = _RHYME_LINES.get(phase)
+                if line:
+                    try:
+                        world.narrations.append({
+                            "actor": "Sara",
+                            "reason": line,
+                            "state": State.WANDERING.value,
+                        })
+                        if len(world.narrations) > 50:
+                            del world.narrations[: len(world.narrations) - 50]
+                    except Exception:
+                        pass
+                    try:
+                        world.rhyme_heard.append(line)
+                    except Exception:
+                        pass
+                    world.emit(Event(
+                        tick=world.tick_count, type="rhyme_heard",
+                        subject=self.id, detail=line, severity="warn",
+                    ))
+                    self.sanity = max(0.0, self.sanity - 0.3)
+                    self._sara_last_rhyme_tick = world.tick_count
+                    self._sara_last_phase = phase
+                    world._sara_has_warned = True  # type: ignore[attr-defined]
+
+        # ---- Khatri calls the meeting (PRIEST after Sara has warned) -------
+        if (
+            self.role == Role.PRIEST
+            and getattr(world, "_sara_has_warned", False)
+            and self.state not in (State.MEETING, State.ARGUING,
+                                   State.DREAMING, State.IRRATIONAL)
+            and not getattr(self, "_khatri_proposed_destroy", False)
+        ):
+            already = any(
+                mo.topic == "destroy_music_box"
+                for mo in (world.meeting_outcomes or [])
+            )
+            if not already:
+                try:
+                    from agents.social import propose_meeting
+                    propose_meeting(world, "Khatri", "destroy_music_box", "church")
+                    self._khatri_proposed_destroy = True
+                except Exception:
+                    pass
+
+        # ---- Boyd picks up the box (SHERIFF) -------------------------------
+        if (
+            self.role == Role.SHERIFF
+            and getattr(world, "music_box_carrier", None) is None
+            and phase != "DORMANT"
+        ):
+            try:
+                target = None
+                for s in world.supernaturals:
+                    if getattr(s, "marker_class", None) != MarkerClass.MUSIC_BOX:
+                        continue
+                    d = math.hypot(self.x - s.x, self.y - s.y)
+                    if d <= 80.0:
+                        target = s
+                        break
+                if target is not None:
+                    world.music_box_carrier = self.id
+                    self.state = State.CARRYING_BOX
+                    self.state_since_tick = world.tick_count
+                    world.emit(Event(
+                        tick=world.tick_count, type="music_box_picked_up",
+                        subject=self.id,
+                        detail="Boyd took it from where it was dropped.",
+                        severity="warn",
+                    ))
+            except Exception:
+                pass
+
     # ----------------------------------------------------------- helpers
     def _hard_override(self, world: World) -> Optional[State]:
         if self.state == State.IRRATIONAL:
@@ -410,6 +525,18 @@ class Character(Agent):
             w *= prophecy_mult.get(next_state, 1.0)
             if w > 0:
                 out.append((next_state, w))
+        # v4: music-box carrier wants to deal with this — strong EXPEDITION bias.
+        if self.id == getattr(world, "music_box_carrier", None):
+            # Either boost an existing EXPEDITION slot, or inject one so the
+            # LLM (and any future relaxed precondition) sees the intent.
+            boosted = False
+            for i, (s, w) in enumerate(out):
+                if s == State.EXPEDITION:
+                    out[i] = (s, w * 3.0)
+                    boosted = True
+                    break
+            if not boosted:
+                out.append((State.EXPEDITION, 3.0))
         return out
 
     # Words inside a prophecy payload that hint at a state being warned against.

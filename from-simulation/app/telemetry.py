@@ -58,6 +58,11 @@ _V2_GAUGE_NAMES = (
     Metric.OUTSIDERS_ACTIVE,
     Metric.YELLOW_TENDRILS,
     Metric.TRUST_AVG,
+    # v4 gauges
+    Metric.MUSIC_BOX_ACTIVE,
+    Metric.MUSIC_BOX_PHASE,
+    Metric.HOUSES_COOLING_OFF,
+    Metric.WORMS_INFECTED,
 )
 
 

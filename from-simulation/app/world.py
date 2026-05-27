@@ -112,6 +112,14 @@ def reset_world(world: World) -> None:
     world.active_dreams.clear()
     world.lighthouse_called = None
     world.lighthouse_voice_active = False
+
+    # v4 — transient music-box state cleared on wipe.
+    world.music_box_phase = "DORMANT"
+    world.music_box_phase_until_tick = 0
+    world.music_box_id = None
+    world.music_box_carrier = None
+    world.worms_infected.clear()
+    world.rhyme_heard.clear()
     # Bus: preserve next_arrival_cycle counter (so the cadence persists), reset
     # the rest. If we just left a cycle whose number IS the scheduled arrival,
     # the bus tick logic will activate after rebuild.

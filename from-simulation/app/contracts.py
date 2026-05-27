@@ -72,6 +72,8 @@ class State(str, enum.Enum):
     DREAMING = "DREAMING"
     CALLED = "CALLED"        # heard the lighthouse — biases toward LIGHTHOUSE
     OUTSIDER_GOAL = "OUTSIDER_GOAL"  # outsiders pursuing their backstory goal
+    # v4 additions
+    CARRYING_BOX = "CARRYING_BOX"    # holding a Music Box — sticky, compelled
 
 
 class Role(str, enum.Enum):
@@ -93,6 +95,7 @@ class Status(str, enum.Enum):
     ABSENT = "ABSENT"
     DEAD = "DEAD"
     INCAPACITATED = "INCAPACITATED"
+    STOLEN = "STOLEN"  # v4: catatonic — taken by the Music Box monster (STEAL phase)
 
 
 class AgentKind(str, enum.Enum):
@@ -113,6 +116,8 @@ class MarkerClass(str, enum.Enum):
     FARAWAY_TREE = "faraway-tree"
     OUTSIDER = "outsider"
     BUS = "bus"
+    MUSIC_BOX = "music-box"
+    CICADA = "cicada"  # transient swarm sprites during STEAL phase
 
 
 class YellowMode(str, enum.Enum):
@@ -152,6 +157,14 @@ class Building:
     role_tag: str = ""  # e.g. "church", "sheriff", "matthews", "colony", "clinic"
     locked: bool = False
     occupants: Set[str] = field(default_factory=set)
+    # v4: cooling-off period after a breach or music-box damage. While
+    # ``world.tick_count < cooling_off_until_tick`` the talisman is treated
+    # as failed and NPCs won't pick this building as a new home.
+    cooling_off_until_tick: int = 0
+
+    def is_protected(self, tick: int) -> bool:
+        """True only when the building has its talisman AND isn't in cool-off."""
+        return self.has_talisman and tick >= self.cooling_off_until_tick
 
 
 @dataclass
@@ -242,6 +255,26 @@ EVENT_TYPES = {
     "lighthouse_call",
     "lighthouse_enter",
     "lighthouse_voice",
+    # v4 — NPC lives + house cooling-off
+    "npc_sanity_break",
+    "npc_displaced",
+    "npc_settled",
+    "npc_contribution",
+    "house_cooling_off",
+    "house_cleared",
+    # v4 — music box monster
+    "music_box_appeared",
+    "music_box_picked_up",
+    "music_box_dropped",
+    "music_box_in_house",
+    "music_box_compulsion",
+    "music_box_destroyed",
+    "rhyme_line",
+    "rhyme_heard",
+    "break_death",
+    "steal_event",
+    "worms_passed",
+    "ballerina_vision",
 }
 
 
@@ -377,6 +410,19 @@ class Config:
     lighthouse_call_tick_frac: float = 0.4
     # v2 — trust
     trust_baseline: float = 0.5
+    # v4 — music box monster
+    music_box_interval_days: int = 3
+    music_box_curiosity_radius: float = 80.0
+    music_box_talisman_fail_prob: float = 0.05
+    music_box_sanity_drain: float = 0.5
+    music_box_destroy_radius: float = 40.0
+    music_box_phase_ticks: int = 600  # ticks between phase escalations
+    # v4 — NPC problems
+    npc_sanity_break_sanity: float = 30.0
+    npc_sanity_break_fear: float = 70.0
+    npc_sanity_break_prob: float = 0.04
+    house_cooling_off_ticks: int = 800
+    npc_breach_death_prob: float = 0.30
 
     @classmethod
     def from_env(cls, getenv: Callable[[str, Optional[str]], Optional[str]]) -> "Config":
@@ -428,6 +474,17 @@ class Config:
             yellow_hydra_max=_i("YELLOW_HYDRA_MAX", 3),
             lighthouse_call_tick_frac=_f("LIGHTHOUSE_CALL_TICK_FRAC", 0.4),
             trust_baseline=_f("TRUST_BASELINE", 0.5),
+            music_box_interval_days=_i("MUSIC_BOX_INTERVAL_DAYS", 3),
+            music_box_curiosity_radius=_f("MUSIC_BOX_CURIOSITY_RADIUS", 80.0),
+            music_box_talisman_fail_prob=_f("MUSIC_BOX_TALISMAN_FAIL_PROB", 0.05),
+            music_box_sanity_drain=_f("MUSIC_BOX_SANITY_DRAIN", 0.5),
+            music_box_destroy_radius=_f("MUSIC_BOX_DESTROY_RADIUS", 40.0),
+            music_box_phase_ticks=_i("MUSIC_BOX_PHASE_TICKS", 600),
+            npc_sanity_break_sanity=_f("NPC_SANITY_BREAK_SANITY", 30.0),
+            npc_sanity_break_fear=_f("NPC_SANITY_BREAK_FEAR", 70.0),
+            npc_sanity_break_prob=_f("NPC_SANITY_BREAK_PROB", 0.04),
+            house_cooling_off_ticks=_i("HOUSE_COOLING_OFF_TICKS", 800),
+            npc_breach_death_prob=_f("NPC_BREACH_DEATH_PROB", 0.30),
         )
 
 
@@ -531,6 +588,15 @@ class World:
     lighthouse_called: Optional[str] = None  # char id when a call is active
     lighthouse_voice_active: bool = False
 
+    # --- v4: music box monster + cooling-off ---
+    # Phase machine: "DORMANT" | "TOUCH" | "BREAK" | "STEAL" | "TERMINAL"
+    music_box_phase: str = "DORMANT"
+    music_box_phase_until_tick: int = 0  # absolute tick; >0 only when armed
+    music_box_id: Optional[str] = None   # id of the active MusicBox in world.supernaturals
+    music_box_carrier: Optional[str] = None  # agent id currently holding it
+    worms_infected: Set[str] = field(default_factory=set)  # agent ids
+    rhyme_heard: List[str] = field(default_factory=list)  # rhyme lines surfaced so far
+
     @property
     def cycle_number(self) -> int:
         return self.village_wipes + 1
@@ -630,6 +696,15 @@ def snapshot_dict(world: World) -> Dict[str, Any]:
             "called": world.lighthouse_called,
             "voice_active": world.lighthouse_voice_active,
         },
+        "music_box": {
+            "phase": world.music_box_phase,
+            "phase_left": max(0, world.music_box_phase_until_tick - world.tick_count)
+            if world.music_box_phase_until_tick else 0,
+            "id": world.music_box_id,
+            "carrier": world.music_box_carrier,
+            "rhyme": list(world.rhyme_heard),
+            "worms_count": len(world.worms_infected),
+        },
         "buildings": [
             {
                 "id": b.id,
@@ -640,6 +715,8 @@ def snapshot_dict(world: World) -> Dict[str, Any]:
                 "locked": b.locked,
                 "occupants": len(b.occupants),
                 "role_tag": b.role_tag,
+                "cooling_off": max(0, b.cooling_off_until_tick - world.tick_count),
+                "protected": b.is_protected(world.tick_count),
             }
             for b in world.buildings.values()
         ],
@@ -691,6 +768,12 @@ class Metric:
     LIGHTHOUSE_VOICE_ACTIVE = "from_sim_lighthouse_voice_active"    # gauge 0/1
     DREAMS_ACTIVE = "from_sim_dreams_active"                        # gauge
     TRUST_AVG = "from_sim_trust_avg"                                # gauge
+    # v4
+    MUSIC_BOX_ACTIVE = "from_sim_music_box_active"                  # gauge 0/1
+    MUSIC_BOX_PHASE = "from_sim_music_box_phase"                    # gauge 0..4
+    HOUSES_COOLING_OFF = "from_sim_houses_cooling_off"              # gauge
+    NPC_HOMES_FULL = "from_sim_npc_homes_full"                      # gauge
+    WORMS_INFECTED = "from_sim_worms_infected"                      # gauge
 
 
 PHASE_TO_NUM = {Phase.DAY: 0, Phase.DUSK: 1, Phase.NIGHT: 2, Phase.DAWN: 3}
@@ -706,23 +789,23 @@ PHASE_TO_NUM = {Phase.DAY: 0, Phase.DUSK: 1, Phase.NIGHT: 2, Phase.DAWN: 3}
 BUILDING_LAYOUT: List[Tuple[str, str, float, float, int, bool, str]] = [
     # (id, name, x, y, footprint, has_talisman, role_tag)
     ("colony_house",     "Colony House",            385, 420, 10, True,  "colony"),
-    ("green_house",      "Green House",             418, 400,  3, False, "house"),
+    ("green_house",      "Green House",             418, 400,  3, True,  "house"),
     ("shed",             "Shed",                    442, 388,  1, False, "shed"),
     ("clinic",           "Clinic",                  478, 402,  4, True,  "clinic"),
     ("root_cellar",      "Root Cellar",             495, 432,  2, False, "cellar"),
     ("choosing_stone",   "Choosing Ceremony Stone", 390, 470,  0, False, "stone"),
     ("church",           "Church",                  385, 510,  6, True,  "church"),
-    ("grey_house",       "Grey House",              420, 490,  3, False, "house"),
-    ("blue_house",       "Blue House",              440, 490,  3, False, "house"),
+    ("grey_house",       "Grey House",              420, 490,  3, True,  "house"),
+    ("blue_house",       "Blue House",              440, 490,  3, True,  "house"),
     ("pool",             "Pool",                    462, 478,  0, False, "pool"),
-    ("lius_home",        "Liu's Home",              478, 462,  4, False, "house"),
+    ("lius_home",        "Liu's Home",              478, 462,  4, True,  "house"),
     ("bar",              "Bar",                     510, 458,  3, False, "bar"),
     ("barn",             "Barn",                    555, 454,  5, False, "barn"),
     ("sheriff_office",   "Sheriff's Office",        490, 510,  4, True,  "sheriff"),
     ("abandoned_bus",    "Abandoned Bus",           460, 538,  0, False, "wreck"),
     ("matthews_home",    "Matthews' Home",          430, 545,  5, True,  "matthews"),
     ("diner",            "Diner",                   405, 530,  4, False, "diner"),
-    ("myers_home",       "Myers' Home",             382, 552,  3, False, "house"),
+    ("myers_home",       "Myers' Home",             382, 552,  3, True,  "house"),
     # Lighthouse lives in its own clearing south-west of town.
     ("lighthouse",       "Lighthouse",              140, 585,  1, False, "lighthouse"),
 ]
@@ -776,3 +859,15 @@ BUS_PATH_OUT: List[Tuple[float, float]] = [
 
 # Lighthouse direct-coord alias (lighthouse.py and bus.py read this).
 LIGHTHOUSE_XY: Tuple[float, float] = (140.0, 585.0)
+
+# v4: the Dungeon ruins — where the Music Box monster's power is anchored
+# and where the box can be destroyed. Maps to the DUNGEON landmark on the map.
+RUINS_XY: Tuple[float, float] = (240.0, 650.0)
+
+# v4: talisman residential houses NPCs may pick as home (subset of layout).
+# Order matters for stable home-assignment; colony_house listed first so the
+# 4× weight in npcs.py preserves "the big house" feel.
+NPC_HOME_BUILDINGS: List[str] = [
+    "colony_house", "matthews_home", "lius_home", "myers_home",
+    "green_house", "grey_house", "blue_house",
+]

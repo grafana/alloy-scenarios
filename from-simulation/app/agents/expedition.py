@@ -30,6 +30,7 @@ from contracts import (
     Event,
     Phase,
     Role,
+    RUINS_XY,
     State,
     Status,
     World,
@@ -43,6 +44,10 @@ FOREST_TARGET_RING = (0.85, 0.95)  # fraction of map dimensions for interior poi
 FOOD_REWARD = 60.0
 DEPART_SPEED = 3.5
 
+# v4: music-box destruction run.
+MUSIC_BOX_RENDEZVOUS_RADIUS = 30.0   # leader-to-carrier adjacency threshold
+MUSIC_BOX_DESTROY_RADIUS = 40.0      # close enough to RUINS for A's tick to fire
+
 
 @dataclass
 class _Expedition:
@@ -51,8 +56,10 @@ class _Expedition:
     departed_tick: int = 0
     target: Tuple[float, float] = (0.0, 0.0)
     home: Tuple[float, float] = (500.0, 350.0)
-    phase: str = "departing"  # departing | milling | returning | done
+    phase: str = "departing"  # departing | milling | returning | done | rendezvous | ruins
     mill_start_tick: int = 0
+    # v4 — set when this is a music-box destruction expedition.
+    is_music_box: bool = False
 
 
 def _get_expedition(world: World) -> Optional[_Expedition]:
@@ -156,6 +163,34 @@ def _release_party(world: World, exp: _Expedition) -> None:
             ch.target = None
 
 
+def _pick_music_box_leader(world: World) -> Optional[Character]:
+    """Prefer Boyd (SHERIFF); fall back to any worm-infected character.
+
+    The infected carrier is a sensible second choice because they're already
+    bonded to the box and will accept the trip without argument.
+    """
+    boyd = world.agents.get("Boyd")
+    if isinstance(boyd, Character) and _eligible(boyd):
+        return boyd
+    # SHERIFF role fallback (in case Boyd is incapacitated/dead).
+    for a in world.agents.values():
+        if (isinstance(a, Character) and a.role == Role.SHERIFF
+                and _eligible(a) and a.id != "Boyd"):
+            return a
+    # Worm-infected carrier fallback.
+    worms = getattr(world, "worms_infected", set()) or set()
+    carrier_id = getattr(world, "music_box_carrier", None)
+    if carrier_id and carrier_id in world.agents:
+        ch = world.agents[carrier_id]
+        if isinstance(ch, Character) and _eligible(ch):
+            return ch
+    for wid in worms:
+        ch = world.agents.get(wid)
+        if isinstance(ch, Character) and _eligible(ch):
+            return ch
+    return None
+
+
 def tick_expeditions(world: World) -> None:
     exp = _get_expedition(world)
 
@@ -163,6 +198,67 @@ def tick_expeditions(world: World) -> None:
     if exp is None:
         if not world.expedition_authorised:
             return
+
+        is_music_box = bool(getattr(world, "_expedition_is_music_box", False))
+
+        if is_music_box:
+            leader = _pick_music_box_leader(world)
+            if leader is None:
+                # Nobody available — drop both flags, try again later.
+                world.expedition_authorised = False
+                world._expedition_is_music_box = False  # type: ignore[attr-defined]
+                return
+            # Music-box runs are smaller: leader + 0-2 companions optional.
+            party = _pick_party(world, leader)[:2]
+            home = (leader.x, leader.y)
+            # Initial target depends on whether a carrier exists.
+            carrier_id = getattr(world, "music_box_carrier", None)
+            carrier = world.agents.get(carrier_id) if carrier_id else None
+            if isinstance(carrier, Character) and carrier.id != leader.id:
+                target = (carrier.x, carrier.y)
+                phase = "rendezvous"
+            else:
+                # No carrier or leader IS the carrier — head straight to ruins.
+                # If no carrier at all, make the leader the carrier.
+                if carrier_id is None or not isinstance(carrier, Character):
+                    world.music_box_carrier = leader.id
+                    try:
+                        leader.state = State.CARRYING_BOX
+                    except Exception:
+                        pass
+                target = RUINS_XY
+                phase = "ruins"
+            exp = _Expedition(
+                leader_id=leader.id,
+                member_ids=[c.id for c in party],
+                departed_tick=world.tick_count,
+                target=target,
+                home=home,
+                phase=phase,
+                is_music_box=True,
+            )
+            _set_expedition(world, exp)
+            _pin_party(world, exp)
+            for mid in [leader.id, *exp.member_ids]:
+                ch = world.agents.get(mid)
+                if isinstance(ch, Character):
+                    ch.target = target
+            world.expedition_authorised = False
+            world.expedition_active = True
+            world.emit(Event(
+                tick=world.tick_count, type="expedition_called",
+                subject=leader.id,
+                detail=f"destroy music box — led by {leader.name}",
+                severity="warn",
+            ))
+            world.emit(Event(
+                tick=world.tick_count, type="expedition_departed",
+                subject=leader.id,
+                detail=f"to the ruins at ({RUINS_XY[0]:.0f},{RUINS_XY[1]:.0f})",
+                severity="warn",
+            ))
+            return
+
         leader = _pick_leader(world)
         if leader is None:
             # Authorised but nobody available — drop the flag, try again later.
@@ -201,6 +297,104 @@ def tick_expeditions(world: World) -> None:
             subject=leader.id,
             detail=f"heading to ({target[0]:.0f},{target[1]:.0f})",
         ))
+        return
+
+    # ------------------------------------------------ music-box destruction run
+    if exp.is_music_box:
+        leader = world.agents.get(exp.leader_id)
+        if not isinstance(leader, Character) or leader.status != Status.ACTIVE:
+            # Lost the leader mid-run — abort cleanly.
+            _release_party(world, exp)
+            _set_expedition(world, None)
+            world.expedition_active = False
+            world._expedition_is_music_box = False  # type: ignore[attr-defined]
+            return
+
+        carrier_id = getattr(world, "music_box_carrier", None)
+        carrier = world.agents.get(carrier_id) if carrier_id else None
+
+        if exp.phase == "rendezvous":
+            # Leader walks to the carrier. If the carrier is gone (dropped /
+            # died / vanished), the leader becomes the carrier.
+            if not isinstance(carrier, Character) or carrier.status != Status.ACTIVE:
+                world.music_box_carrier = leader.id
+                try:
+                    leader.state = State.CARRYING_BOX
+                except Exception:
+                    pass
+                exp.target = RUINS_XY
+                exp.phase = "ruins"
+                for mid in [exp.leader_id, *exp.member_ids]:
+                    ch = world.agents.get(mid)
+                    if isinstance(ch, Character):
+                        ch.target = RUINS_XY
+                return
+            # Step toward the carrier's current position.
+            target = (carrier.x, carrier.y)
+            exp.target = target
+            for mid in [exp.leader_id, *exp.member_ids]:
+                ch = world.agents.get(mid)
+                if isinstance(ch, Character):
+                    ch.target = target
+            _walk_party(world, exp, target, DEPART_SPEED)
+            d = math.hypot(leader.x - carrier.x, leader.y - carrier.y)
+            if d <= MUSIC_BOX_RENDEZVOUS_RADIUS:
+                # Leader joins the carrier. From here both head to the ruins.
+                exp.phase = "ruins"
+                exp.target = RUINS_XY
+                # Make sure carrier is part of the marching party.
+                if carrier.id != leader.id and carrier.id not in exp.member_ids:
+                    exp.member_ids.append(carrier.id)
+                    try:
+                        carrier.state = State.EXPEDITION  # pin alongside leader
+                        carrier.expedition_role = "carrier"
+                        carrier.state_since_tick = world.tick_count
+                    except Exception:
+                        pass
+                for mid in [exp.leader_id, *exp.member_ids]:
+                    ch = world.agents.get(mid)
+                    if isinstance(ch, Character):
+                        ch.target = RUINS_XY
+            return
+
+        if exp.phase == "ruins":
+            # Walk the carrier (and leader) to RUINS_XY. Agent A's
+            # tick_music_box handles the actual destruction when within
+            # MUSIC_BOX_DESTROY_RADIUS of the ruins.
+            ref = carrier if isinstance(carrier, Character) and carrier.status == Status.ACTIVE else leader
+            _walk_party(world, exp, RUINS_XY, DEPART_SPEED)
+            d = math.hypot(ref.x - RUINS_XY[0], ref.y - RUINS_XY[1])
+            if d <= MUSIC_BOX_DESTROY_RADIUS:
+                # Arrived. Hold for one tick to let A's destroyer fire.
+                # When the carrier is cleared by A, fold the expedition.
+                if world.music_box_carrier is None or world.music_box_phase == "DORMANT":
+                    exp.phase = "returning"
+                    for mid in [exp.leader_id, *exp.member_ids]:
+                        ch = world.agents.get(mid)
+                        if isinstance(ch, Character) and ch.status == Status.ACTIVE:
+                            ch.target = exp.home
+            return
+
+        if exp.phase == "returning":
+            arrived = _walk_party(world, exp, exp.home, DEPART_SPEED)
+            if arrived:
+                _release_party(world, exp)
+                world.emit(Event(
+                    tick=world.tick_count, type="expedition_returned",
+                    subject=exp.leader_id,
+                    detail="music box destroyed; party home",
+                    severity="info",
+                ))
+                _set_expedition(world, None)
+                world.expedition_active = False
+                world._expedition_is_music_box = False  # type: ignore[attr-defined]
+            return
+
+        # Unknown music-box phase — recover by bailing out.
+        _release_party(world, exp)
+        _set_expedition(world, None)
+        world.expedition_active = False
+        world._expedition_is_music_box = False  # type: ignore[attr-defined]
         return
 
     # ------------------------------------------------ drive existing expedition

@@ -168,6 +168,12 @@ TRANSITION_TABLE: Dict[State, List[Transition]] = {
         (State.IRRATIONAL, 4.0, _ANYTIME),
         (State.WANDERING, 0.3, _BIASED_DAY),
     ],
+    State.CARRYING_BOX: [
+        # v4 — Music Box carriers rarely transition; drop is driven by
+        # music_box.py's compulsion check. Self-stay dominates.
+        (State.CARRYING_BOX, 10.0, _ANYTIME),
+        (State.WANDERING, 0.2, _BIASED_DAY),
+    ],
     State.MEETING: [
         (State.MEETING, 3.0, _BIASED_DAY),
         (State.WANDERING, 1.0, _ANYTIME),

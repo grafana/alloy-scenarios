@@ -30,7 +30,7 @@ from contracts import (
     Status,
     World,
 )
-from agents.npcs import NPC, generate_npc_name
+from agents.npcs import NPC, generate_npc_name, pick_home_id
 
 
 # Numeric counter so NPC ids are stable + unique across a single cycle.
@@ -67,6 +67,10 @@ def spawn_npc(world: World) -> NPC:
         y=y,
     )
     npc.arrived_at_tick = world.tick_count
+    # v4: bind a home building on spawn so the snapshot shows it from tick 0.
+    # ``pick_home_id`` may return None (every house in cool-off); the NPC's
+    # own tick will retry until something opens up.
+    npc.home_id = pick_home_id(world)
     world.agents[npc.id] = npc
 
     world.emit(
@@ -93,6 +97,12 @@ def _reap_dead(world: World) -> int:
     for nid in dead_ids:
         agent = world.agents.pop(nid, None)
         name = getattr(agent, "name", nid) if agent is not None else nid
+        # v4: clear them from their home's occupant set.
+        home_id = getattr(agent, "home_id", None) if agent is not None else None
+        if home_id is not None:
+            building = world.buildings.get(home_id)
+            if building is not None:
+                building.occupants.discard(nid)
         # If this NPC was puppeted, drop the touch — they're gone.
         world.yellow_touched_npcs.discard(nid)
         world.emit(
@@ -137,3 +147,12 @@ def tick_population(world: World) -> None:
             Metric.NPCS_ACTIVE,
             float(_count_active_npcs(world)),
         )
+        # v4: count NPCs that have been assigned a home building.
+        homes_full = sum(
+            1
+            for a in world.agents.values()
+            if getattr(a, "kind", None) == AgentKind.NPC
+            and getattr(a, "status", Status.ACTIVE) == Status.ACTIVE
+            and getattr(a, "home_id", None) is not None
+        )
+        world.telemetry.gauge_set(Metric.NPC_HOMES_FULL, float(homes_full))
