@@ -119,7 +119,30 @@ class Memory:
         # Apply schema. ``schema.sql`` is idempotent (CREATE IF NOT EXISTS).
         with open(_SCHEMA_PATH, "r", encoding="utf-8") as fh:
             conn.executescript(fh.read())
+        # v9 — additive migrations. Safe on a fresh DB (column already exists)
+        # and on an upgraded DB (column gets added).
+        cls._migrate_v9(conn)
         return cls(conn)
+
+    # ----------------------------------------------------- v9 migrations
+    @staticmethod
+    def _migrate_v9(conn: sqlite3.Connection) -> None:
+        """Add ``preferred_home`` to sub_main_characters when missing.
+
+        SQLite has no ``ADD COLUMN IF NOT EXISTS``; we inspect the table and
+        emit ``ALTER`` only when needed. Failure is non-fatal — the caller
+        treats a busted migration like a busted DB (memory off).
+        """
+        try:
+            cols = {
+                r[1] for r in conn.execute("PRAGMA table_info(sub_main_characters)")
+            }
+            if "preferred_home" not in cols:
+                conn.execute(
+                    "ALTER TABLE sub_main_characters ADD COLUMN preferred_home TEXT"
+                )
+        except Exception:  # pragma: no cover — best-effort migration
+            pass
 
     # ----------------------------------------------------------------- log
     def _log_exc(self, world: Any, where: str) -> None:
@@ -221,6 +244,91 @@ class Memory:
             )
         except Exception:
             self._log_exc(world, "hydrate")
+
+    # -------------------------------------------------------- hydrate minds
+    def hydrate_minds(self, world: Any) -> None:
+        """v9 — lift open goals and recent beliefs back into each Mind.
+
+        Called from ``app.py`` AFTER ``build_characters`` so every character
+        already owns a fresh ``Mind`` instance. Walks ``world.agents`` once;
+        a missing ``mind`` attribute is fine (the agent simply skips).
+
+        Belief rows are scored by ``last_seen_tick`` so only the latest
+        ``RECENT_LIMIT`` per character are restored.
+        """
+        try:
+            from agents.mind import Belief, Goal, GoalKind  # local import — avoid cycle
+        except Exception:
+            return
+        try:
+            with self._lock:
+                for agent in list(getattr(world, "agents", {}).values()):
+                    mind = getattr(agent, "mind", None)
+                    if mind is None:
+                        continue
+                    aid = getattr(agent, "id", None)
+                    if not aid:
+                        continue
+                    # Restore the most recent 10 beliefs.
+                    belief_rows = self._conn.execute(
+                        "SELECT tick, subject, detail, payload FROM character_memory "
+                        "WHERE character_id = ? AND kind = 'belief' "
+                        "ORDER BY tick DESC LIMIT 10",
+                        (str(aid),),
+                    ).fetchall()
+                    for r in belief_rows:
+                        try:
+                            payload = json.loads(r["payload"] or "{}") if r["payload"] else {}
+                        except Exception:
+                            payload = {}
+                        key = str(r["subject"] or "")
+                        if not key:
+                            continue
+                        if key in mind.beliefs:
+                            continue
+                        mind.beliefs[key] = Belief(
+                            key=key,
+                            confidence=float(payload.get("confidence", 0.5)),
+                            polarity=float(payload.get("polarity", 1.0)),
+                            created_tick=int(r["tick"]),
+                            last_seen_tick=int(r["tick"]),
+                            note=str(r["detail"] or ""),
+                        )
+                    # Restore the latest open goal (if any). A goal is "open"
+                    # if a more recent goal_closed row hasn't superseded it.
+                    open_row = self._conn.execute(
+                        "SELECT tick, subject, detail, payload FROM character_memory "
+                        "WHERE character_id = ? AND kind = 'goal_open' "
+                        "ORDER BY tick DESC LIMIT 1",
+                        (str(aid),),
+                    ).fetchone()
+                    if open_row is None:
+                        continue
+                    closed_tick = self._conn.execute(
+                        "SELECT MAX(tick) AS t FROM character_memory "
+                        "WHERE character_id = ? AND kind = 'goal_closed'",
+                        (str(aid),),
+                    ).fetchone()
+                    last_closed = int(closed_tick["t"] or -1) if closed_tick else -1
+                    if int(open_row["tick"]) <= last_closed:
+                        continue
+                    try:
+                        payload = json.loads(open_row["payload"] or "{}") if open_row["payload"] else {}
+                        kind_val = str(open_row["subject"] or "")
+                        target = str(open_row["detail"] or "")
+                        kind = GoalKind(kind_val)
+                        mind.active_goal = Goal(
+                            kind=kind,
+                            target=target,
+                            priority=float(payload.get("priority", 0.5)),
+                            expires_at_tick=int(world.tick_count) + int(world.config.mind_goal_ttl_ticks),
+                            origin_belief_key=str(payload.get("origin_belief") or "") or None,
+                            opened_tick=int(open_row["tick"]),
+                        )
+                    except (KeyError, ValueError):
+                        continue
+        except Exception:
+            self._log_exc(world, "hydrate_minds")
 
     # --------------------------------------------------- buffered writes
     def record_event(self, world: Any, event: Any) -> None:
@@ -364,6 +472,37 @@ class Memory:
             # blow up trying to rename the NPC; the row just isn't persisted.
             return getattr(npc, "name", str(getattr(npc, "id", "Unknown")))
 
+    # ------------------------------------------------------- preferred home
+    def get_sub_main_preferred_home(self, npc_id: str) -> Optional[str]:
+        """v9 — read a sub-main NPC's preferred home (or None)."""
+        try:
+            with self._lock:
+                row = self._conn.execute(
+                    "SELECT preferred_home FROM sub_main_characters "
+                    "WHERE npc_id = ? AND died_at_cycle IS NULL",
+                    (str(npc_id),),
+                ).fetchone()
+            if row is None:
+                return None
+            val = row["preferred_home"]
+            return str(val) if val else None
+        except Exception:
+            return None
+
+    def set_sub_main_preferred_home(
+        self, world: Any, npc_id: str, building_id: Optional[str]
+    ) -> None:
+        """v9 — record (or clear) a sub-main's preferred home."""
+        try:
+            with self._lock:
+                self._conn.execute(
+                    "UPDATE sub_main_characters SET preferred_home = ? "
+                    "WHERE npc_id = ? AND died_at_cycle IS NULL",
+                    (str(building_id) if building_id else None, str(npc_id)),
+                )
+        except Exception:
+            self._log_exc(world, "set_sub_main_preferred_home")
+
     def mark_sub_main_dead(self, world: Any, npc_id: str, cause: str) -> None:
         """Close a sub-main's tombstone — they stop showing up in
         ``world.sub_mains`` on subsequent hydrates."""
@@ -443,12 +582,10 @@ class Memory:
                     pruned = sorted(self._recall_cache.items(), key=lambda kv: kv[1][0])
                     for k, _ in pruned[: len(pruned) // 2]:
                         self._recall_cache.pop(k, None)
-            from contracts import Event
-            world.emit(Event(
-                tick=world.tick_count, type="memory_recall",
-                subject=str(character_id),
-                detail=f"{len(rows)} rows ({','.join(sorted(kind_set))})",
-            ))
+            # Note: memory_recall used to emit an event per call, but that
+            # made the user-facing event log unreadable (10+ recalls per tick
+            # × hundreds of ticks). The SQLite write/read itself is the
+            # source of truth; metrics/telemetry still count the volume.
             return rows
         except Exception:
             self._log_exc(world, "recall_for")

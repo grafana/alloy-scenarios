@@ -46,6 +46,7 @@ def _apply_building_layout(world: World) -> None:
             has_talisman=bool(has_talisman),
             role_tag=role_tag,
             locked=False,
+            original_talisman=bool(has_talisman),
         )
 
 
@@ -120,6 +121,26 @@ def reset_world(world: World) -> None:
     world.music_box_carrier = None
     world.worms_infected.clear()
     world.rhyme_heard.clear()
+
+    # v6 — any live arrival car gets cleared (the Car object is in supernaturals
+    # which we wiped above). Legacy.permanent_wrecks is preserved automatically.
+    world.active_car_id = None
+    world.car_pending_npc_id = None
+    # v7 — barn state is per-cycle; reset on wipe so the new village starts
+    # with a working food store.
+    world.barn_destroyed_until_tick = 0
+    world.barn_repair_progress = 0.0
+    # v8 — construction state is per-cycle; new houses don't survive wipes.
+    world.construction_progress.clear()
+    world.consumed_lots.clear()
+    # And remove any built houses from the NPC home pool we appended into.
+    try:
+        from contracts import NPC_HOME_BUILDINGS
+        NPC_HOME_BUILDINGS[:] = [
+            bid for bid in NPC_HOME_BUILDINGS if not bid.startswith("built_house_")
+        ]
+    except Exception:
+        pass
 
     # v5 — sub_mains persist across wipes (they're tracked in SQLite forever);
     # in-memory set survives this reset. Memory handle stays attached too.

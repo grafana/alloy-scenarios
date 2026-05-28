@@ -34,6 +34,31 @@
   <div class="hud-cell yellow">
     <span id="hud-yellow" class="hud-chip yellow-dormant hidden">DORMANT</span>
   </div>
+  <!-- v9: minds heatmap — Director pressure + goal-mix at a glance. -->
+  <div class="hud-cell minds" id="hud-minds-cell">
+    <span class="hud-label">Minds</span>
+    <div class="minds-row">
+      <div class="minds-pressure" title="Director pressure (0 = quiet, 1 = breaking)">
+        <div class="bar"><div id="hud-pressure-fill" class="bar-fill pressure"></div></div>
+        <span id="hud-pressure-text" class="bar-text">0.00</span>
+      </div>
+      <div class="minds-goals" id="hud-goals">
+        <span class="goal-pip goal-protect" title="PROTECT">P<span data-kind="protect">0</span></span>
+        <span class="goal-pip goal-investigate" title="INVESTIGATE">I<span data-kind="investigate">0</span></span>
+        <span class="goal-pip goal-revenge" title="REVENGE">R<span data-kind="revenge">0</span></span>
+        <span class="goal-pip goal-flee" title="FLEE">F<span data-kind="flee">0</span></span>
+        <span class="goal-pip goal-find_item" title="FIND ITEM">$<span data-kind="find_item">0</span></span>
+      </div>
+      <div class="minds-popstress" title="Population-stress: how much the Director is escalating because the town is thriving (0..0.4)">
+        <span class="minds-label">PS</span>
+        <span id="hud-pop-stress">0.00</span>
+      </div>
+      <div class="minds-beliefs" title="active beliefs across all minds">
+        <span class="minds-label">Beliefs</span>
+        <span id="hud-beliefs-count">0</span>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
@@ -44,6 +69,9 @@
     {% include "_map_svg.html" %}
   </div>
 </section>
+
+<!-- v6: floating dossier overlay populated by inspector.js on inspect_reply. -->
+<aside class="dossier hidden" id="dossier"></aside>
 
 <aside class="side-pane">
   <details class="panel" open>
@@ -79,6 +107,8 @@
       <dt>NPCs</dt><dd id="stat-npcs">0</dd>
       <dt>Creatures</dt><dd id="stat-creatures">0</dd>
       <dt>Yellow Man</dt><dd id="stat-yellow">DORMANT</dd>
+      <dt>Cave clues</dt><dd id="stat-cave-clues">0</dd>
+      <dt>Barn</dt><dd id="stat-barn">intact</dd>
     </dl>
   </details>
 
@@ -192,5 +222,6 @@
 </script>
 <script src="{{ url_for('static', filename='js/lighting.js') }}"></script>
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/inspector.js') }}"></script>
 <script src="{{ url_for('static', filename='js/socket.js') }}"></script>
 {% endblock %}

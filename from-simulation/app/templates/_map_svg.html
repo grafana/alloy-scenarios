@@ -248,6 +248,21 @@
         <path d="M 16 65 Q 30 58 44 65 L 46 76 L 14 76 Z" fill="#e8e0d0" stroke="#7a8090" stroke-width="0.9"/>
       </g>
     </symbol>
+
+    <!-- v6: battered arrival hatchback. 40x20 viewBox so map.js can use the
+         token with width=40 height=20 at the agent's (x, y). Rust browns and
+         dark grey to match the dark-Americana palette. -->
+    <symbol id="token-car" viewBox="0 0 40 20">
+      <rect x="2" y="6" width="36" height="9" rx="2" fill="#7d5a3a" stroke="#1a1611" stroke-width="0.9"/>
+      <rect x="6" y="3" width="12" height="6" fill="#5a4630" stroke="#1a1611" stroke-width="0.7"/>
+      <rect x="22" y="3" width="12" height="6" fill="#5a4630" stroke="#1a1611" stroke-width="0.7"/>
+      <circle cx="10" cy="16" r="2.6" fill="#1a1611"/>
+      <circle cx="30" cy="16" r="2.6" fill="#1a1611"/>
+      <rect x="34" y="9" width="3" height="2" fill="#d8a83a"/>
+      <!-- rust patches -->
+      <circle cx="14" cy="11" r="1.2" fill="#3a2a18" opacity="0.5"/>
+      <circle cx="27" cy="12" r="1" fill="#3a2a18" opacity="0.4"/>
+    </symbol>
   </defs>
 
   <!-- LAYER 1: FOREST BASE -->
@@ -479,6 +494,7 @@
       <rect x="410" y="396" width="3" height="3" fill="#f6c869"/>
       <rect x="424" y="396" width="3" height="3" fill="#f6c869"/>
     </g>
+    <use href="#talisman" transform="translate(418 386) scale(0.42)"/>
 
     <!-- 3 SHED -->
     <g transform="translate(442 388)">
@@ -542,6 +558,7 @@
       <rect x="412" y="486" width="3" height="3" fill="#f6c869"/>
       <rect x="426" y="486" width="3" height="3" fill="#f6c869"/>
     </g>
+    <use href="#talisman" transform="translate(420 476) scale(0.42)"/>
 
     <!-- 9 BLUE HOUSE -->
     <g transform="translate(440 490) rotate(2)">
@@ -553,6 +570,7 @@
       <rect x="432" y="486" width="3" height="3" fill="#f6c869"/>
       <rect x="446" y="486" width="3" height="3" fill="#f6c869"/>
     </g>
+    <use href="#talisman" transform="translate(440 476) scale(0.42)"/>
 
     <!-- 10 POOL -->
     <g transform="translate(462 478)">
@@ -571,6 +589,7 @@
       <rect x="471" y="458" width="3" height="3" fill="#f6c869"/>
       <rect x="483" y="458" width="3" height="3" fill="#f6c869"/>
     </g>
+    <use href="#talisman" transform="translate(478 448) scale(0.42)"/>
 
     <!-- 12 BAR -->
     <g transform="translate(510 458) rotate(-2)">
@@ -658,6 +677,7 @@
       <rect x="373" y="548" width="3" height="3" fill="#f6c869"/>
       <rect x="386" y="548" width="3" height="3" fill="#f6c869"/>
     </g>
+    <use href="#talisman" transform="translate(382 538) scale(0.42)"/>
 
   </g>
 

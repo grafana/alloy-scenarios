@@ -37,9 +37,12 @@
   });
 
   socket.on("inspect_reply", (payload) => {
-    window.dispatchEvent(
-      new CustomEvent("from:inspect_reply", { detail: payload || {} })
-    );
+    // The legacy inline roster-detail still listens on "from:inspect_reply".
+    // The v6 dossier overlay (inspector.js) listens on the shorter "from:inspect"
+    // alias so it can be wired/unwired independently of the roster panel.
+    const detail = payload || {};
+    window.dispatchEvent(new CustomEvent("from:inspect_reply", { detail }));
+    window.dispatchEvent(new CustomEvent("from:inspect", { detail }));
   });
 
   socket.on("cycle_reset", (payload) => {

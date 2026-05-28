@@ -353,7 +353,10 @@ def _begin_arrival(world: World) -> None:
     n_outsiders = rng.randint(1, 3)
     picks = _pick_backstories(world, n_outsiders)
     arrive_at = world.tick_count + 10
-    leave_at = bus.departure_tick - 10
+    # v8 — outsiders no longer board the departing bus, so the leave-tick is
+    # effectively never. Keeping the field set far in the future avoids a
+    # brief ABSENT flicker just before the bus drives off.
+    leave_at = 10 ** 12
     spawned: List[Outsider] = []
     for seed, backstory, goal in picks:
         name = _disambiguate_name(world, seed)
@@ -431,36 +434,37 @@ def _drive_out(world: World) -> None:
         marker.x, marker.y = bus.x, bus.y
         return
 
-    # Path complete — collect survivors and depart.
-    survivors: List[Outsider] = []
+    # v8 — lore says no one can leave Fromville. The bus drives out empty.
+    # Any outsider who arrived stays as a permanent resident — they're
+    # already in world.agents and will continue to tick. The departure
+    # message reflects the change so the journal doesn't lie.
+    stranded: List[Outsider] = []
     for oid in list(bus.passengers):
         agent = world.agents.get(oid)
-        if isinstance(agent, Outsider) and agent.status in (Status.ACTIVE, Status.ABSENT):
-            survivors.append(agent)
-            world.agents.pop(oid, None)
-
-    for o in survivors:
-        world.emit(
-            Event(
-                tick=world.tick_count,
-                type="outsider_left",
-                subject=o.id,
-                detail=f"{o.name} boarded the bus out of town",
-                severity="info",
-            )
-        )
+        if isinstance(agent, Outsider):
+            stranded.append(agent)
+            # Their lifetime gate is no longer meaningful — drop it so the
+            # Outsider tick doesn't suddenly flip them to ABSENT.
+            agent.leaves_at_tick = 10 ** 12
+            if agent.status == Status.ABSENT:
+                agent.status = Status.ACTIVE
 
     world.emit(
         Event(
             tick=world.tick_count,
             type="bus_depart",
             subject="bus",
-            detail=f"the bus left with {len(survivors)} passenger(s)",
+            detail=(
+                "the bus rolls out empty — the road won't keep its passengers"
+                if stranded
+                else "the bus left town the way it came"
+            ),
             severity="info",
         )
     )
 
-    # Reset bus state.
+    # Reset bus state. We intentionally DO NOT clear passengers from
+    # world.agents — they remain as wandering residents.
     bus.active = False
     bus.passengers.clear()
     bus.path_index = 0

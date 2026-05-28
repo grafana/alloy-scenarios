@@ -26,7 +26,9 @@ from typing import Optional
 import legacy as _legacy
 from contracts import (
     Event,
+    LIGHTHOUSE_XY,
     Phase,
+    State,
     Status,
     World,
 )
@@ -56,9 +58,70 @@ _VOICE_LINES = [
 # inside the same tick by using a module-local set indexed by cycle.
 _called_cycles: set = set()
 
+# v6 — module-local set of cycles for which we've already emitted
+# ``lighthouse_walking``. Once we've biased the called character toward the
+# lighthouse, we don't want to keep re-emitting the same "started walking"
+# event every tick.
+_walking_emitted_cycles: set = set()
+
 
 def _find_lighthouse(world: World):
     return world.buildings.get("lighthouse")
+
+
+def _maybe_pull_called(world: World) -> None:
+    """v6 — explicit-targeting override.
+
+    Replaces the old "called character happens to wander within 30 px"
+    approach. When a call is active AND it's DUSK or NIGHT AND the called
+    character is still ACTIVE, we set ``state = State.CALLED`` and seed
+    ``target_x``/``target_y`` with the lighthouse coordinates. ``characters.py``
+    honours CALLED as a hard override and walks them straight there.
+
+    A single ``lighthouse_walking`` event is emitted on the first transition
+    so the activity feed has a clear "X is walking to the lighthouse" beat.
+    """
+    if world.lighthouse_called is None:
+        return
+    if world.time.phase not in (Phase.DUSK, Phase.NIGHT):
+        return
+    char = world.agents.get(world.lighthouse_called)
+    if char is None:
+        return
+    if getattr(char, "status", Status.ACTIVE) != Status.ACTIVE:
+        return
+
+    lx, ly = LIGHTHOUSE_XY
+
+    # First-transition guard: only emit the walking event once per cycle.
+    cycle = world.cycle_number
+    prev_state = getattr(char, "state", None)
+    if prev_state != State.CALLED and cycle not in _walking_emitted_cycles:
+        _walking_emitted_cycles.add(cycle)
+        name = getattr(char, "name", char.id)
+        world.emit(
+            Event(
+                tick=world.tick_count,
+                type="lighthouse_walking",
+                subject=char.id,
+                detail=f"{name} began walking toward the Lighthouse",
+                severity="warn",
+            )
+        )
+
+    # Hard override every tick a call is active during the night phases.
+    try:
+        char.state = State.CALLED
+    except Exception:
+        pass
+    try:
+        setattr(char, "target_x", float(lx))
+        setattr(char, "target_y", float(ly))
+        # Also write into the ``target`` tuple if the character uses one.
+        if hasattr(char, "target"):
+            char.target = (float(lx), float(ly))
+    except Exception:
+        pass
 
 
 def _maybe_call(world: World) -> None:
@@ -74,7 +137,11 @@ def _maybe_call(world: World) -> None:
     if tick_today < call_tick:
         return
 
-    # Find a callable target: highest sanity, ACTIVE character.
+    # Find a callable target. Originally always the highest-sanity character,
+    # but that made Boyd-the-sheriff the perennial pilgrim. v7: weight each
+    # candidate by sanity, then sample. The high-sanity ones are still more
+    # likely but every active character has a real shot, so the lighthouse
+    # rotates organically across cycles.
     candidates = [
         a for a in world.agents.values()
         if getattr(a, "status", Status.ACTIVE) == Status.ACTIVE
@@ -83,7 +150,8 @@ def _maybe_call(world: World) -> None:
     ]
     if not candidates:
         return
-    target = max(candidates, key=lambda a: float(getattr(a, "sanity", 100.0)))
+    weights = [max(1.0, float(getattr(a, "sanity", 50.0))) for a in candidates]
+    target = world.rng.choices(candidates, weights=weights, k=1)[0]
     world.lighthouse_called = target.id
     try:
         setattr(target, "called", True)
@@ -106,7 +174,9 @@ def _maybe_enter(world: World) -> None:
         return  # already inside
     if world.lighthouse_called is None:
         return
-    if world.time.phase != Phase.NIGHT:
+    # v6 — accept DUSK as well as NIGHT, since the character is now actively
+    # walking toward the lighthouse rather than wandering into it by accident.
+    if world.time.phase not in (Phase.DUSK, Phase.NIGHT):
         return
     char = world.agents.get(world.lighthouse_called)
     if char is None:
@@ -191,8 +261,14 @@ def tick_lighthouse(world: World) -> None:
     # Cycle wipes invalidate our memo: keep the set bounded.
     if len(_called_cycles) > 64:
         _called_cycles.clear()
+    if len(_walking_emitted_cycles) > 64:
+        _walking_emitted_cycles.clear()
 
     _sweep_removals(world)
     _maybe_call(world)
+    # v6 — pull the called character toward the lighthouse explicitly. Must
+    # run BEFORE _maybe_enter so the override applies on the same tick the
+    # character first becomes eligible.
+    _maybe_pull_called(world)
     _maybe_enter(world)
     _maybe_voice(world)

@@ -77,6 +77,11 @@ All variables are optional — defaults are in `docker-compose.yml` and `app/con
 | `YELLOW_HYDRA_MAX`                | `3`                    | Maximum simultaneous Yellow Man tendrils               |
 | `LIGHTHOUSE_CALL_TICK_FRAC`       | `0.4`                  | Fraction of NIGHT after which the lighthouse may call  |
 | `TRUST_BASELINE`                  | `0.5`                  | Initial pairwise trust value between characters        |
+| `MIND_REFLECT_EVERY_TICKS`        | `600`                  | Cadence per named character for the Mind's reflection pass (≈5 sim-min) |
+| `MIND_GOAL_TTL_ticks`             | `3600`                 | How long an active goal lives before it expires        |
+| `MIND_NPC_ENABLED`                | `true`                 | When `true`, NPCs run the lightweight `NpcMind` (no LLM cost) |
+| `LLM_THINKING_RPM`                | `2`                    | Reserved RPM slice for "thinking" LLM calls (Yellow Man tactics, belief flavour); split off the global RPM |
+| `DETERMINISTIC_MODE`              | `false`                | When `true`, every LLM `maybe_*` returns None so `SEED` runs are byte-identical |
 
 ### Optional LLM narration
 
@@ -133,6 +138,92 @@ Late in NIGHT (after `LIGHTHOUSE_CALL_TICK_FRAC` of the phase), the lighthouse m
 ### v3 — hand-drawn map & character tokens
 
 The map is now the **Claude Design hand-drawn Fromville** — a paper-stock meadow inside a dark forest ring with a single S-curve highway, internal dirt streets, three Faraway/Bottle Trees, a rotating lighthouse beam, and all 18 numbered township buildings (forest scatter is generated client-side from a seeded RNG so it stays consistent across sessions). A new **Township Index** side panel lists every building with its number, mini-icon, and name; the five talisman-protected buildings — **Colony House, Clinic, Church, Sheriff's Office, Matthews' Home** — are marked with a ★. Named characters now render as hand-drawn 60×80 token sprites (one `<symbol>` per character, dropped onto the map via `<use href="#token-{name}">`), and the Man in Yellow / Boy in White get their own distinct tokens. Building windows glow at DUSK and NIGHT and a radial-gradient overlay deepens the village in dream-time.
+
+### v9 — cognitive layer (Mind + AI Director)
+
+Named characters and (lightweight) NPCs now run a four-layer cognitive stack
+between the existing weighted-FSM and the optional LLM picker:
+
+1. **Memory stream** — retrieves recent `character_memory` rows scored by
+   recency × importance × structural relevance (deterministic; no embeddings).
+2. **Beliefs** — every `MIND_REFLECT_EVERY_TICKS` ticks each named character
+   clusters their recent memories and emits up to three typed beliefs
+   (`house_weak:X`, `yellow_suspect:Y`, `loss:Z`, …) that are persisted as
+   `character_memory` rows with `kind = "belief"` so they survive restart.
+3. **Goals** — a deterministic rule table maps beliefs + drives to one active
+   `Goal` per agent (`PROTECT_X`, `INVESTIGATE_X`, `REVENGE_X`, `FLEE_TO_Y`,
+   `FIND_ITEM_Z`). Open/close are recorded in memory.
+4. **Plan** — the active goal adds additive weight deltas onto the existing
+   FSM menu; the weighted-FSM choice still runs last, so `SEED`-pinned runs
+   stay deterministic.
+
+A world-level **AI Director** (`app/agents/director.py`) reads town tension
+(fear/sanity averages, food ratio, recent breach rate, yellow deadline) and
+tunes three knobs each tick:
+
+- `spawn_rate_mult` — creature cohort size at dusk
+- `yellow_appearance_bias` — added to `YELLOW_IMPOSTER_PROB`
+- `target_bias` — softmax over `legacy.building_breach_marks` and the new
+  `legacy.talisman_failure_count` so historically weak buildings draw the
+  next wave (creatures *learn* across cycles).
+
+The **Yellow Man** is now actively strategic — tendril NPCs are chosen by an
+"awareness × social-load" weight, and `LURE_OUTSIDE` prefers homes of
+load-bearing roles (SHERIFF / CARETAKER / PRIEST). The previously-broken LLM
+hook (`yellow_man.py:_consult_llm`) is wired to a generic
+`LLMDecider.maybe_pick_string` on its own thinking-budget bucket so reflection
+and tactical calls never starve the state-choice budget.
+
+Visibility:
+
+- HUD bar gains a **Minds** cell — Director pressure (0..1 with a colour
+  gradient), goal-mix pips by kind, and the live belief count.
+- Dossier panel adds a **Mind** section: active goal + top-3 beliefs with
+  confidence bars, plus a reflection counter.
+- OTel spans (`mind.recall`, `mind.reflect`, `mind.regoal`, `mind.shape_menu`,
+  `director.recalc`, `yellow.target_select`) and metrics
+  (`from_sim_director_pressure`, `from_sim_director_spawn_mult`,
+  `from_sim_mind_beliefs_active`, `from_sim_mind_goals_active{kind}`,
+  `from_sim_mind_reflections_total`, `from_sim_yellow_target_role{role}`,
+  plus a new `purpose` label on `from_sim_llm_calls_total`).
+
+LLM budget is split: 4 RPM for state-choice + `LLM_THINKING_RPM` (default 2)
+for thinking. With `ANTHROPIC_API_KEY` unset, or `DETERMINISTIC_MODE=true`,
+every cognitive op falls back to the deterministic path.
+
+### v9.1 — pressure-equilibrium pass
+
+Tuning pass on top of v9 to make monsters actually suppress survivor growth
+rather than the user reducing arrivals. Key changes:
+
+- Dusk creature cohort cap raised (12 → 20) and population scaling steepened
+  (one extra per 8 living agents instead of 12).
+- Cave spawner activates at DUSK as well as NIGHT, runs on a 60-tick cadence
+  (was 90), and the soft cap rises 8 → 14.
+- New mid-NIGHT wave (`creatures.tick_night_wave`) drops a half-strength
+  cohort once per simulated night so cohort depletion no longer empties the
+  map between dusk and dawn.
+- Stalker creatures multi-kill (up to 3 prey before retreating); swarmers
+  keep single-prey behaviour. A `creature_kill_streak` event fires on the
+  second catch so rampages are visible in the journal.
+- Hunt geometry: radius 110 → 150 (overcrowded 180 → 240), catch box 12 →
+  14, chase speed bonus 0.4 → 0.6.
+- `NPC_BREACH_DEATH_PROB` default 0.30 → 0.50 so getting through a door
+  matters.
+- AI Director gains a **population-stress** input: once live population
+  crosses ~1.5× `NPC_FLOOR`, it subtracts from the raw pressure score
+  (capped at 0.4), pushing the Director toward escalation. The spawn-mult
+  ceiling also rises 1.4× → 1.6×, so a thriving town gets a max cohort of
+  ~32 creatures.
+- HUD minds cell gains a `PS` pip alongside Director pressure; the dossier
+  is unchanged.
+
+New metrics: `from_sim_director_population_stress` (gauge),
+`from_sim_creatures_night_waves_total` (counter).
+New events: `creature_night_wave`, `creature_kill_streak`.
+
+The whole pass is deterministic with `SEED` set, and `DETERMINISTIC_MODE`
+still disables every LLM call.
 
 ## Repository
 

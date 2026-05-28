@@ -103,6 +103,42 @@ _TEMPLATES: Dict[str, List[str]] = {
         "The Father called a meeting. Sara had told them where to take it.",
         "We voted to destroy the box. Most of us, anyway.",
     ],
+    # v6 — cave exploration outcomes.
+    "cave_fragment_found": [
+        "{name} brought back something from the caves. Old script we don't recognise.",
+        "{name} returned from the cave with a relic. Khatri studied it for hours.",
+        "{name} dug something out of the cave wall. The dust would not brush off.",
+    ],
+    "cave_clue_found": [
+        "{name} pocketed something from the caves. They won't say what.",
+        "{name} came back from the caves quiet. Their hands were closed too tight.",
+    ],
+    "cave_lost": [
+        "{name} did not return from the caves. We waited at the entrance till dawn.",
+        "We searched the caves for {name}. We did not find them.",
+    ],
+    # v6 — car arrivals + their slow deaths on the road.
+    "car_arrival": [
+        "A car came down the road. We weren't expecting one. {name} stepped out.",
+        "Another one tried the road. {name} survived the drive.",
+    ],
+    "car_broke_down": [
+        "They tried to leave. The car gave up halfway. It joins the others now.",
+        "The engine died on the bend. Nothing leaves Fromville on wheels.",
+    ],
+    # v7 — barn destroyed + foraging fallback.
+    "barn_destroyed": [
+        "The barn is gone. The food store with it. We will go hungry until it's rebuilt.",
+        "They came through the barn. The harvest is open to the rain.",
+    ],
+    "barn_rebuilt": [
+        "{name} put the barn back up. We can stop the foraging runs.",
+        "The barn stands again. We slept easier that night.",
+    ],
+    "forage_returned": [
+        "{name} came back from the river with food.",
+        "{name} found enough by the windmill to get us through the day.",
+    ],
 }
 
 

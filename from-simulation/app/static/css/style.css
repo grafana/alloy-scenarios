@@ -47,6 +47,8 @@ body.theme-dread {
     radial-gradient(ellipse at top, #1a1525 0%, #08080a 60%) fixed,
     var(--bg-0);
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ============================== topbar HUD ============================== */
@@ -54,13 +56,15 @@ body.theme-dread {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
   background: linear-gradient(180deg, rgba(20, 18, 32, 0.95), rgba(8, 8, 12, 0.95));
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
   z-index: 10;
-  gap: 16px;
+  gap: 12px;
+  flex: 0 0 auto;
 }
 
 .brand {
@@ -84,8 +88,9 @@ body.theme-dread {
 .hud {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   flex-wrap: wrap;
+  row-gap: 6px;
 }
 .hud-cell {
   display: flex;
@@ -96,6 +101,13 @@ body.theme-dread {
   border: 1px solid var(--line);
   border-radius: 4px;
   min-height: 28px;
+}
+/* Hide HUD cells whose only child is .hidden (keeps the bar from
+   showing an empty 18px-wide bordered box when e.g. the yellow chip
+   is dormant-hidden). */
+.hud-cell:empty,
+.hud-cell:has(> .hidden:only-child) {
+  display: none;
 }
 .hud-label {
   font-size: 10px;
@@ -176,7 +188,8 @@ body.theme-dread {
   grid-template-columns: 1fr 380px;
   gap: 12px;
   padding: 12px;
-  height: calc(100vh - 56px);
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .map-pane {
@@ -200,6 +213,13 @@ body.theme-dread {
   gap: 10px;
   overflow-y: auto;
   padding-right: 4px;
+  min-height: 0;
+}
+/* Panels are flex items in the side-pane. Without flex-shrink: 0
+   they would be squashed to fit the column's available height,
+   which silently hides content. Let the side-pane scroll instead. */
+.side-pane > .panel {
+  flex: 0 0 auto;
 }
 
 /* ============================== panels ============================== */
@@ -230,7 +250,16 @@ body.theme-dread {
 .panel:not([open]) > summary::after { content: "+"; }
 .panel > *:not(summary) {
   padding: 8px 12px;
-  max-height: 280px;
+}
+/* Lists that grow unbounded over the run get capped so they don't
+   dominate the side-pane scroll. Static / short panels (Stats,
+   Township Index, Roster, Bus) size to their content and the
+   side-pane is the single scroll container. */
+#event-log,
+#journal-list,
+#lighthouse-voice-list,
+#narration {
+  max-height: 320px;
   overflow-y: auto;
 }
 
@@ -306,7 +335,7 @@ body.theme-dread {
   margin: 0;
   padding: 0;
   font-size: 12px;
-  max-height: 120px;
+  max-height: 220px;
   overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -398,7 +427,20 @@ body.theme-dread {
   filter: drop-shadow(0 0 4px rgba(216, 179, 64, 0.6));
 }
 #entities .anghkooey  { fill: var(--anghkooey); }
-#entities .faraway-tree { fill: var(--faraway-tree); opacity: 0.85; }
+#entities .faraway-tree {
+  fill: none;
+  stroke: var(--faraway-tree);
+  stroke-width: 1.2;
+  opacity: 0.85;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: faraway-pulse 1.6s ease-in-out infinite;
+}
+@keyframes faraway-pulse {
+  0%, 100% { transform: scale(0.8); opacity: 0.3; }
+  50%      { transform: scale(1.8); opacity: 0.9; }
+}
 
 #entities text.label {
   font-size: 8px;
@@ -468,6 +510,152 @@ body.theme-dread {
  * lighthouse-called, dream mode, journal / voice / bus panels.
  * ============================================================ */
 
+/* v9 — Minds heatmap HUD cell + dossier mind section. */
+.hud-cell.minds {
+  min-width: 280px;
+}
+.minds-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.minds-pressure {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 110px;
+}
+.minds-pressure .bar {
+  width: 80px;
+  height: 6px;
+  background: #1a1611;
+  border: 1px solid #3a3024;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.minds-pressure .bar-fill.pressure {
+  height: 100%;
+  width: 0%;
+  background: #4a8a4a;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+.minds-goals {
+  display: flex;
+  gap: 4px;
+}
+.minds-goals .goal-pip {
+  font-size: 9px;
+  letter-spacing: 0.3px;
+  padding: 1px 4px;
+  border-radius: 8px;
+  background: #2a2418;
+  color: #c0a070;
+  border: 1px solid #3a3024;
+}
+.minds-goals .goal-pip.goal-protect      { color: #8ed8a4; border-color: #2a5a3a; }
+.minds-goals .goal-pip.goal-investigate  { color: #a4b8d8; border-color: #2a3a5a; }
+.minds-goals .goal-pip.goal-revenge      { color: #d88a8a; border-color: #5a2a2a; }
+.minds-goals .goal-pip.goal-flee         { color: #d8b070; border-color: #5a4a2a; }
+.minds-goals .goal-pip.goal-find_item    { color: #d8d090; border-color: #5a5024; }
+.minds-goals .goal-pip span { margin-left: 2px; font-weight: bold; }
+.minds-beliefs,
+.minds-popstress {
+  font-size: 10px;
+  color: #c0a070;
+  display: flex;
+  gap: 4px;
+}
+.minds-popstress {
+  font-variant-numeric: tabular-nums;
+}
+.minds-beliefs .minds-label {
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  opacity: 0.7;
+}
+
+/* Mind section inside the dossier — beliefs list + active goal. */
+.dossier .mind-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #3a3024;
+}
+.dossier .mind-section h4 {
+  margin: 0 0 6px 0;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #c0a070;
+}
+.dossier .mind-goal {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+.dossier .mind-goal .goal-kind {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-size: 9px;
+  background: #2a2418;
+  color: #d8a83a;
+  border: 1px solid #3a3024;
+}
+.dossier .mind-goal .goal-target {
+  font-family: "Georgia", serif;
+  font-style: italic;
+}
+.dossier .mind-goal .goal-priority {
+  margin-left: auto;
+  font-size: 9px;
+  opacity: 0.7;
+}
+.dossier .mind-beliefs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dossier .mind-beliefs li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  padding: 2px 0;
+  border-bottom: 1px dotted #2a2418;
+}
+.dossier .mind-beliefs li:last-child {
+  border-bottom: none;
+}
+.dossier .mind-beliefs .belief-key {
+  font-family: "Menlo", monospace;
+  font-size: 9px;
+  color: #8a9a78;
+}
+.dossier .mind-beliefs .belief-polarity-positive { color: #b94747; }
+.dossier .mind-beliefs .belief-polarity-negative { color: #4a8a8a; }
+.dossier .mind-beliefs .belief-conf {
+  margin-left: auto;
+  width: 32px;
+  height: 4px;
+  background: #1a1611;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.dossier .mind-beliefs .belief-conf-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6a5524, #d8a83a);
+}
+.dossier .mind-empty {
+  font-size: 10px;
+  font-style: italic;
+  color: #6a5f48;
+}
+
 /* HUD: cycles_witnessed badge + fragments indicator */
 .hud-fragments {
   margin-left: 8px;
@@ -482,7 +670,7 @@ body.theme-dread {
   font-size: 11px;
   color: #c0a070;
   letter-spacing: 0.5px;
-  max-width: 240px;
+  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -731,18 +919,21 @@ svg#world.dream-mode {
 .lighting.dusk {
   opacity: 1;
   background:
-    radial-gradient(60% 70% at 47% 65%,
-      rgba(70, 40, 60, 0.0) 0%,
-      rgba(40, 25, 55, 0.55) 60%,
-      rgba(15, 10, 30, 0.78) 100%);
+    radial-gradient(75% 85% at 47% 65%,
+      rgba(110, 70, 90, 0.0) 0%,
+      rgba(50, 28, 56, 0.18) 55%,
+      rgba(20, 14, 36, 0.32) 100%);
 }
+/* v8 — was darkened to near-pitch and silhouettes vanished. Dropped
+   the gradient stops so the village is still visibly dim but tokens
+   read clearly. Mood survives via the cool-blue tint, not opacity. */
 .lighting.night {
   opacity: 1;
   background:
-    radial-gradient(45% 55% at 47% 65%,
-      rgba(10, 12, 30, 0.55) 0%,
-      rgba(8, 10, 26, 0.85) 50%,
-      rgba(4, 6, 18, 0.96) 100%);
+    radial-gradient(75% 85% at 47% 65%,
+      rgba(12, 16, 36, 0.18) 0%,
+      rgba(8, 12, 28, 0.38) 55%,
+      rgba(4, 6, 18, 0.55) 100%);
 }
 
 /* Building windows light up at DUSK / NIGHT — controlled by mapWrap[data-time]. */
@@ -798,14 +989,15 @@ svg#world.dream-mode {
 #entities .npc:hover { stroke: var(--talisman); stroke-width: 1.4; }
 
 #entities .creature {
-  fill: #a83a2a;
-  stroke: #1a1611;
-  stroke-width: 0.7;
-  opacity: 0.92;
+  fill: #8a2418;
+  stroke: #ffb4a0;
+  stroke-width: 0.6;
+  opacity: 0.95;
   cursor: pointer;
   transition: transform 500ms linear;
+  filter: drop-shadow(0 0 3px rgba(255, 80, 50, 0.7));
 }
-#entities .creature:hover { stroke: #f4a884; stroke-width: 1.2; }
+#entities .creature:hover { stroke: #ffd4c0; stroke-width: 1.2; }
 
 #entities .anghkooey {
   fill: #7d6dc0;
@@ -941,4 +1133,358 @@ svg#world.dream-mode {
 #world.dream-mode,
 .map-wrap.dream-mode {
   filter: hue-rotate(80deg) saturate(0.6) brightness(0.85);
+}
+
+/* ============================================================
+ * v6 additions — dossier popup, swarmer creatures, car + wrecks,
+ * roster intent line.
+ * ============================================================ */
+
+/* ----- dossier popup (overlays the map, anchored top-right) ------------- */
+.dossier {
+  position: fixed;
+  right: 408px;            /* sits to the left of the 380px side-pane */
+  top: 80px;
+  width: 360px;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 16px 16px 14px;
+  background: rgba(20, 18, 14, 0.96);
+  border: 1px solid var(--talisman);
+  border-radius: 8px;
+  color: #e8e1d0;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.7);
+  z-index: 100;
+  font-size: 12px;
+  line-height: 1.45;
+  animation: dossierIn 220ms ease-out;
+}
+@keyframes dossierIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.dossier.hidden { display: none; }
+
+.dossier .header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px dotted #5a4528;
+  padding-bottom: 10px;
+}
+.dossier .header svg {
+  width: 60px;
+  height: 80px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
+  flex: 0 0 auto;
+}
+.dossier .header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.dossier .header h2 {
+  margin: 0;
+  font-family: "Georgia", serif;
+  font-size: 18px;
+  color: var(--talisman);
+  letter-spacing: 0.5px;
+}
+.dossier .header .role {
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dossier .intent {
+  margin: 10px 0 12px;
+  font-family: "Georgia", serif;
+  font-style: italic;
+  font-size: 13px;
+  color: #d8c89a;
+  line-height: 1.4;
+}
+
+.dossier h3 {
+  margin: 14px 0 6px;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px dotted #3a2e1a;
+  padding-bottom: 3px;
+}
+
+/* ----- vitals (overrides the topbar .bar layout in dossier scope) ------- */
+.dossier .vitals { display: flex; flex-direction: column; gap: 6px; }
+.dossier .vital {
+  display: grid;
+  grid-template-columns: 60px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.dossier .vital-label {
+  color: var(--muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+.dossier .vital-val {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.dossier .bar {
+  position: relative;
+  width: auto;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #2a1f12;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.dossier .bar .bar-fill {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  transition: width 400ms ease-out;
+}
+.dossier .bar.fear   .bar-fill { background: linear-gradient(90deg, #6a2a22, #b94747); }
+.dossier .bar.sanity .bar-fill { background: linear-gradient(90deg, #1f6240, #6bd3a1); }
+.dossier .bar.hunger .bar-fill { background: linear-gradient(90deg, #6a5524, #d8a83a); }
+
+/* ----- inventory --------------------------------------------------------- */
+.dossier .inventory {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dossier .inventory li {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.dossier .inventory li .item-name { color: #e8e1d0; text-transform: capitalize; }
+.dossier .inventory li .item-qty  { color: var(--talisman); }
+.dossier .inventory li.muted { color: var(--muted); font-style: italic; justify-content: flex-start; }
+
+/* ----- relationships ----------------------------------------------------- */
+.dossier .relationships .rel-list {
+  list-style: none;
+  margin: 0 0 4px;
+  padding: 0;
+}
+.dossier .relationships .rel-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 6px;
+  font-size: 11px;
+  border-bottom: 1px dotted #2a2418;
+}
+.dossier .relationships .rel-list li:last-child { border-bottom: none; }
+.dossier .relationships .rel-list li.muted { color: var(--muted); font-style: italic; }
+.dossier .relationships .rel-name { color: #e8e1d0; }
+.dossier .relationships .rel-score {
+  font-variant-numeric: tabular-nums;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10px;
+}
+.dossier .relationships .pos { color: #7dd1a8; }
+.dossier .relationships .neg { color: #d87878; }
+.dossier .relationships .rel-score.pos {
+  background: rgba(125, 209, 168, 0.12);
+  border: 1px solid rgba(125, 209, 168, 0.4);
+}
+.dossier .relationships .rel-score.neg {
+  background: rgba(216, 120, 120, 0.12);
+  border: 1px solid rgba(216, 120, 120, 0.4);
+}
+
+/* ----- memory feed ------------------------------------------------------- */
+.dossier .memory {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dossier .memory li {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 2px 6px;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
+  line-height: 1.35;
+}
+.dossier .memory .mem-tick {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+.dossier .memory .kind {
+  color: var(--talisman);
+  font-size: 9px;
+  letter-spacing: 1px;
+  grid-column: 2;
+  word-break: break-all;
+}
+.dossier .memory .detail {
+  color: #d8d0bd;
+  word-break: break-word;
+  grid-column: 2;
+}
+.dossier .memory li.muted { color: var(--muted); font-style: italic; display: block; }
+
+/* ----- close button + error state --------------------------------------- */
+.dossier .close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  font-family: "Georgia", serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+.dossier .close:hover {
+  color: var(--talisman);
+  border-color: var(--talisman);
+}
+.dossier .error {
+  color: #d87878;
+  font-style: italic;
+  padding: 6px 0;
+}
+
+/* ----- v6 token: car + permanent wrecks --------------------------------- */
+.token-car {
+  cursor: pointer;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+  transition: transform 500ms linear;
+}
+#overlays #wrecks .wreck {
+  opacity: 0.65;
+  filter: grayscale(0.5) brightness(0.85);
+  pointer-events: none;
+}
+
+/* ----- v8 building dossier (occupant list) ------------------------------- */
+.dossier .building-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dossier .building-list li {
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.dossier .building-list .rel-name {
+  color: #e8e1d0;
+}
+.dossier .building-list .building-role {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.dossier .muted-line {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 12px;
+  padding: 4px 0 6px;
+}
+
+/* ----- v8 creature dossier facts (replaces vitals/inventory for creatures) - */
+.dossier .creature-facts {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 4px 12px;
+  margin: 6px 0 4px;
+  font-size: 12px;
+}
+.dossier .creature-facts dt {
+  color: var(--muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-size: 10px;
+  align-self: center;
+}
+.dossier .creature-facts dd {
+  margin: 0;
+  color: #e8e1d0;
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+
+/* ----- v8 cultist NPC marker ------------------------------------------- */
+#entities .npc.cultist {
+  fill: #6a1f24;
+  stroke: #d8a83a;
+  stroke-width: 1.4;
+  filter: drop-shadow(0 0 4px rgba(216, 168, 58, 0.7));
+  animation: cultPulse 2.4s ease-in-out infinite;
+}
+@keyframes cultPulse {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(216, 168, 58, 0.55)); }
+  50%      { filter: drop-shadow(0 0 7px rgba(216, 168, 58, 0.95)); }
+}
+
+/* ----- v6 swarmer creature (smaller, hotter, faster pulse) -------------- */
+#entities .creature-swarm {
+  fill: #b8413a;
+  stroke: #ffd4c0;
+  stroke-width: 0.5;
+  opacity: 0.95;
+  cursor: pointer;
+  transition: transform 320ms linear;
+  filter: drop-shadow(0 0 2px rgba(255, 80, 50, 0.65));
+  animation: swarmPulse 0.9s ease-in-out infinite;
+}
+#entities .creature-swarm:hover { stroke: #ffe7d8; stroke-width: 1; }
+@keyframes swarmPulse {
+  0%, 100% { filter: drop-shadow(0 0 2px rgba(255, 80, 50, 0.55)); }
+  50%      { filter: drop-shadow(0 0 5px rgba(255, 100, 60, 0.95)); }
+}
+
+/* ----- roster intent muted second line ---------------------------------- */
+.roster-list li .roster-title {
+  font-size: 12px;
+}
+.roster-list li .intent {
+  font-size: 10px;
+  font-style: italic;
+  color: var(--muted);
+  margin-top: 1px;
+  line-height: 1.35;
+  word-break: break-word;
 }

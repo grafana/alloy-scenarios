@@ -42,6 +42,7 @@ from contracts import (
     Agent,
     AgentKind,
     Event,
+    FOREST_SPAWN_POINTS,
     MarkerClass,
     MeetingOutcome,
     Metric,
@@ -77,6 +78,38 @@ class _YellowMarchMarker:
         self.id = "yellow_man_march"
         self.x = float(x)
         self.y = float(y)
+
+    def tick(self, world: World) -> None:  # pragma: no cover - stepped externally
+        pass
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "kind": self.kind.value,
+            "marker_class": self.marker_class.value,
+            "x": round(self.x, 2),
+            "y": round(self.y, 2),
+        }
+
+
+class _YellowLurkMarker:
+    """v8 — Yellow Man visible in the forest at night when DORMANT.
+
+    He drifts between forest spawn points so the viewer sees him watching
+    even when he isn't actively marching or playing a tendril. The marker
+    is the same ``man-in-yellow`` class as the march so the frontend
+    sprite work is unchanged.
+    """
+
+    kind = AgentKind.SUPERNATURAL
+    marker_class = MarkerClass.MAN_IN_YELLOW
+
+    def __init__(self, x: float, y: float) -> None:
+        self.id = "yellow_man_lurk"
+        self.x = float(x)
+        self.y = float(y)
+        self.target_x = float(x)
+        self.target_y = float(y)
 
     def tick(self, world: World) -> None:  # pragma: no cover - stepped externally
         pass
@@ -149,6 +182,79 @@ def _distance(ax: float, ay: float, bx: float, by: float) -> float:
 
 
 # ---------------------------------------------------------------------------
+# v9 — weighted tendril selection
+# ---------------------------------------------------------------------------
+
+
+_LOAD_BEARING_ROLES = ("SHERIFF", "CARETAKER", "PRIEST", "LEADER_COLONY")
+
+
+def _tendril_weight(world: World, npc: Any) -> float:
+    """How "good" a tendril this NPC would be. Returns a positive float.
+
+    Two signals — both deterministic, read off existing world state:
+      * ``closing_in``: sum of any character's existing awareness suspicion
+        of THIS npc. The closer the village is to discovering them, the
+        juicier the wear (sense of dread: "they almost knew").
+      * ``social_load``: high-trust relationships between this NPC and a
+        load-bearing role (sheriff / caretaker / priest / leader).
+    """
+    w = 1.0
+    closing_in = 0.0
+    social_load = 0.0
+    trust = getattr(world, "trust", {}) or {}
+    for c in world.agents.values():
+        if getattr(c, "kind", None) != AgentKind.CHARACTER:
+            continue
+        aware = getattr(c, "awareness", None) or {}
+        if isinstance(aware, dict):
+            try:
+                closing_in += float(aware.get(npc.id, 0.0))
+            except (TypeError, ValueError):
+                pass
+        role = getattr(c, "role", None)
+        rname = getattr(role, "value", str(role) if role else "")
+        if rname in _LOAD_BEARING_ROLES:
+            t = trust.get((c.id, npc.id), trust.get((npc.id, c.id), None))
+            if t is not None:
+                try:
+                    social_load += max(0.0, float(t) - 0.5)
+                except (TypeError, ValueError):
+                    pass
+    w *= 1.0 + min(2.0, closing_in / 3.0)
+    w *= 1.0 + min(1.0, social_load)
+    return w
+
+
+def _weighted_sample(rng: Any, items: List[Any], weights: List[float], k: int) -> List[Any]:
+    """Sample ``k`` distinct items without replacement, weighted by ``weights``.
+
+    Falls back to uniform if all weights are zero.
+    """
+    if not items:
+        return []
+    k = max(1, min(int(k), len(items)))
+    pool = list(zip(items, weights))
+    chosen: List[Any] = []
+    for _ in range(k):
+        total = sum(w for _, w in pool)
+        if total <= 0.0:
+            # Degenerate weights — uniform fallback for the rest.
+            picks = rng.sample([it for it, _ in pool], k - len(chosen))
+            chosen.extend(picks)
+            return chosen
+        r = rng.random() * total
+        acc = 0.0
+        for i, (it, w) in enumerate(pool):
+            acc += w
+            if r <= acc:
+                chosen.append(it)
+                pool.pop(i)
+                break
+    return chosen
+
+
+# ---------------------------------------------------------------------------
 # Appearance starters
 # ---------------------------------------------------------------------------
 
@@ -165,8 +271,14 @@ def _start_appearance(world: World) -> None:
     rng = world.rng
     ya = world.yellow_active
 
+    # v9 — Director can nudge imposter probability when pressure is low
+    # (escalate) or high (de-escalate).
+    director = getattr(world, "director", None)
+    bias = float(getattr(director, "yellow_appearance_bias", 0.0))
+    imposter_prob = max(0.0, min(1.0, cfg.yellow_imposter_prob + bias))
+
     # Pick mode.
-    if rng.random() < cfg.yellow_imposter_prob:
+    if rng.random() < imposter_prob:
         npcs = [
             a for a in world.agents.values()
             if getattr(a, "kind", None) == AgentKind.NPC
@@ -183,9 +295,26 @@ def _start_appearance(world: World) -> None:
         n_hydra = rng.randint(hydra_min, hydra_max)
         n_hydra = max(1, min(n_hydra, len(npcs)))
 
-        chosen = rng.sample(npcs, n_hydra)
+        # v9 — weighted tendril selection. Characters whose awareness of a
+        # given NPC is already high (they're "closing in" on a suspicion)
+        # make that NPC a juicier wear; tendrils trust-adjacent to high-role
+        # characters (sheriff / caretaker / priest) get a smaller boost so
+        # the imposter ends up next to load-bearing relationships.
+        weights = [_tendril_weight(world, n) for n in npcs]
+        chosen = _weighted_sample(rng, npcs, weights, n_hydra)
         tendril_ids = [n.id for n in chosen]
         leader_id = tendril_ids[0]
+        # Emit one telemetry counter labelled by chosen leader's "role" so a
+        # dashboard can show which kind of NPC the Yellow Man tends to wear.
+        if world.telemetry is not None:
+            try:
+                world.telemetry.counter_inc(
+                    Metric.YELLOW_TARGET_ROLE,
+                    1.0,
+                    {"role": "imposter"},
+                )
+            except Exception:
+                pass
 
         ya.mode = YellowMode.IMPOSTER
         ya.disguised_as = leader_id
@@ -421,10 +550,43 @@ def _apply_imposter_action(world: World, npc: NPC, action: str) -> None:
         if world.time.phase == Phase.NIGHT:
             talismans = [b for b in world.buildings.values() if b.has_talisman and b.locked]
             if talismans:
-                b = rng.choice(talismans)
+                # v9 — weighted by (a) presence of a load-bearing-role occupant
+                # and (b) the Director's target_bias for cross-cycle weakness.
+                director = getattr(world, "director", None)
+                tb = getattr(director, "target_bias", {}) or {}
+                def _bldg_weight(b) -> float:
+                    w = 1.0
+                    occupants = getattr(b, "occupants", set()) or set()
+                    for occ_id in occupants:
+                        a = world.agents.get(occ_id)
+                        if a is None:
+                            continue
+                        rname = getattr(getattr(a, "role", None), "value", "")
+                        if rname in _LOAD_BEARING_ROLES:
+                            w += 1.5
+                    w += 2.0 * float(tb.get(b.id, 0.0))
+                    return w
+                weights = [_bldg_weight(b) for b in talismans]
+                b = _weighted_sample(rng, talismans, weights, 1)[0]
                 b.locked = False
                 npc.target_x = b.x + rng.uniform(-15, 15)
                 npc.target_y = b.y + rng.uniform(25, 45)
+                # Telemetry: record the role label of the most "load-bearing"
+                # occupant so a dashboard can show who tends to get isolated.
+                role_label = "unknown"
+                for occ_id in getattr(b, "occupants", set()) or set():
+                    a = world.agents.get(occ_id)
+                    rname = getattr(getattr(a, "role", None), "value", "")
+                    if rname in _LOAD_BEARING_ROLES:
+                        role_label = rname
+                        break
+                if world.telemetry is not None:
+                    try:
+                        world.telemetry.counter_inc(
+                            Metric.YELLOW_TARGET_ROLE, 1.0, {"role": role_label}
+                        )
+                    except Exception:
+                        pass
                 world.emit(
                     Event(
                         tick=world.tick_count,
@@ -456,24 +618,40 @@ def _apply_imposter_action(world: World, npc: NPC, action: str) -> None:
 
 
 def _consult_llm(world: World, npc: NPC) -> Optional[str]:
-    """If an LLM decider is wired, ask it which action to take."""
+    """If an LLM decider is wired, ask it which imposter action to take.
+
+    v9 — previously called ``maybe_decide`` with a kwargs shape that didn't
+    match the decider's signature, so the call always raised and got
+    swallowed by the surrounding try/except. We now use the dedicated
+    string-picker which lives on its own thinking-budget bucket.
+    """
     decider = getattr(world, "llm_decider", None)
     if decider is None:
         return None
-    rate = world.config.llm_yellow_rate
+    # Coarse rate gate kept for behavioural parity with the v8 path.
+    if world.rng.random() >= world.config.llm_yellow_rate:
+        return None
+    system = (
+        "You play the Man in Yellow — a smiling, polite imposter wearing an "
+        "NPC's face in the small town of From. Pick ONE action that escalates "
+        "dread without revealing the disguise. Reason briefly (<=120 chars)."
+    )
+    prompt = (
+        f"Disguised as: {npc.id}\n"
+        f"Phase: {world.time.phase.value}\n"
+        f"Tick: {world.tick_count}\n"
+        f"Children visible: {len(_children(world))}\n"
+        f"Tendrils alive: {len(_live_tendrils(world))}\n"
+        f"Pressure: {round(float(getattr(getattr(world, 'director', None), 'pressure', 0.0)), 2)}\n"
+        f"Menu: {', '.join(_IMPOSTER_ACTIONS)}"
+    )
     try:
-        # The decider interface (defined by Agent A's llm package) returns
-        # either a chosen option string or None when rate-limited / disabled.
-        return decider.maybe_decide(
-            actor=f"yellow_man:{npc.id}",
-            rate=rate,
+        return decider.maybe_pick_string(
+            actor_id=f"yellow_man:{npc.id}",
             options=list(_IMPOSTER_ACTIONS),
-            context={
-                "tick": world.tick_count,
-                "phase": world.time.phase.value,
-                "disguised_as": npc.id,
-                "n_children_visible": len(_children(world)),
-            },
+            current_tick=int(world.tick_count),
+            system=system,
+            prompt=prompt,
         )
     except Exception:
         return None
@@ -685,16 +863,100 @@ def _trigger_wipe(world: World) -> None:
 
 
 def _maybe_force_box_drop(world: World) -> None:
-    """v4: tiny NIGHT-only chance to gift the village a Music Box.
+    """v4/v7: tiny NIGHT-only chance to gift the village a Music Box.
 
-    Active in DORMANT and IMPOSTER modes. The 0.5% per-tick roll gives roughly
-    one drop per sim-day at NIGHT. No-op if a box already exists.
+    Active in DORMANT and IMPOSTER modes. v7: lowered from 0.5% to 0.0006%
+    per-tick — at 360 NIGHT ticks/sim-day that's ~20% per night, so a force
+    drop lands roughly every 5 sim-nights when not gated by cooldown. Also
+    respects the global music_box_interval_days cooldown so we never spam
+    boxes on top of each other.
     """
     if world.time.phase != Phase.NIGHT:
         return
-    if world.rng.random() >= 0.005:
+    if world.rng.random() >= 0.0006:
+        return
+    # Honour the module-level cooldown so Yellow Man can't shortcut the
+    # full music_box_interval_days gate every single night.
+    last = _music_box._LAST_SPAWN_TICK  # type: ignore[attr-defined]
+    interval = max(1, world.config.music_box_interval_days) * 720
+    if world.tick_count < last + (interval // 2):
         return
     _music_box.force_drop(world, None)
+
+
+def _tick_dormant_lurk(world: World) -> None:
+    """v8 — Yellow Man lurks visibly in the forest at night while DORMANT.
+
+    DUSK / NIGHT: ensure a single _YellowLurkMarker exists at a forest spawn
+    point and let it drift slowly between points so the viewer sees him
+    watching the village from the treeline.
+
+    DAY / DAWN, or any non-DORMANT mode: remove the lurk marker so the
+    forest empties at first light (and so the active-mode marchers don't
+    collide with a dormant ghost).
+    """
+    ya = world.yellow_active
+    phase = world.time.phase
+    should_lurk = (
+        ya.mode == YellowMode.DORMANT
+        and phase in (Phase.NIGHT, Phase.DUSK)
+    )
+
+    # Find any existing lurk marker.
+    existing = next(
+        (s for s in world.supernaturals
+         if getattr(s, "id", "") == "yellow_man_lurk"),
+        None,
+    )
+
+    if not should_lurk:
+        if existing is not None:
+            world.supernaturals[:] = [
+                s for s in world.supernaturals
+                if getattr(s, "id", "") != "yellow_man_lurk"
+            ]
+        return
+
+    if existing is None:
+        # Choose a forest point that isn't too close to the lighthouse —
+        # the user's complaint was creatures at the lighthouse; the Yellow
+        # Man has the same "wrong location" risk if he spawns right on top
+        # of it. Filter to forest points whose x is right of the village
+        # so he reads as "in the woods" not "at the lighthouse clearing".
+        candidates = [pt for pt in FOREST_SPAWN_POINTS if pt[0] > 280.0]
+        if not candidates:
+            candidates = list(FOREST_SPAWN_POINTS)
+        sx, sy = world.rng.choice(candidates)
+        world.supernaturals.append(_YellowLurkMarker(sx, sy))
+        world.emit(Event(
+            tick=world.tick_count,
+            type="yellow_appearance",
+            subject="yellow_man_lurk",
+            detail=f"the Yellow Man watches from the trees at ({sx:.0f},{sy:.0f})",
+            severity="warn",
+        ))
+        return
+
+    # Drift the existing lurker toward its target; occasionally re-pick a
+    # new target so he moves around the treeline. Speed kept low so he
+    # reads as "watching" rather than "approaching".
+    LURK_SPEED = 0.6
+    LURK_RETARGET_TICKS = 120
+    last_pick = int(getattr(existing, "_last_retarget_tick", -10_000))
+    if world.tick_count - last_pick > LURK_RETARGET_TICKS:
+        candidates = [pt for pt in FOREST_SPAWN_POINTS if pt[0] > 280.0]
+        if not candidates:
+            candidates = list(FOREST_SPAWN_POINTS)
+        tx, ty = world.rng.choice(candidates)
+        existing.target_x = float(tx)
+        existing.target_y = float(ty)
+        existing._last_retarget_tick = world.tick_count
+    dx = existing.target_x - existing.x
+    dy = existing.target_y - existing.y
+    dist = math.hypot(dx, dy)
+    if dist > LURK_SPEED:
+        existing.x += LURK_SPEED * (dx / dist)
+        existing.y += LURK_SPEED * (dy / dist)
 
 
 def tick_yellow(world: World) -> None:
@@ -705,12 +967,19 @@ def tick_yellow(world: World) -> None:
     if ya.mode == YellowMode.DORMANT:
         _maybe_taint_npcs(world)
         _maybe_force_box_drop(world)
+        _tick_dormant_lurk(world)
         # Lazily initialise the schedule the very first time we run.
         if _SCHED.next_appearance_tick == 0:
             _schedule_next_appearance(world)
         elif world.tick_count >= _SCHED.next_appearance_tick:
             _start_appearance(world)
     else:
+        # Active mode — the lurk marker must not coexist with the march /
+        # imposter rendering. _tick_dormant_lurk handles its own removal
+        # when called outside the lurk window, but mode-change is an edge
+        # case (it can flip on a DAY tick when the schedule fires) so do
+        # an explicit cleanup here too.
+        _tick_dormant_lurk(world)
         # Active modes consume any votes BEFORE checking the deadline so
         # a banishment on the deadline tick still saves the village.
         _consume_meeting_outcomes(world)

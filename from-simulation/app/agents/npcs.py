@@ -75,6 +75,55 @@ def generate_npc_name(world: World) -> str:
     return f"NPC-{world.rng.randint(1000, 9999)}"
 
 
+# v8 — surname / family assignment. Each NPC gets a surname so events can read
+# "Beatrice Marsh — bolted outside" instead of an anonymous first name. About a
+# third of arrivals join an existing surname (becoming family); the rest start
+# a new household. Family ties feed the cult mechanic in agents/cult.py.
+_FAMILY_SURNAMES = [
+    "Tate", "Reyes", "Hollander", "Burke", "Akeyo", "Vasquez", "Cromwell",
+    "Okafor", "Hendrix", "Walsh", "Marsh", "Quincey", "Dover", "Linde",
+    "Stoker", "Ashby", "Pendrake", "Yates", "Galt", "Roe",
+    "Fairchild", "Whitlock", "Carrow", "Sealy", "Penmark", "Vargas",
+]
+_FAMILY_MAX_SIZE = 5
+_FAMILY_JOIN_PROB = 0.35   # chance of joining an existing surname instead of new
+
+
+def assign_family(world: World, npc_id: str) -> str:
+    """Pick a surname for a fresh NPC.
+
+    With probability ``_FAMILY_JOIN_PROB`` we join an existing surname that
+    still has room (< ``_FAMILY_MAX_SIZE`` living members); otherwise we
+    spin up a fresh family. Returns the surname string.
+    """
+    rng = world.rng
+    # Count current surname memberships among living NPCs.
+    counts: Dict[str, int] = {}
+    for a in world.agents.values():
+        if getattr(a, "kind", None) != AgentKind.NPC:
+            continue
+        if getattr(a, "status", Status.ACTIVE) != Status.ACTIVE:
+            continue
+        if a.id == npc_id:
+            continue
+        sn = getattr(a, "surname", None)
+        if sn:
+            counts[sn] = counts.get(sn, 0) + 1
+
+    if counts and rng.random() < _FAMILY_JOIN_PROB:
+        available = [sn for sn, c in counts.items() if c < _FAMILY_MAX_SIZE]
+        if available:
+            return rng.choice(available)
+    # Fresh family — pick a surname not at capacity.
+    pool = list(_FAMILY_SURNAMES)
+    rng.shuffle(pool)
+    for sn in pool:
+        if counts.get(sn, 0) < _FAMILY_MAX_SIZE:
+            return sn
+    # All saturated — accept overflow.
+    return rng.choice(pool)
+
+
 def _distance(ax: float, ay: float, bx: float, by: float) -> float:
     """Euclidean distance; small helper so we don't depend on agents.base existing yet."""
     return math.hypot(ax - bx, ay - by)
@@ -128,7 +177,61 @@ def _talisman_door(world: World, rng) -> Optional[Tuple[float, float]]:
     return (b.x + rng.uniform(-12, 12), b.y + rng.uniform(18, 28))
 
 
-def pick_home_id(world: World, exclude: Optional[List[str]] = None) -> Optional[str]:
+def residents_count(world: World, building_id: str) -> int:
+    """v8 — number of living NPCs whose home_id is this building."""
+    count = 0
+    for a in world.agents.values():
+        if getattr(a, "kind", None) != AgentKind.NPC:
+            continue
+        if getattr(a, "status", Status.ACTIVE) != Status.ACTIVE:
+            continue
+        if getattr(a, "home_id", None) == building_id:
+            count += 1
+    return count
+
+
+def building_has_resident_slot(world: World, building) -> bool:
+    """v8 — capacity check based on assigned residents, not transient
+    occupants. A house with 4 NPCs calling it home (cap 5) reads as
+    1 slot left, regardless of who happens to be inside right now.
+    """
+    if building is None or getattr(building, "destroyed", False):
+        return False
+    cap = building.capacity if hasattr(building, "capacity") else int(building.footprint)
+    if cap <= 0:
+        return False
+    return residents_count(world, building.id) < cap
+
+
+def _find_open_dwelling(world: World, npc) -> Optional["Building"]:
+    """v8 — return the nearest residential building with a free slot, or None.
+
+    Used when an NPC's assigned home is full or destroyed at NIGHT. Looks
+    only at the canonical residential pool so the NPC doesn't sneak into
+    the bar or the barn. Capacity is judged by assigned residents (home_id)
+    not by who's currently inside the footprint, so an empty-during-the-day
+    house still counts as "full" if four NPCs live there.
+    """
+    best = None
+    best_d = float("inf")
+    for bid in NPC_HOME_BUILDINGS:
+        b = world.buildings.get(bid)
+        if b is None or getattr(b, "destroyed", False):
+            continue
+        if not building_has_resident_slot(world, b):
+            continue
+        d = _distance(npc.x, npc.y, b.x, b.y)
+        if d < best_d:
+            best_d = d
+            best = b
+    return best
+
+
+def pick_home_id(
+    world: World,
+    exclude: Optional[List[str]] = None,
+    npc_id: Optional[str] = None,
+) -> Optional[str]:
     """Pick a home building id for an NPC from the talisman residential pool.
 
     Excludes buildings currently in cooling-off (failed talisman) and any caller-
@@ -137,6 +240,11 @@ def pick_home_id(world: World, exclude: Optional[List[str]] = None) -> Optional[
 
     Weighted: ``colony_house`` is 4x more likely than the smaller houses, so the
     "big house" feels populated.
+
+    v9 — when ``npc_id`` is provided and points at a sub-main NPC with a
+    persisted ``preferred_home``, that home is favoured ~60% of the time
+    so promoted survivors come back to "their" house across cycles. We
+    only prefer it when the building is still eligible by the normal rules.
     """
     exclude_set = set(exclude or [])
     tick = world.tick_count
@@ -150,10 +258,27 @@ def pick_home_id(world: World, exclude: Optional[List[str]] = None) -> Optional[
             continue
         if b.cooling_off_until_tick > tick:
             continue
+        if getattr(b, "destroyed", False):
+            continue
+        # v8 — capacity = number of NPCs already calling this building home,
+        # NOT how many are physically inside right now. So a house with 4
+        # residents (cap 5) reads as 1 slot left even during the day when
+        # everyone is out at work. When all houses are full new arrivals
+        # remain homeless and exposed → survivors must build new lots.
+        if not building_has_resident_slot(world, b):
+            continue
         candidates.append(bid)
         weights.append(4 if bid == "colony_house" else 1)
     if not candidates:
         return None
+    # v9 — sub-main preferred home: 60% chance to honour the persisted choice.
+    if npc_id and world.memory is not None and npc_id in world.sub_mains:
+        try:
+            pref = world.memory.get_sub_main_preferred_home(npc_id)
+        except Exception:
+            pref = None
+        if pref and pref in candidates and world.rng.random() < 0.6:
+            return pref
     return world.rng.choices(candidates, weights=weights, k=1)[0]
 
 
@@ -232,14 +357,47 @@ class NPC(Agent):
         # v5 — tombstone window for sub-mains. When >0, _reap_dead leaves the
         # corpse in world.agents until world.tick_count reaches it.
         self._tombstone_until_tick: int = 0
+        # v6 — short human-readable sentence describing what the NPC is doing
+        # right now. Refreshed whenever the mini-FSM state changes (or the
+        # yellow-touched-at-night override kicks in). Surfaced via to_dict()
+        # for the roster + dossier panels.
+        self.intent: str = ""
+        # Cache of the last state we generated an intent for; used to avoid
+        # recomputing the string every tick when nothing changed.
+        self._last_intent_state: Optional[State] = None
+        self._last_intent_touched_night: bool = False
+        # v8 — family + cult fields. ``surname`` is assigned via
+        # ``assign_family`` at intake and used for kinship lookups; the
+        # ``cult_state`` flips to "SUSPECTED" or "CONVERTED" once losses
+        # in the NPC's family / friend graph cross a threshold (see
+        # agents/cult.py).
+        self.surname: str = ""
+        self.cult_state: str = "NONE"        # "NONE" | "SUSPECTED" | "CONVERTED"
+        self.cult_pressure: float = 0.0      # accumulator from losses
+        self.cult_converted_at_tick: int = 0
+        # v9 — lightweight cognitive layer for NPCs (deterministic only).
+        # Created up front so a missing world handle at init time doesn't
+        # matter; tick-time logic still gates usage on cfg.mind_npc_enabled.
+        try:
+            from agents.mind import NpcMind
+            self.mind = NpcMind(self.id)
+        except Exception:
+            self.mind = None
 
     # ---------------------------------------------------------------- API
 
     def to_dict(self):
         d = super().to_dict()
+        # v8 — surface a "First Surname" display name when the NPC has one
+        # so the event log and roster show "Beatrice Marsh" not "Beatrice".
+        display_name = (
+            f"{self.name} {self.surname}" if self.surname else self.name
+        )
         d.update(
             {
-                "name": self.name,
+                "name": display_name,
+                "first_name": self.name,
+                "surname": self.surname,
                 "state": self.state.value,
                 "status": self.status.value,
                 "fear": round(self.fear, 2),
@@ -252,6 +410,14 @@ class NPC(Agent):
                 # contracts._enrich_agent ``is_sub_main`` tag).
                 "is_sub_main": self.is_sub_main,
                 "notability_score": round(self.notability_score, 2),
+                # v6 — current intent sentence (may be "" if the NPC hasn't
+                # ticked yet or is parked as a car arrival).
+                "intent": self.intent,
+                # v8 — cult faction (NONE / SUSPECTED / CONVERTED).
+                "cult_state": self.cult_state,
+                # v8 — frontend hides indoor agents so the map reads
+                # "who is outside / exposed".
+                "indoors": bool(self._indoors),
             }
         )
         return d
@@ -332,6 +498,74 @@ class NPC(Agent):
             else:
                 self.state = State.WORKING
 
+    def _home_name(self, world: World) -> str:
+        """Display name of the assigned home building, or a generic fallback."""
+        if self.home_id is not None:
+            home = world.buildings.get(self.home_id)
+            if home is not None and home.name:
+                return home.name
+        return "home"
+
+    def _near_colony(self, world: World) -> bool:
+        colony = world.buildings.get("colony_house")
+        if colony is None:
+            return False
+        return _distance(self.x, self.y, colony.x, colony.y) < 80.0
+
+    def _near_social_venue(self, world: World) -> bool:
+        for tag in ("diner", "bar"):
+            venue = world.buildings.get(tag)
+            if venue is not None and _distance(self.x, self.y, venue.x, venue.y) < 60.0:
+                return True
+        return False
+
+    def _refresh_intent(self, world: World) -> None:
+        """Recompute ``self.intent`` from the current state + phase + flags.
+
+        Called from ``tick()`` after the mini-FSM has settled for this tick.
+        Cheap to call every tick — only updates the string when something
+        meaningful changed.
+        """
+        touched_night = (
+            self.id in world.yellow_touched_npcs
+            and world.time.phase == Phase.NIGHT
+        )
+        # Skip recompute if nothing relevant has changed.
+        if (
+            self.state == self._last_intent_state
+            and touched_night == self._last_intent_touched_night
+            and self.intent
+        ):
+            return
+
+        # Yellow-touched at NIGHT trumps the regular state text — they're not
+        # really sheltering, they're loitering near doors.
+        if touched_night:
+            self.intent = f"{self.name} is loitering near a doorway."
+        elif self.state == State.WORKING:
+            if self._near_colony(world):
+                self.intent = f"{self.name} is working at the colony farm."
+            else:
+                self.intent = f"{self.name} is going about their day."
+        elif self.state == State.SOCIALIZING:
+            if self._near_social_venue(world):
+                self.intent = f"{self.name} is chatting at the diner."
+            else:
+                self.intent = f"{self.name} is going about their day."
+        elif self.state == State.SHELTERING:
+            self.intent = f"{self.name} is at home behind locked doors."
+        elif self.state == State.WANDERING:
+            self.intent = f"{self.name} is wandering near {self._home_name(world)}."
+        elif self.state == State.IRRATIONAL:
+            self.intent = f"{self.name} is not themselves."
+        else:
+            # Any other state (e.g. transient FLEEING, ABSENT) — leave the
+            # intent vague rather than blank.
+            self.intent = f"{self.name} is going about their day."
+
+        self._last_intent_state = self.state
+        self._last_intent_touched_night = touched_night
+
     def force_wander(self, until_tick: int) -> None:
         """Called by yellow_man.py when the visible march passes nearby."""
         self._wander_until_tick = max(self._wander_until_tick, until_tick)
@@ -343,20 +577,74 @@ class NPC(Agent):
         if self.status != Status.ACTIVE:
             return
 
+        # v9 — lightweight cognition: deterministic goal pick. Cheap, no LLM.
+        # Behaviour effect is small (NPCs already react to fear / food via the
+        # mini-FSM); the value is making goals visible in telemetry and giving
+        # promoted sub-mains a continuous identity across cycles.
+        if (
+            getattr(self, "mind", None) is not None
+            and getattr(world.config, "mind_npc_enabled", True)
+        ):
+            try:
+                self.mind.maybe_reflect(world, self)
+            except Exception:
+                pass
+
+        # v6 — car-arrival pin. While Agent A is animating the arrival car for
+        # this NPC, freeze the mini-FSM so the passenger doesn't try to walk
+        # while still "in" the vehicle. Once cars.py clears
+        # ``world.car_pending_npc_id`` (car has parked), we resume normally.
+        # ``getattr`` is used for safety: contracts.py defines the field, but
+        # a hot-reloaded process from before the v6 fields landed wouldn't
+        # have it.
+        if getattr(world, "car_pending_npc_id", None) == self.id:
+            self.intent = f"{self.name} just stepped off a car."
+            # Reset cache so the *next* tick after the car clears recomputes
+            # a proper state-based intent string.
+            self._last_intent_state = None
+            self._last_intent_touched_night = False
+            return
+
+        # IRRATIONAL is fear.py's sticky state — without this early-return the
+        # NPC's mini-FSM stomps over it the same tick fear.py set it, breaking
+        # the 30-tick cooldown and producing tight paranormal_break spam.
+        if self.state == State.IRRATIONAL:
+            self._refresh_intent(world)
+            return
+
         # ----- Ensure we have a home (and a personality bucket).
         if self.home_id is None:
-            self.home_id = pick_home_id(world)
+            self.home_id = pick_home_id(world, npc_id=self.id)
         if self._bucket is None:
             self._bucket = _personality_bucket(self.id)
+        # v9 — record this home as the sub-main's preferred home on first
+        # binding (so it persists across cycles). Only writes for promoted
+        # NPCs; regular NPCs are anonymous and re-roll each cycle.
+        if (
+            self.is_sub_main
+            and self.home_id is not None
+            and world.memory is not None
+            and self.id in world.sub_mains
+        ):
+            try:
+                if world.memory.get_sub_main_preferred_home(self.id) is None:
+                    world.memory.set_sub_main_preferred_home(world, self.id, self.home_id)
+            except Exception:
+                pass
 
         # If our home went into cool-off (e.g. a sanity break happened there),
-        # drop it and try to find a new one next tick.
+        # OR was destroyed by a creature, drop it and try to find a new one.
+        # Otherwise the destroyed house's resident slot blocks both us and
+        # any new arrivals from settling elsewhere.
         if self.home_id is not None:
             home = world.buildings.get(self.home_id)
-            if home is not None and home.cooling_off_until_tick > world.tick_count:
+            if home is not None and (
+                home.cooling_off_until_tick > world.tick_count
+                or getattr(home, "destroyed", False)
+            ):
                 home.occupants.discard(self.id)
                 self._indoors = False
-                self.home_id = pick_home_id(world, exclude=[self.home_id])
+                self.home_id = pick_home_id(world, exclude=[self.home_id], npc_id=self.id)
 
         phase = world.time.phase
         rng = world.rng
@@ -401,15 +689,40 @@ class NPC(Agent):
         move_toward(self, self.target_x, self.target_y, step)
         self._update_state(world)
 
-        # ----- NIGHT shelter snap.
+        # ----- NIGHT shelter snap (v8 — capacity-aware).
+        # If our home is full we don't squeeze in; we try one of the other
+        # NPC home buildings. If they're ALL full we stay outside in
+        # WANDERING and become huntable, which is the point: overcrowding
+        # forces survivors to build new houses (see tick_house_repair) or
+        # die trying.
         if phase == Phase.NIGHT and self.home_id is not None:
             home = world.buildings.get(self.home_id)
-            if home is not None and _distance(self.x, self.y, home.x, home.y) < 20.0:
+            # Already inside? Keep our seat.
+            if home is not None and self.id in home.occupants:
                 self.x = home.x
                 self.y = home.y
-                home.occupants.add(self.id)
                 self._indoors = True
                 self.state = State.SHELTERING
+            elif home is not None and _distance(self.x, self.y, home.x, home.y) < 20.0:
+                if home.has_room() and not getattr(home, "destroyed", False):
+                    self.x = home.x
+                    self.y = home.y
+                    home.occupants.add(self.id)
+                    self._indoors = True
+                    self.state = State.SHELTERING
+                else:
+                    # Door is locked / full — look for another roof.
+                    backup = _find_open_dwelling(world, self)
+                    if backup is not None:
+                        self.x = backup.x
+                        self.y = backup.y
+                        backup.occupants.add(self.id)
+                        self._indoors = True
+                        self.state = State.SHELTERING
+                    else:
+                        # Nowhere to go. Stay outside.
+                        self._indoors = False
+                        self.state = State.WANDERING
             elif self._indoors:
                 # We left home (rare — but cleanup the occupants set).
                 if home is not None:
@@ -484,6 +797,9 @@ class NPC(Agent):
                     self.sanity = max(0.0, self.sanity - 0.1)
                     self.fear = min(100.0, self.fear + 0.05)
                     break
+
+        # ----- v6: refresh the intent sentence for the dossier / roster.
+        self._refresh_intent(world)
 
     # ----- helpers used by the new tick body --------------------------------
 

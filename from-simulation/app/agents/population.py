@@ -24,13 +24,21 @@ from typing import List
 
 from contracts import (
     AgentKind,
+    CAR_PATH_IN,
+    CAR_PARK_XY,
     Event,
     Metric,
     NPC_INTAKE_POINTS,
     Status,
     World,
 )
-from agents.npcs import NPC, generate_npc_name, pick_home_id
+from agents.npcs import NPC, assign_family, generate_npc_name, pick_home_id
+from agents import cars as _cars
+
+
+# v6 — chance an NPC arrival comes by car instead of on foot. Only applies
+# when no Car is currently active in the world (one at a time).
+_CAR_ARRIVAL_PROBABILITY = 0.35
 
 
 # Numeric counter so NPC ids are stable + unique across a single cycle.
@@ -54,8 +62,53 @@ def _count_active_npcs(world: World) -> int:
 
 
 def spawn_npc(world: World) -> NPC:
-    """Spawn one NPC at a random intake point. Used by ``tick_population``."""
+    """Spawn one NPC. v6 — ~35% chance it arrives by car instead of on foot.
+
+    On a car-arrival roll the NPC is created at the car's starting waypoint
+    (the road edge), placed in ``Status.ABSENT`` so they don't tick or render
+    as walkable until the car parks, and ``cars.spawn_car`` is invoked to put
+    the actual vehicle on the map. When the car emits ``car_arrival``,
+    ``tick_population`` reads ``world.car_pending_npc_id`` and alights the
+    passenger (flipping to ACTIVE at ``CAR_PARK_XY``).
+
+    On a foot-arrival roll (the default) the NPC appears at a random intake
+    point as before.
+    """
     rng = world.rng
+
+    use_car = (
+        world.active_car_id is None
+        and rng.random() < _CAR_ARRIVAL_PROBABILITY
+    )
+
+    if use_car:
+        # Place the NPC at the car's first waypoint and mirror their position
+        # to the car's. They're ABSENT until the car parks, so the existing
+        # tick loop skips them. ``home_id`` is still bound now so the
+        # snapshot has a stable home from tick 0 if the frontend cares.
+        if CAR_PATH_IN:
+            x, y = CAR_PATH_IN[0]
+        else:
+            x, y = CAR_PARK_XY
+        npc = NPC(
+            npc_id=_next_npc_id(world),
+            name=generate_npc_name(world),
+            x=float(x),
+            y=float(y),
+        )
+        npc.arrived_at_tick = world.tick_count
+        npc.home_id = pick_home_id(world)
+        npc.surname = assign_family(world, npc.id)
+        # Hide them until the car parks. ``tick_population`` flips this back
+        # to ACTIVE when ``world.car_pending_npc_id`` matches.
+        npc.status = Status.ABSENT
+        world.agents[npc.id] = npc
+        # Spawn the car. ``spawn_car`` sets ``world.active_car_id``; the car
+        # remembers the npc id and triggers car_arrival on parking.
+        _cars.spawn_car(world, npc.id)
+        return npc
+
+    # Foot-arrival — original behaviour.
     x, y = rng.choice(NPC_INTAKE_POINTS)
     # Small jitter so they don't all stack on the exact same pixel.
     x += rng.uniform(-12, 12)
@@ -71,18 +124,58 @@ def spawn_npc(world: World) -> NPC:
     # ``pick_home_id`` may return None (every house in cool-off); the NPC's
     # own tick will retry until something opens up.
     npc.home_id = pick_home_id(world)
+    npc.surname = assign_family(world, npc.id)
     world.agents[npc.id] = npc
 
+    full_name = f"{npc.name} {npc.surname}" if npc.surname else npc.name
     world.emit(
         Event(
             tick=world.tick_count,
             type="npc_arrival",
             subject=npc.id,
-            detail=f"{npc.name} arrived from the trees",
+            detail=f"{full_name} arrived from the trees",
             severity="info",
         )
     )
     return npc
+
+
+def _alight_car_passenger(world: World) -> None:
+    """If a car has parked this tick, finalise the NPC's arrival.
+
+    The Car sets ``world.car_pending_npc_id`` from ``_transition_parked``.
+    We pop the id off the world, flip the NPC to ACTIVE, snap them to the
+    car park location, and emit the canonical ``npc_arrival`` event so
+    downstream systems (legacy journal, telemetry, intent strings) all
+    behave exactly as if the NPC walked in on foot.
+    """
+    pid = world.car_pending_npc_id
+    if pid is None:
+        return
+    world.car_pending_npc_id = None
+    npc = world.agents.get(pid)
+    if npc is None:
+        return
+    # Snap them off the car and onto the road spur.
+    try:
+        npc.x, npc.y = float(CAR_PARK_XY[0]), float(CAR_PARK_XY[1]) + 8.0
+        npc.target_x, npc.target_y = npc.x, npc.y
+    except Exception:
+        pass
+    try:
+        npc.status = Status.ACTIVE
+    except Exception:
+        pass
+    name = getattr(npc, "name", pid)
+    world.emit(
+        Event(
+            tick=world.tick_count,
+            type="npc_arrival",
+            subject=npc.id,
+            detail=f"{name} stepped out of a battered car",
+            severity="info",
+        )
+    )
 
 
 _TOMBSTONE_TICKS = 30
@@ -208,6 +301,10 @@ def tick_population(world: World) -> None:
     """Engine hook — call once per tick, after agent ticks have run."""
     # 1) Reap any newly-dead NPCs first so the floor count is honest.
     _reap_dead(world)
+
+    # 1b) v6 — if a car parked this tick, finalise the NPC's arrival
+    # (flip to ACTIVE + snap to road spur + emit npc_arrival).
+    _alight_car_passenger(world)
 
     # 2) Maybe spawn.
     active = _count_active_npcs(world)

@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from contracts import Agent, Event, State, Status, World
+from contracts import Agent, Event, Phase, State, Status, World
 from agents.base import distance, nearest
 from agents import supernatural as _supernatural
 
@@ -84,11 +84,31 @@ def _maybe_break(world: World, agent: Agent) -> None:
 
 
 def _resolve_outcome(world: World, agent: Agent) -> None:
-    """Sample an outcome once the agent has been IRRATIONAL long enough."""
+    """Sample an outcome once the agent has been IRRATIONAL long enough.
+
+    v9 — when the agent has beliefs about local danger (``house_weak:X``
+    nearby) or a specific suspect (``yellow_suspect:Y``), the outcome
+    distribution skews accordingly: distrust the shelter and bolt outside,
+    or lash out at the perceived villain.
+    """
     outcomes = ("unlock_door", "run_outside", "attack_neighbour", "silent_collapse")
     # Light weighting: silent_collapse rarer, others roughly even.
-    weights = (3.0, 3.0, 3.0, 1.5)
-    outcome = world.rng.choices(outcomes, weights=weights, k=1)[0]
+    w = [3.0, 3.0, 3.0, 1.5]
+    mind = getattr(agent, "mind", None)
+    if mind is not None:
+        # Find the nearest building id for "house_weak" lookups.
+        nearest_b = nearest(list(world.buildings.values()), agent.x, agent.y)
+        if nearest_b is not None:
+            hw = mind.beliefs.get(f"house_weak:{nearest_b.id}")
+            if hw is not None and hw.confidence > 0.4:
+                w[1] += 2.5 * hw.confidence   # +run_outside (don't trust this shelter)
+                w[0] += 1.0 * hw.confidence   # +unlock_door (something to escape from)
+        # Any active suspicion tips toward attack_neighbour.
+        for key, belief in mind.beliefs.items():
+            if key.startswith("yellow_suspect:") and belief.confidence > 0.5:
+                w[2] += 2.0 * belief.confidence
+                break
+    outcome = world.rng.choices(outcomes, weights=w, k=1)[0]
 
     if outcome == "unlock_door":
         target = nearest(list(world.buildings.values()), agent.x, agent.y)
@@ -127,7 +147,24 @@ def _resolve_outcome(world: World, agent: Agent) -> None:
             if n.id != agent.id and distance(n, agent) <= 60.0
         ]
         if neighbours:
-            victim = world.rng.choice(neighbours)
+            # v9 — if any neighbour is the subject of an active yellow_suspect
+            # belief, the agent lashes at THEM specifically (the "I knew it
+            # was you" moment). Otherwise uniform random.
+            suspect_id: Optional[str] = None
+            mind = getattr(agent, "mind", None)
+            if mind is not None:
+                for key, belief in mind.beliefs.items():
+                    if key.startswith("yellow_suspect:") and belief.confidence > 0.5:
+                        suspect_id = key.split(":", 1)[1]
+                        break
+            if suspect_id is not None:
+                preferred = [n for n in neighbours if n.id == suspect_id]
+                if preferred:
+                    victim = preferred[0]
+                else:
+                    victim = world.rng.choice(neighbours)
+            else:
+                victim = world.rng.choice(neighbours)
             setattr(victim, "status", Status.INCAPACITATED)
             world.emit(
                 Event(
@@ -194,21 +231,61 @@ def propagate(world: World) -> None:
     creatures = world.creatures
     eligible = _eligible_agents(world)
 
+    # Find the nearest creature for each agent in a single pass; reused for
+    # both fear gain and the decay path so a hidden agent decays even with
+    # creatures nearby.
+    nearest_dist: dict = {}
     if creatures:
         for agent in eligible:
-            brave = float(getattr(agent, "brave", 0.5))
-            # Closest creature drives the gain (avoid stacking multiplicatively).
             min_d = None
             for c in creatures:
                 d = distance(agent, c)
                 if min_d is None or d < min_d:
                     min_d = d
+            nearest_dist[id(agent)] = min_d
+
+    if creatures:
+        for agent in eligible:
+            brave = float(getattr(agent, "brave", 0.5))
+            min_d = nearest_dist.get(id(agent))
             if min_d is None:
                 continue
             gain = _fear_gain(brave, min_d)
             if gain > 0.0:
                 current = float(getattr(agent, "fear", 0.0))
                 setattr(agent, "fear", min(100.0, current + gain))
+
+    # Fear decay: every tick, fear drifts back toward 0. Sheltering / sleeping
+    # in a protected building drains it fast; otherwise a small idle drain.
+    # Without this, a single creature night strands the whole village in
+    # FLEEING forever — observed in the live snapshot before this fix.
+    phase = world.time.phase
+    for agent in eligible:
+        cur = float(getattr(agent, "fear", 0.0))
+        if cur <= 0.0:
+            continue
+        state = getattr(agent, "state", None)
+        in_safe_shelter = False
+        dwelling_id = getattr(agent, "dwelling_id", None) or getattr(agent, "home_id", None)
+        if dwelling_id and dwelling_id in world.buildings:
+            b = world.buildings[dwelling_id]
+            if b.is_protected(world.tick_count):
+                in_safe_shelter = True
+        # Skip decay if a creature is within meaningful range (60 px) — that's
+        # active terror, fear should not regenerate downward.
+        min_d = nearest_dist.get(id(agent))
+        if min_d is not None and min_d < 60.0:
+            continue
+        if state == State.SLEEPING and in_safe_shelter:
+            drain = 1.20
+        elif state == State.SHELTERING and in_safe_shelter:
+            drain = 0.80
+        elif phase == Phase.DAY:
+            drain = 0.30
+        else:
+            drain = 0.10
+        new = max(0.0, cur - drain)
+        setattr(agent, "fear", new)
 
     # Always run break + irrational follow-up (gives agents who broke a creature
     # back a chance to recover even after the creature has retreated).

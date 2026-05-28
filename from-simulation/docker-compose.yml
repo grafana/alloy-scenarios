@@ -85,7 +85,7 @@ services:
       - SERVICE_NAME=from-sim
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318
       - PYROSCOPE_SERVER_ADDRESS=http://alloy:9999
-      - TICK_HZ=2
+      - TICK_HZ=5
       - TIME_SCALE=1.0
       # Optional LLM driver — leave blank to run pure deterministic
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}

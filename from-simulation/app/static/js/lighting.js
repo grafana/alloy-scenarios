@@ -37,14 +37,19 @@
     if (wrap) wrap.dataset.time = cls || "day";
     if (lighting) lighting.className = "lighting " + cls;
 
-    // Continuous-alpha fallback. If #lighting is a <div>, we'll set an inline
-    // background-color tint as well so non-CSS clients still see the gradient.
+    // Continuous-alpha fallback. If #lighting is a <div>, paint an inline
+    // box-shadow tint ONLY when the CSS .night / .dusk class is inactive —
+    // otherwise the gradient and the inset shadow stack and the map turns
+    // pitch-black for the few seconds between DUSK and full NIGHT.
     if (lighting) {
-      const a = alphaFor(payload.lighting);
-      // Only paint the fallback tint when we're not relying on the .night/.dusk
-      // class (so the cleaner CSS overlay wins).
-      lighting.style.boxShadow = `inset 0 0 0 1000px rgba(10, 12, 40, ${a.toFixed(3)})`;
-      lighting.style.opacity = cls ? "" : (a > 0 ? "1" : "0");
+      if (cls) {
+        lighting.style.boxShadow = "";
+        lighting.style.opacity = "";
+      } else {
+        const a = alphaFor(payload.lighting);
+        lighting.style.boxShadow = `inset 0 0 0 1000px rgba(10, 12, 40, ${a.toFixed(3)})`;
+        lighting.style.opacity = a > 0 ? "1" : "0";
+      }
     }
   }
 

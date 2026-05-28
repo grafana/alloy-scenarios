@@ -74,6 +74,10 @@ class State(str, enum.Enum):
     OUTSIDER_GOAL = "OUTSIDER_GOAL"  # outsiders pursuing their backstory goal
     # v4 additions
     CARRYING_BOX = "CARRYING_BOX"    # holding a Music Box — sticky, compelled
+    # v6 additions
+    EXPLORING_CAVES = "EXPLORING_CAVES"  # DAY-only investigative state — walks to CAVE_ENTRY_XY
+    # v7 additions
+    FORAGING = "FORAGING"  # walks to the windmill / lakeside river to gather food when the barn is down
 
 
 class Role(str, enum.Enum):
@@ -116,6 +120,9 @@ class MarkerClass(str, enum.Enum):
     FARAWAY_TREE = "faraway-tree"
     OUTSIDER = "outsider"
     BUS = "bus"
+    CAR = "car"  # v6 — survivor arrival vehicles; turn into permanent wrecks
+    CREATURE_SWARM = "creature-swarm"  # v6 — smaller, faster swarmer-type creature
+    WRECK = "wreck"  # v6 — permanent abandoned-car static markers
     MUSIC_BOX = "music-box"
     CICADA = "cicada"  # transient swarm sprites during STEAL phase
 
@@ -134,6 +141,7 @@ class Item(str, enum.Enum):
     JOURNAL_PAGE = "journal_page"
     TORCH = "torch"
     TALISMAN_FRAGMENT = "talisman_fragment"
+    CAVE_CLUE = "cave_clue"  # v6 — found by EXPLORING_CAVES outcomes
 
 
 # ---------------------------------------------------------------------------
@@ -171,10 +179,38 @@ class Building:
     # ``world.tick_count < cooling_off_until_tick`` the talisman is treated
     # as failed and NPCs won't pick this building as a new home.
     cooling_off_until_tick: int = 0
+    # v8 — damage / destruction / rebuild. Each unprotected breach increments
+    # ``damage``. Once ``damage >= HOUSE_DESTRUCTION_THRESHOLD`` the building
+    # is ``destroyed`` and creatures stop targeting it. Survivors can spend
+    # ticks rebuilding it (see _tick_house_repair); progress is tracked in
+    # ``rebuild_progress``. When the rebuild completes both flags clear.
+    damage: int = 0
+    destroyed: bool = False
+    rebuild_progress: float = 0.0
+    # v8 — talisman crack: a separate flag from has_talisman so that we can
+    # restore the original talisman state when the building is rebuilt
+    # (rebuilt houses come back without a talisman; survivors must find a
+    # new one). ``original_talisman`` is captured at world init / reseed.
+    original_talisman: bool = False
 
     def is_protected(self, tick: int) -> bool:
         """True only when the building has its talisman AND isn't in cool-off."""
         return self.has_talisman and tick >= self.cooling_off_until_tick
+
+    @property
+    def capacity(self) -> int:
+        """v8 — max simultaneous occupants. Currently mirrors ``footprint``.
+
+        The hand-drawn map's footprint sizes already encode "big house" vs
+        "small house": Colony House is 10, Matthews / Liu / Barn are 4-5,
+        and the smaller dwellings are 3. Non-residential structures
+        (choosing stone, pool, abandoned bus) are 0 — they accept no one.
+        """
+        return max(0, int(self.footprint))
+
+    def has_room(self) -> bool:
+        """True when at least one slot is still free."""
+        return self.capacity > 0 and len(self.occupants) < self.capacity
 
 
 @dataclass
@@ -295,6 +331,42 @@ EVENT_TYPES = {
     "memory_recall",
     "db_pruned",
     "memory_hydrated",
+    # v6 — purposeful movement + caves + cars
+    "cave_explored",
+    "cave_clue_found",
+    "cave_fragment_found",
+    "cave_scare",
+    "cave_lost",
+    "lighthouse_walking",
+    "creature_swarm_spawn",
+    "car_arrival",
+    "car_departure",
+    "car_broke_down",
+    "intent_change",
+    # v7 — barn / forage / cave-dwelling creatures
+    "barn_destroyed",
+    "barn_rebuilt",
+    "forage_started",
+    "forage_returned",
+    "creature_cave_spawn",
+    "creature_hunting",
+    # v9.1 — danger-pass: night surge + multi-kill rampage
+    "creature_night_wave",
+    "creature_kill_streak",
+    # v8 — house destruction + talisman crack
+    "talisman_cracked",
+    "house_destroyed",
+    "house_rebuilt",
+    # v8 — cult faction + endgame
+    "cult_joined",
+    "cult_recruited",
+    "cult_sacrifice_called",
+    "cult_suppressed",
+    "cult_sacrifice",
+    # v8 — construction
+    "construction_started",
+    "construction_progress",
+    "house_built",
 }
 
 
@@ -367,6 +439,15 @@ class Legacy:
     deaths_by_creature: Dict[str, int] = field(default_factory=dict)
     cycles_witnessed: int = 0  # incremented once per village_wipe
     pending_prophecies: List[Prophecy] = field(default_factory=list)
+    # v6 — permanent abandoned vehicles. Each entry is (x, y, cycle_recorded).
+    # Capped at MAX_PERMANENT_WRECKS; oldest evicted FIFO. Persists across wipes.
+    permanent_wrecks: List[Tuple[float, float, int]] = field(default_factory=list)
+    # v6 — running count of cave fragments / clues discovered. Story progress.
+    cave_clues_found: int = 0
+    # v9 — adaptive antagonist: per-building creature pressure that survives
+    # village wipes so the forest "learns" which talismans bend. Bumped on
+    # every ``creature_breach``, decayed on clean nights by the Director.
+    talisman_failure_count: Dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -431,7 +512,7 @@ class Config:
     # v2 — trust
     trust_baseline: float = 0.5
     # v4 — music box monster
-    music_box_interval_days: int = 3
+    music_box_interval_days: int = 8
     music_box_curiosity_radius: float = 80.0
     music_box_talisman_fail_prob: float = 0.05
     music_box_sanity_drain: float = 0.5
@@ -442,13 +523,19 @@ class Config:
     npc_sanity_break_fear: float = 70.0
     npc_sanity_break_prob: float = 0.04
     house_cooling_off_ticks: int = 800
-    npc_breach_death_prob: float = 0.30
+    npc_breach_death_prob: float = 0.50
     # v5 — SQLite memory + promotion
     db_path: str = "/data/from.db"
     memory_cycle_window: int = 50
     memory_flush_every_ticks: int = 60
     memory_recall_window_ticks: int = 1200
     npc_promotion_score_threshold: float = 1.0
+    # v9 — cognitive layer (Mind + Director + reflective thinking)
+    mind_reflect_every_ticks: int = 600
+    mind_goal_ttl_ticks: int = 3600
+    mind_npc_enabled: bool = True
+    llm_thinking_rpm: int = 2
+    deterministic_mode: bool = False
 
     @classmethod
     def from_env(cls, getenv: Callable[[str, Optional[str]], Optional[str]]) -> "Config":
@@ -500,7 +587,7 @@ class Config:
             yellow_hydra_max=_i("YELLOW_HYDRA_MAX", 3),
             lighthouse_call_tick_frac=_f("LIGHTHOUSE_CALL_TICK_FRAC", 0.4),
             trust_baseline=_f("TRUST_BASELINE", 0.5),
-            music_box_interval_days=_i("MUSIC_BOX_INTERVAL_DAYS", 3),
+            music_box_interval_days=_i("MUSIC_BOX_INTERVAL_DAYS", 8),
             music_box_curiosity_radius=_f("MUSIC_BOX_CURIOSITY_RADIUS", 80.0),
             music_box_talisman_fail_prob=_f("MUSIC_BOX_TALISMAN_FAIL_PROB", 0.05),
             music_box_sanity_drain=_f("MUSIC_BOX_SANITY_DRAIN", 0.5),
@@ -516,6 +603,11 @@ class Config:
             memory_flush_every_ticks=_i("MEMORY_FLUSH_EVERY_TICKS", 60),
             memory_recall_window_ticks=_i("MEMORY_RECALL_WINDOW_TICKS", 1200),
             npc_promotion_score_threshold=_f("NPC_PROMOTION_SCORE_THRESHOLD", 1.0),
+            mind_reflect_every_ticks=_i("MIND_REFLECT_EVERY_TICKS", 600),
+            mind_goal_ttl_ticks=_i("MIND_GOAL_TTL_TICKS", 3600),
+            mind_npc_enabled=(_s("MIND_NPC_ENABLED", "true").lower() in ("1", "true", "yes")),
+            llm_thinking_rpm=_i("LLM_THINKING_RPM", 2),
+            deterministic_mode=(_s("DETERMINISTIC_MODE", "false").lower() in ("1", "true", "yes")),
         )
 
 
@@ -632,6 +724,34 @@ class World:
     memory: Optional[Any] = None  # storage.Memory; attached by app.py at boot
     sub_mains: Set[str] = field(default_factory=set)  # npc ids that have been promoted
 
+    # --- v9: cognitive layer + AI Director ---
+    director: Optional[Any] = None  # agents.director.DirectorState; lazily attached
+
+    # --- v6: arrival cars + cave exploration ---
+    # Only one Car may be live in the world at a time; the model mirrors BusState.
+    active_car_id: Optional[str] = None  # id of the live Car in supernaturals, or None
+    # Holds the NPC arrival id while the car is in transit. When the car parks
+    # the NPC alights and is moved into world.agents.
+    car_pending_npc_id: Optional[str] = None
+
+    # --- v7: barn = food store; while destroyed, food regen collapses and
+    # characters must FORAGE at the windmill / lake area. Set by creatures.py
+    # when the barn is breached; cleared after engineers rebuild OR the timer
+    # expires (whichever comes first). Reset on village wipe.
+    barn_destroyed_until_tick: int = 0
+    # Pending engineer rebuild progress on the barn. Increments while an
+    # ENGINEER character is REPAIRING near the barn. When it reaches the
+    # threshold, barn_destroyed_until_tick clears early.
+    barn_repair_progress: float = 0.0
+
+    # --- v8: per-lot construction progress for newly-built houses. Each
+    # entry maps an EMPTY_LOTS lot_id to the accumulated build progress;
+    # once it crosses CONSTRUCTION_THRESHOLD the lot is converted to a
+    # Building and removed from the map. Cleared on wipe.
+    construction_progress: Dict[str, float] = field(default_factory=dict)
+    # Lots already turned into buildings — so we don't re-render or reuse.
+    consumed_lots: Set[str] = field(default_factory=set)
+
     @property
     def cycle_number(self) -> int:
         return self.village_wipes + 1
@@ -685,6 +805,37 @@ def _enrich_agent(agent: Agent, world: World) -> Dict[str, Any]:
     return d
 
 
+def _mind_aggregate(world: World) -> Dict[str, Any]:
+    """v9 — compact mind summary for the broadcast snapshot.
+
+    Aggregate-only: no per-actor PII on the wire. Dossier reads detail on
+    demand via the inspect endpoint.
+    """
+    director = getattr(world, "director", None)
+    pressure = float(getattr(director, "pressure", 0.0)) if director is not None else 0.0
+    spawn_mult = float(getattr(director, "spawn_rate_mult", 1.0)) if director is not None else 1.0
+    pop_stress = float(getattr(director, "pop_relief", 0.0)) if director is not None else 0.0
+    goals: Dict[str, int] = {}
+    beliefs_active = 0
+    for a in world.agents.values():
+        mind = getattr(a, "mind", None)
+        if mind is None:
+            continue
+        goal = getattr(mind, "active_goal", None)
+        if goal is not None:
+            key = getattr(getattr(goal, "kind", None), "value", "unknown")
+            goals[key] = goals.get(key, 0) + 1
+        bb = getattr(mind, "beliefs", None) or {}
+        beliefs_active += len(bb)
+    return {
+        "director_pressure": round(pressure, 3),
+        "spawn_rate_mult": round(spawn_mult, 2),
+        "pop_stress": round(pop_stress, 3),
+        "goals_by_kind": goals,
+        "beliefs_active": beliefs_active,
+    }
+
+
 def snapshot_dict(world: World) -> Dict[str, Any]:
     """The shape SocketIO emits as a 'tick' event. Frontend (Agent D) renders this.
 
@@ -705,6 +856,12 @@ def snapshot_dict(world: World) -> Dict[str, Any]:
         "food_supply": round(world.food_supply, 2),
         "food_capacity": world.food_capacity,
         "farm_health": round(world.farm_health, 3),
+        # v7 — barn status so the UI can flag the food-store outage.
+        "barn_destroyed_in_ticks": max(
+            0,
+            int(getattr(world, "barn_destroyed_until_tick", 0)) - world.tick_count,
+        ),
+        "barn_repair_progress": round(getattr(world, "barn_repair_progress", 0.0), 1),
         "yellow": {
             "mode": world.yellow_active.mode.value,
             "disguised_as": world.yellow_active.disguised_as,
@@ -722,6 +879,12 @@ def snapshot_dict(world: World) -> Dict[str, Any]:
             ],
             "building_breach_marks": dict(world.legacy.building_breach_marks),
             "pending_prophecies": len(world.legacy.pending_prophecies),
+            # v6 — permanent abandoned vehicles painted on the map every tick.
+            "permanent_wrecks": [
+                {"x": w[0], "y": w[1], "cycle": w[2]}
+                for w in world.legacy.permanent_wrecks
+            ],
+            "cave_clues_found": world.legacy.cave_clues_found,
         },
         "dreams": [
             {"character_id": d.character_id, "lines": list(d.lines),
@@ -757,6 +920,7 @@ def snapshot_dict(world: World) -> Dict[str, Any]:
             "db_attached": world.memory is not None,
             "sub_mains_alive": len(world.sub_mains),
         },
+        "mind": _mind_aggregate(world),
         "buildings": [
             {
                 "id": b.id,
@@ -831,6 +995,15 @@ class Metric:
     SUB_MAINS_ALIVE = "from_sim_sub_mains_alive"                    # gauge
     SUB_MAINS_DEAD_TOTAL = "from_sim_sub_mains_dead_total"          # gauge cumulative
     INVENTORY_ITEMS = "from_sim_inventory_items"                    # gauge: total items held
+    # v9 — cognitive layer
+    MIND_BELIEFS_ACTIVE = "from_sim_mind_beliefs_active"            # gauge: live beliefs across all minds
+    MIND_GOALS_ACTIVE = "from_sim_mind_goals_active"                # gauge: live goals (attr: kind)
+    MIND_REFLECTIONS_TOTAL = "from_sim_mind_reflections_total"      # counter (attr: actor)
+    DIRECTOR_PRESSURE = "from_sim_director_pressure"                # gauge 0..1
+    DIRECTOR_SPAWN_MULT = "from_sim_director_spawn_mult"            # gauge
+    DIRECTOR_POP_STRESS = "from_sim_director_population_stress"     # gauge 0..0.4
+    YELLOW_TARGET_ROLE = "from_sim_yellow_target_role"              # counter (attr: role)
+    CREATURES_NIGHT_WAVES_TOTAL = "from_sim_creatures_night_waves_total"  # counter
 
 
 PHASE_TO_NUM = {Phase.DAY: 0, Phase.DUSK: 1, Phase.NIGHT: 2, Phase.DAWN: 3}
@@ -845,7 +1018,7 @@ PHASE_TO_NUM = {Phase.DAY: 0, Phase.DUSK: 1, Phase.NIGHT: 2, Phase.DAWN: 3}
 # Coordinates match the hand-drawn Fromville map (viewBox 0 0 1000 700).
 BUILDING_LAYOUT: List[Tuple[str, str, float, float, int, bool, str]] = [
     # (id, name, x, y, footprint, has_talisman, role_tag)
-    ("colony_house",     "Colony House",            385, 420, 10, True,  "colony"),
+    ("colony_house",     "Colony House",            385, 420, 14, True,  "colony"),
     ("green_house",      "Green House",             418, 400,  3, True,  "house"),
     ("shed",             "Shed",                    442, 388,  1, False, "shed"),
     ("clinic",           "Clinic",                  478, 402,  4, True,  "clinic"),
@@ -921,6 +1094,71 @@ LIGHTHOUSE_XY: Tuple[float, float] = (140.0, 585.0)
 # and where the box can be destroyed. Maps to the DUNGEON landmark on the map.
 RUINS_XY: Tuple[float, float] = (240.0, 650.0)
 
+# v6 — landmarks that previously sat unused on the map. Lifted from the SVG so
+# Python code can target them directly. Each one drives a distinct character
+# state's destination (see ``_target_for_role_and_state`` in characters.py).
+CAVE_ENTRY_XY: Tuple[float, float] = (260.0, 510.0)
+CRASH_SITE_XY: Tuple[float, float] = (615.0, 335.0)
+HIDEOUT_TRUCK_XY: Tuple[float, float] = (275.0, 610.0)
+CHOOSING_STONE_XY: Tuple[float, float] = (390.0, 670.0)
+WINDMILL_XY: Tuple[float, float] = (465.0, 195.0)
+GRAVE_MOUNDS: List[Tuple[float, float]] = [(240.0, 650.0), (390.0, 670.0)]
+CAR_GRAVEYARD_XY: Tuple[float, float] = (470.0, 615.0)
+
+# v7 — forage zones. When the barn is destroyed the village can't store
+# harvest, so foragers walk to one of these (the windmill area for game and
+# berries, the lakeside river for fish) and bring food back. Two locations so
+# the foragers spread out instead of all clustering on the same point.
+FORAGE_ZONES: List[Tuple[float, float]] = [
+    (465.0, 195.0),   # near the windmill — wild game / berries
+    (745.0, 240.0),   # lakeside "river" — fish
+    (155.0, 220.0),   # the small western pond — secondary game route
+]
+# How much food a single completed forage run returns to the larder.
+FORAGE_FOOD_PAYOFF = 18.0
+# How long an agent spends gathering once they arrive at a forage zone.
+FORAGE_TICKS_TO_GATHER = 35
+# Engineer barn-repair: progress per ENGINEER-REPAIRING tick near the barn,
+# threshold to clear the destroyed flag.
+BARN_REPAIR_PER_TICK = 0.6
+BARN_REPAIR_THRESHOLD = 60.0
+# How long the barn stays out of action by default if no repair happens.
+# 2 sim-days at the current 2 sim-minutes/tick. ~1440 ticks total.
+BARN_DOWN_DEFAULT_TICKS = 1440
+
+# v8 — house destruction + rebuild thresholds. Each unprotected breach
+# increments damage by 1; at the threshold the house collapses. Engineers
+# (or any character in REPAIRING state) near a destroyed house contribute
+# to rebuild_progress; once it crosses HOUSE_REBUILD_THRESHOLD the house
+# is rebuilt without its original talisman.
+HOUSE_DESTRUCTION_THRESHOLD = 3
+HOUSE_REBUILD_PER_TICK = 0.4
+HOUSE_REBUILD_THRESHOLD = 50.0
+
+# v8 — talisman crack. Every tick, an occupant whose sanity is below
+# TALISMAN_CRACK_SANITY and fear is above TALISMAN_CRACK_FEAR has this
+# probability of cracking and letting a creature concept past the
+# threshold. The talisman is permanently removed from that house until
+# rebuild + re-find.
+TALISMAN_CRACK_SANITY = 0.18    # 0..1 scale
+TALISMAN_CRACK_FEAR = 78.0      # 0..100 scale
+TALISMAN_CRACK_PROB = 0.0015    # ~1 in 670 ticks per qualifying occupant
+
+# v6 — Car arrival path. Shares the S-curve in/out with the bus but parks at a
+# different spur point so the two vehicles can both be on-map without overlap.
+CAR_PATH_IN: List[Tuple[float, float]] = [
+    (-20, 200), (80, 240), (240, 320), (395, 405), (490, 415),
+]
+CAR_PARK_XY: Tuple[float, float] = (495, 430)
+CAR_PATH_OUT: List[Tuple[float, float]] = [
+    (495, 430), (565, 425), (640, 555), (740, 680),
+]
+# After this many path-out waypoints, the car breaks down and becomes a wreck.
+CAR_BREAKDOWN_AFTER_WAYPOINTS = 2
+# How many permanent abandoned wrecks the map can carry before the oldest is
+# evicted. Five is enough that long-running sessions feel scarred.
+MAX_PERMANENT_WRECKS = 5
+
 # v4: talisman residential houses NPCs may pick as home (subset of layout).
 # Order matters for stable home-assignment; colony_house listed first so the
 # 4× weight in npcs.py preserves "the big house" feel.
@@ -928,3 +1166,26 @@ NPC_HOME_BUILDINGS: List[str] = [
     "colony_house", "matthews_home", "lius_home", "myers_home",
     "green_house", "grey_house", "blue_house",
 ]
+
+# v8 — empty lots that survivors can build into new houses when the existing
+# residences fill up. Each tuple is (lot_id, x, y) on the painted map in
+# spots that aren't already a building. tick_construction in
+# agents/construction.py consumes these one at a time as homeless NPCs
+# accumulate and engineers spend ticks at the lot.
+EMPTY_LOTS: List[Tuple[str, float, float]] = [
+    ("lot_north_east",  525.0, 410.0),
+    ("lot_south_east",  550.0, 535.0),
+    ("lot_south_west",  355.0, 575.0),
+    ("lot_north_west",  340.0, 395.0),
+    ("lot_far_east",    595.0, 470.0),
+    ("lot_far_west",    295.0, 460.0),
+]
+
+# Each new house starts as a small structure: 4-slot capacity, no talisman.
+NEW_HOUSE_CAPACITY = 4
+# Construction is intentionally slow so the user can see it happen over a
+# sim-day. ~80 ticks of survivor work to finish a house.
+CONSTRUCTION_PER_TICK = 1.0
+CONSTRUCTION_THRESHOLD = 80.0
+# Min distance an engineer must be from the lot to count as "on site".
+CONSTRUCTION_RADIUS_PX = 32.0

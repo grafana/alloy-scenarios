@@ -53,6 +53,9 @@
   const hashGroups = new Map();
   // Single bus group (or null when bus inactive).
   let busGroup = null;
+  // v6: dedicated <g id="wrecks"> that we wipe-and-redraw each tick. Up to
+  // MAX_PERMANENT_WRECKS (5) elements, so the cost is negligible.
+  let wreckGroup = null;
   let lastJournalKey = "";
   let lastVoiceTick = -1;
   let selectedId = null;
@@ -184,16 +187,20 @@
   // ---------------------------------------------------------- Entity rendering
   // Decide which token symbol id (if any) to use for a given agent.
   function tokenIdFor(item) {
-    if (!item || !item.name) return null;
+    if (!item) return null;
+    // v8 — marker_class fallback runs FIRST so nameless supernaturals (like
+    // the Yellow Man forest lurker) still resolve to their token. The
+    // previous early-return on missing name silently dropped them and they
+    // never rendered.
+    const mc = item.marker_class || "";
+    if (mc === "man-in-yellow") return "token-yellow";
+    if (mc === "boy-in-white")  return "token-white";
+    if (!item.name) return null;
     const key = String(item.name).toLowerCase().trim();
     // Strip "the " prefixes for Man in Yellow / Boy in White if present.
     if (key.includes("yellow")) return "token-yellow";
     if (key.includes("white"))  return "token-white";
     if (TOKEN_NAMES.has(key)) return "token-" + key;
-    // Marker-class fallbacks for supernaturals carrying no name.
-    const mc = item.marker_class || "";
-    if (mc === "man-in-yellow") return "token-yellow";
-    if (mc === "boy-in-white")  return "token-white";
     return null;
   }
 
@@ -222,6 +229,11 @@
     use.setAttribute("href", "#" + symbolId);
     use.setAttribute("class", "token " + klass);
     use.setAttribute("data-id", id);
+    // Force the <use> to honour the symbol's intrinsic 60×80 viewBox.
+    // Without width/height a <use> referencing a <symbol> inherits the
+    // parent SVG viewport (1000×700) and renders enormous.
+    use.setAttribute("width", "60");
+    use.setAttribute("height", "80");
     layer.appendChild(use);
     attachClick(use, id);
     entry = { el: use, kind: "token", symbolId, klass };
@@ -258,16 +270,37 @@
   }
 
   function placeToken(entry, x, y) {
-    // 60x80 viewBox centered roughly on token's belt; scale 0.55 ⇒ visual ~33x44.
-    // Anchor so that (x,y) sits at the centre of the token's mass.
+    // 60x80 viewBox; scale 0.25 ⇒ visual ~15x20, so named tokens read at the
+    // same scale as buildings (most ~20-30 px wide) and NPC dots (~12 px).
+    // Anchor offsets put symbol centre (30, 40) at (x, y).
     entry.el.setAttribute(
       "transform",
-      `translate(${(x - 15).toFixed(2)} ${(y - 22).toFixed(2)}) scale(0.55)`,
+      `translate(${(x - 7.5).toFixed(2)} ${(y - 10).toFixed(2)}) scale(0.25)`,
     );
   }
 
   function applyAgent(item, seenIds) {
     if (!item || !item.id) return;
+    // v8 — indoor agents are hidden from the map so the user sees who is
+    // exposed outside. We DO mark them as "seen" so removeEntities()
+    // doesn't garbage-collect a token we're going to want back the next
+    // time they step outside. But we tear down the visible element here
+    // so the map empties at NIGHT inside houses.
+    if (item.indoors === true) {
+      seenIds.add(item.id);
+      const existing = entities.get(item.id);
+      if (existing) {
+        existing.el.remove();
+        entities.delete(item.id);
+        // Sub-mains carry a chevron sibling under "<id>::chev".
+        const chev = entities.get(item.id + "::chev");
+        if (chev) {
+          chev.el.remove();
+          entities.delete(item.id + "::chev");
+        }
+      }
+      return;
+    }
     seenIds.add(item.id);
 
     const tokenId = tokenIdFor(item);
@@ -285,10 +318,46 @@
 
     // Fallback shapes by marker_class.
     const mc = item.marker_class || "npc";
+    // v6: live arrival car — uses the same <symbol id="token-car"> as wrecks
+    // but is part of the live entity registry so it transitions smoothly
+    // along the road.
+    if (mc === "car") {
+      let entry = entities.get(item.id);
+      if (!entry || entry.kind !== "car") {
+        if (entry) { entry.el.remove(); entities.delete(item.id); }
+        const layer = $("entities");
+        if (!layer) return;
+        const use = document.createElementNS(SVG_NS, "use");
+        use.setAttribute("href", "#token-car");
+        use.setAttribute("class", "token-car");
+        use.setAttribute("data-id", item.id);
+        use.setAttribute("width", "40");
+        use.setAttribute("height", "20");
+        layer.appendChild(use);
+        attachClick(use, item.id);
+        entry = { el: use, kind: "car" };
+        entities.set(item.id, entry);
+      }
+      entry.el.setAttribute(
+        "transform",
+        `translate(${(x - 20).toFixed(2)} ${(y - 10).toFixed(2)})`,
+      );
+      return;
+    }
+    // v6: swarmer creature — smaller, brighter polygon. Distinct CSS class.
+    if (mc === "creature-swarm") {
+      const entry = ensureShape(item.id, "polygon", "creature-swarm", {
+        points: "0,-6 3,-2 6,3 1,2 -1,5 -4,2 -6,1 -3,-2",
+      });
+      if (entry) entry.el.setAttribute("transform", `translate(${x} ${y})`);
+      return;
+    }
     if (mc === "creature") {
-      // small jagged triangle, points roughly forming a creature glyph
+      // jagged polygon — larger, asymmetric so it reads as a thing-with-claws
+      // even at 1:1 pixel ratio on the map (creatures at NIGHT are the visual
+      // anchor of "something is wrong"; they need to stand out).
       const entry = ensureShape(item.id, "polygon", "creature", {
-        points: "0,-7 6,5 -2,2 -6,5",
+        points: "0,-10 5,-3 9,4 3,3 -1,9 -5,3 -9,2 -4,-3",
       });
       if (entry) entry.el.setAttribute("transform", `translate(${x} ${y})`);
       return;
@@ -317,6 +386,22 @@
       }
       return;
     }
+    if (mc === "faraway-tree") {
+      // Short-lived portal/glitch shimmer (FarawayTreePortal + glitch markers
+      // from fear.py share this marker_class). Render as a small open ring so
+      // a stack of them — common during paranormal_break cascades — reads as
+      // a layered shimmer rather than a clump of solid NPC dots.
+      const entry = ensureShape(item.id, "circle", "faraway-tree", {
+        r: 4.5,
+        fill: "none",
+        "stroke-width": 1.2,
+      });
+      if (entry) {
+        entry.el.setAttribute("cx", x);
+        entry.el.setAttribute("cy", y);
+      }
+      return;
+    }
     if (item.kind === "outsider" || mc === "outsider") {
       const entry = ensureShape(item.id, "circle", "outsider", { r: 7 });
       if (entry) {
@@ -328,10 +413,16 @@
     // Default: NPC dot.
     // v5: NPC default — promoted sub-mains get a larger circle + a chevron;
     // tombstoned ones render with a fading "✝" glyph for ~30 ticks.
+    // v8: cultist NPCs get a red fill + gold ring (.cultist class).
     const isSubMain = item.is_sub_main === true;
     const isDead = (item.status === "DEAD");
+    const isCultist = item.cult_state === "CONVERTED";
     const r = isSubMain ? 7.5 : 6;
-    const klass = isSubMain ? (isDead ? "npc sub-main tombstone" : "npc sub-main") : "npc";
+    const parts = ["npc"];
+    if (isSubMain) parts.push("sub-main");
+    if (isCultist) parts.push("cultist");
+    if (isDead) parts.push("tombstone");
+    const klass = parts.join(" ");
     const entry = ensureShape(item.id, "circle", klass, { r });
     if (entry) {
       entry.el.setAttribute("cx", x);
@@ -417,6 +508,36 @@
         yel.textContent = "Yellow Man: " + yellow.mode + deadline;
       }
     }
+
+    // v9 — Minds heatmap. Director pressure 0..1, goal counts by kind, total beliefs.
+    const mind = payload.mind || {};
+    const pressure = typeof mind.director_pressure === "number" ? mind.director_pressure : 0;
+    const pFill = $("hud-pressure-fill");
+    if (pFill) {
+      pFill.style.width = (Math.max(0, Math.min(1, pressure)) * 100).toFixed(1) + "%";
+      // green-yellow-red gradient via inline color so we don't need a class table.
+      const r = Math.round(120 + 135 * Math.min(1, pressure * 1.2));
+      const g = Math.round(180 - 130 * Math.min(1, pressure * 1.2));
+      pFill.style.backgroundColor = `rgb(${r},${g},80)`;
+    }
+    const pText = $("hud-pressure-text");
+    if (pText) pText.textContent = pressure.toFixed(2);
+    const goals = (mind && mind.goals_by_kind) || {};
+    const pips = document.querySelectorAll("#hud-goals .goal-pip span[data-kind]");
+    pips.forEach(function (el) {
+      const k = el.getAttribute("data-kind");
+      el.textContent = String(goals[k] || 0);
+    });
+    const bel = $("hud-beliefs-count");
+    if (bel) bel.textContent = String(mind.beliefs_active || 0);
+    // v9.1 — population-stress signal (0..0.4). Tints when above zero so
+    // the user can see the "town's success → more monsters" link directly.
+    const ps = typeof mind.pop_stress === "number" ? mind.pop_stress : 0;
+    const psEle = $("hud-pop-stress");
+    if (psEle) {
+      psEle.textContent = ps.toFixed(2);
+      psEle.style.color = ps > 0 ? "#d88a8a" : "#c0a070";
+    }
   }
   function pad(n) { return String(n == null ? 0 : n).padStart(2, "0"); }
 
@@ -433,6 +554,19 @@
     setText("stat-creatures", counts.creature);
     const y = payload.yellow || { mode: "DORMANT" };
     setText("stat-yellow", y.mode || "DORMANT");
+    // v6: cave clues counter persists across cycles via Legacy.
+    const legacy = payload.legacy || {};
+    setText("stat-cave-clues", legacy.cave_clues_found != null ? legacy.cave_clues_found : 0);
+    // v7: barn destroyed indicator. Empty when barn is fine; shows the
+    // remaining ticks when down so the viewer knows the foragers are out.
+    const barnLeft = payload.barn_destroyed_in_ticks || 0;
+    setText("stat-barn", barnLeft > 0
+      ? ("DOWN — " + barnLeft + " ticks left")
+      : "intact");
+    const statBarnEl = document.getElementById("stat-barn");
+    if (statBarnEl) {
+      statBarnEl.style.color = barnLeft > 0 ? "#ff8060" : "";
+    }
 
     const roster = $("roster-summary");
     if (roster) {
@@ -447,6 +581,16 @@
   }
 
   // ---------------------------------------------------------- Event log
+  // v8 — agent-id → display-name map, rebuilt every tick from the latest
+  // agents payload. Event subjects (which carry raw ids like "npc_1_24")
+  // are resolved through this so the log reads "Beatrice — bolted outside"
+  // instead of "npc_1_24 — bolted outside".
+  let idToName = new Map();
+  function resolveName(id) {
+    if (!id) return id;
+    const n = idToName.get(id);
+    return n ? n : id;
+  }
   function renderEvents(events) {
     if (!Array.isArray(events) || events.length === 0) return;
     const ol = $("event-log");
@@ -467,7 +611,10 @@
       typeSpan.textContent = ev.type || "?";
       const detail = document.createElement("span");
       detail.className = "ev-detail";
-      detail.textContent = ev.subject ? (ev.subject + " — " + (ev.detail || "")) : (ev.detail || "");
+      const subjectName = ev.subject ? resolveName(ev.subject) : "";
+      detail.textContent = subjectName
+        ? (subjectName + " — " + (ev.detail || ""))
+        : (ev.detail || "");
       li.appendChild(tickSpan);
       li.appendChild(typeSpan);
       li.appendChild(detail);
@@ -476,16 +623,36 @@
   }
 
   // ---------------------------------------------------------- Roster list
+  // v6: also surfaces each agent's `intent` string on a muted second line so
+  // viewers can see "Boyd is patrolling toward the church." next to his name.
+  // We rebuild the list whenever the agent count OR any intent string has
+  // changed since the last render — keeps the DOM stable while keeping the
+  // "Right now" text in sync.
+  let lastRosterSig = "";
   function renderRosterList(agents) {
     const list = $("roster-list");
     if (!list) return;
-    if (list.childElementCount === agents.length) return;
+    const sig = agents.map((a) =>
+      (a.id || "") + "|" + (a.intent || "") + "|" + (a.role || "")
+    ).join("\n");
+    if (sig === lastRosterSig) return;
+    lastRosterSig = sig;
     list.innerHTML = "";
     for (const a of agents) {
       const li = document.createElement("li");
       const base = (a.name || a.id) + (a.role ? "  ·  " + a.role : "");
       const drifted = !!(a.drift || a.personality_drifted);
-      li.textContent = base + (drifted ? "  ↕" : "");
+      const title = document.createElement("div");
+      title.className = "roster-title";
+      title.textContent = base + (drifted ? "  ↕" : "");
+      li.appendChild(title);
+      const intent = (a.intent || "").trim();
+      if (intent) {
+        const sub = document.createElement("div");
+        sub.className = "intent muted";
+        sub.textContent = intent;
+        li.appendChild(sub);
+      }
       if (drifted) li.classList.add("drifted");
       li.dataset.id = a.id;
       if (a.id === selectedId) li.classList.add("selected");
@@ -557,6 +724,112 @@
       li.textContent = typeof line === "string" ? line : (line && line.text) || "";
       list.appendChild(li);
     });
+  }
+
+  // ---------------------------------------------------------- v8: new houses
+  // Buildings that didn't exist in the original SVG layout (id starts with
+  // "built_house_") get painted dynamically as simple wooden shacks. Same
+  // hitbox + dossier pipeline as the original buildings, so the user can
+  // click them and see who lives inside.
+  const builtHouseShapes = new Map();
+  const ORIGINAL_BUILDING_IDS = new Set([
+    "colony_house","green_house","shed","clinic","root_cellar",
+    "choosing_stone","church","grey_house","blue_house","pool",
+    "lius_home","bar","barn","sheriff_office","abandoned_bus",
+    "matthews_home","diner","myers_home","lighthouse",
+  ]);
+  function renderBuiltHouses(buildings) {
+    const overlays = $("overlays");
+    if (!overlays) return;
+    const live = new Set();
+    for (const b of buildings) {
+      if (!b || !b.id) continue;
+      if (ORIGINAL_BUILDING_IDS.has(b.id)) continue;
+      live.add(b.id);
+      let entry = builtHouseShapes.get(b.id);
+      if (!entry) {
+        const g = document.createElementNS(SVG_NS, "g");
+        g.setAttribute("class", "built-house");
+        g.style.pointerEvents = "none";
+        // Simple cabin: brown rect + darker roof + door.
+        const wall = document.createElementNS(SVG_NS, "rect");
+        wall.setAttribute("x", -12);
+        wall.setAttribute("y", -7);
+        wall.setAttribute("width", 24);
+        wall.setAttribute("height", 14);
+        wall.setAttribute("fill", "#8a6a48");
+        wall.setAttribute("stroke", "#1a1611");
+        wall.setAttribute("stroke-width", "0.8");
+        const roof = document.createElementNS(SVG_NS, "polygon");
+        roof.setAttribute("points", "-14,-7 14,-7 11,-13 -11,-13");
+        roof.setAttribute("fill", "#3a2820");
+        roof.setAttribute("stroke", "#1a1611");
+        roof.setAttribute("stroke-width", "0.8");
+        const door = document.createElementNS(SVG_NS, "rect");
+        door.setAttribute("x", -2);
+        door.setAttribute("y", -1);
+        door.setAttribute("width", 4);
+        door.setAttribute("height", 8);
+        door.setAttribute("fill", "#1a1611");
+        g.appendChild(roof);
+        g.appendChild(wall);
+        g.appendChild(door);
+        overlays.appendChild(g);
+        entry = { g };
+        builtHouseShapes.set(b.id, entry);
+      }
+      entry.g.setAttribute("transform", `translate(${b.x} ${b.y})`);
+    }
+    for (const [id, entry] of builtHouseShapes) {
+      if (!live.has(id)) {
+        entry.g.remove();
+        builtHouseShapes.delete(id);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------- v8: building hitboxes
+  // Invisible click targets layered over the painted building art so clicking
+  // a house opens its dossier (residents inside / away, talisman state).
+  const buildingHitboxes = new Map();
+  function renderBuildingHitboxes(buildings) {
+    const overlays = $("overlays");
+    if (!overlays) return;
+    const live = new Set();
+    for (const b of buildings) {
+      if (!b || !b.id) continue;
+      // Lighthouse, abandoned bus, pool etc. are part of the map atmosphere
+      // and don't house residents — skip them so clicks pass through.
+      if (b.footprint === 0) continue;
+      live.add(b.id);
+      let entry = buildingHitboxes.get(b.id);
+      // Hitbox size scales with footprint so colony_house (10) gets a bigger
+      // click area than a small home (3). 26 px works for the big buildings,
+      // 18 px for medium, 14 px floor.
+      const half = Math.max(14, Math.min(28, 12 + (b.footprint || 1) * 1.4));
+      if (!entry) {
+        const rect = document.createElementNS(SVG_NS, "rect");
+        rect.setAttribute("class", "building-hit");
+        rect.setAttribute("data-id", b.id);
+        rect.setAttribute("fill", "transparent");
+        rect.setAttribute("pointer-events", "all");
+        rect.style.cursor = "pointer";
+        attachClick(rect, b.id);
+        overlays.appendChild(rect);
+        entry = { rect };
+        buildingHitboxes.set(b.id, entry);
+      }
+      entry.rect.setAttribute("x", (b.x || 0) - half);
+      entry.rect.setAttribute("y", (b.y || 0) - half);
+      entry.rect.setAttribute("width", half * 2);
+      entry.rect.setAttribute("height", half * 2);
+    }
+    for (const [id, entry] of buildingHitboxes) {
+      if (!live.has(id)) {
+        entry.rect.remove();
+        buildingHitboxes.delete(id);
+      }
+    }
   }
 
   // ---------------------------------------------------------- v4: cooling-off haze
@@ -701,6 +974,42 @@
       busGroup = g;
     }
     busGroup.setAttribute("transform", `translate(${bus.x || 0}, ${bus.y || 0})`);
+  }
+
+  // ---------------------------------------------------------- v6: wrecks
+  // Static, indelible parked-and-broken cars from `payload.legacy.permanent_wrecks`.
+  // These persist across cycle wipes via Legacy. We wipe-and-redraw the whole
+  // <g id="wrecks"> each tick; the cap is 5 wrecks so the cost is trivial.
+  function renderWrecks(wrecks) {
+    const overlays = $("overlays");
+    if (!overlays) return;
+    if (!wreckGroup) {
+      wreckGroup = document.createElementNS(SVG_NS, "g");
+      wreckGroup.setAttribute("id", "wrecks");
+      overlays.appendChild(wreckGroup);
+    }
+    while (wreckGroup.firstChild) wreckGroup.removeChild(wreckGroup.firstChild);
+    if (!Array.isArray(wrecks) || wrecks.length === 0) return;
+    for (const w of wrecks) {
+      if (!w) continue;
+      const x = Number(w.x);
+      const y = Number(w.y);
+      if (!isFinite(x) || !isFinite(y)) continue;
+      const use = document.createElementNS(SVG_NS, "use");
+      use.setAttribute("href", "#token-car");
+      use.setAttribute("class", "wreck");
+      use.setAttribute("width", "40");
+      use.setAttribute("height", "20");
+      // Translate-then-rotate; SVG transforms compose right-to-left so the
+      // rotation happens around the wreck's own centre.
+      const cx = x;
+      const cy = y;
+      use.setAttribute(
+        "transform",
+        `translate(${(x - 20).toFixed(2)} ${(y - 10).toFixed(2)}) rotate(-12 ${(cx - (x - 20)).toFixed(2)} ${(cy - (y - 10)).toFixed(2)})`,
+      );
+      wreckGroup.appendChild(use);
+    }
   }
 
   // ---------------------------------------------------------- v2: outsider '+'
@@ -859,6 +1168,12 @@
     const creatures = Array.isArray(payload.creatures) ? payload.creatures : [];
     const supes = Array.isArray(payload.supernaturals) ? payload.supernaturals : [];
 
+    // v8 — rebuild id → name map so the event log can resolve raw ids.
+    idToName = new Map();
+    for (const a of agents) if (a.id && a.name) idToName.set(a.id, a.name);
+    for (const c of creatures) if (c.id && c.name) idToName.set(c.id, c.name);
+    for (const s of supes) if (s.id && s.name) idToName.set(s.id, s.name);
+
     const seenGlyphs = new Set();
     for (const a of agents) {
       applyAgent(a, seen);
@@ -909,9 +1224,13 @@
 
     const buildings = Array.isArray(payload.buildings) ? payload.buildings : [];
     const legacy = payload.legacy || {};
+    renderBuiltHouses(buildings);
+    renderBuildingHitboxes(buildings);
     renderHashMarks(buildings, legacy.building_breach_marks);
     renderCoolingOff(buildings);
     renderBus(payload.bus);
+    // v6: paint permanent wrecks every tick (idempotent, capped at 5).
+    renderWrecks(legacy.permanent_wrecks);
 
     updateHud(payload);
     updateStats(payload, counts);

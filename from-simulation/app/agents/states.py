@@ -74,6 +74,10 @@ TRANSITION_TABLE: Dict[State, List[Transition]] = {
         (State.EATING, 1.5, _ANYTIME),
         (State.WANDERING, 1.0, _ANYTIME),
         (State.SHELTERING, 1.5, _DUSK_NIGHT),
+        # v7 — pivot to FORAGING when the barn is down. The weight here is
+        # baseline; characters.py applies an additional 3× boost via the
+        # food_shortage / barn_destroyed_until_tick checks.
+        (State.FORAGING, 1.2, _DAY_ONLY),
     ],
     State.GOSSIPING: [
         (State.GOSSIPING, 2.0, _DAY_ONLY),
@@ -130,6 +134,9 @@ TRANSITION_TABLE: Dict[State, List[Transition]] = {
         (State.REPAIRING, 0.4, _DAY_ONLY),
         (State.PLAYING, 0.4, _DAY_ONLY),
         (State.CONVERSING, 0.5, _BIASED_DAY),
+        # v6 — wanderers occasionally drift into the caves on their own.
+        # Lower base than the INVESTIGATING edge; same DAY-only gating.
+        (State.EXPLORING_CAVES, 0.4, _DAY_ONLY),
     ],
     State.FLEEING: [
         # Fleeing decays back into shelter / wander when fear subsides.
@@ -143,10 +150,16 @@ TRANSITION_TABLE: Dict[State, List[Transition]] = {
         (State.WANDERING, 0.2, _BIASED_DAY),
     ],
     State.INVESTIGATING: [
-        (State.INVESTIGATING, 1.5, _ANYTIME),
-        (State.WANDERING, 1.5, _ANYTIME),
+        (State.INVESTIGATING, 0.7, _ANYTIME),
+        (State.WANDERING, 1.0, _ANYTIME),
         (State.PATROLLING, 0.8, _BIASED_NIGHT),
         (State.MEETING, 0.4, _BIASED_DAY),
+        # v6 — cave exploration. DAY-only; INVESTIGATOR/SEER get a role bonus
+        # on top of this in characters.py via ROLE_PRIORITY. Bumped to 3.0 so
+        # the role bonus (2×) gives ~6.0 vs INVESTIGATING's ~1.4 — Jade and
+        # Sara actually leave the village for the caves rather than just
+        # picking nearby buildings.
+        (State.EXPLORING_CAVES, 3.0, _DAY_ONLY),
     ],
     State.PLAYING: [
         (State.PLAYING, 2.0, _DAY_ONLY),
@@ -214,5 +227,30 @@ TRANSITION_TABLE: Dict[State, List[Transition]] = {
     State.DREAMING: [
         (State.SLEEPING, 4.0, _ANYTIME),
         (State.DREAMING, 1.0, _ANYTIME),
+    ],
+    # v6 — cave exploration. caves.py drives the actual lifecycle (progress
+    # counter + outcome roll); these edges only matter if a character is
+    # sampled mid-exploration before caves.py has run its outcome.
+    State.EXPLORING_CAVES: [
+        # Heavily sticky — caves.py owns the exit. Otherwise the FSM can
+        # bounce the character out before they walk ~150 px to the entrance.
+        (State.EXPLORING_CAVES, 20.0, _DAY_ONLY),
+        (State.WANDERING, 0.2, _BIASED_DAY),
+        (State.FLEEING, 0.5, _ANYTIME),
+    ],
+    # v7 — FORAGING. characters.py owns the lifecycle (walking to a forage
+    # zone, gathering for FORAGE_TICKS_TO_GATHER, returning food). Sticky like
+    # EXPLORING_CAVES so the FSM doesn't pull the forager off mid-trip.
+    State.FORAGING: [
+        (State.FORAGING, 20.0, _DAY_ONLY),
+        (State.WANDERING, 0.3, _BIASED_DAY),
+        (State.FLEEING, 0.5, _ANYTIME),
+    ],
+    # v6 — CALLED is sticky. The hard-override in characters.py pins us to it
+    # while ``world.lighthouse_called`` names this character, but we still
+    # register edges so the FSM doesn't deadlock if the call is cleared.
+    State.CALLED: [
+        (State.CALLED, 10.0, _ANYTIME),
+        (State.WANDERING, 0.2, _BIASED_DAY),
     ],
 }

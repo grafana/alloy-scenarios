@@ -60,6 +60,13 @@ from agents import music_box as _music_box     # A v4: tick_music_box
 from agents import cooling_off as _cooling_off # A v4: tick_cooling_off
 from agents import npc_problems as _npc_problems  # C v4: tick_npc_problems
 from agents import promotion as _promotion        # C v5: tick_promotion
+from agents import caves as _caves                # A v6: tick_caves
+from agents import cars as _cars                  # A v6: tick_cars
+from agents import forage as _forage              # A v7: tick_forage
+from agents import cult as _cult                  # C v8: cult faction + endgame
+from agents import construction as _construction  # A v8: build new houses
+from agents import director as _director           # A v9: AI Director (tension monitor)
+from agents import mind as _mind                   # A v9: per-agent cognition (gauges only here)
 from time_cycle import phase_for, update_lighting
 from world import reset_world
 
@@ -229,6 +236,19 @@ class Simulation:
         # reaping so the deaths and displacements it creates land same-tick.
         _npc_problems.tick_npc_problems(world)
         _population.tick_population(world)
+        # A v6: drive any live arrival car forward one step. Runs right after
+        # population so the same-tick alighting handoff (car parks -> NPC
+        # flips ACTIVE) lines up with the population pass that finalises it.
+        _cars.tick_cars(world)
+        # A v6: tick the cave exploration mechanic. Runs after population so
+        # any character who flipped to EXPLORING_CAVES this tick gets their
+        # first progress increment immediately, and before the social /
+        # supernatural passes that read agent state.
+        _caves.tick_caves(world)
+        # A v7: foraging mechanic. Like caves it owns a per-agent progress
+        # counter; we tick it once per tick alongside caves so foragers can
+        # accrue progress while sitting at their forage zone.
+        _forage.tick_forage(world)
         # C v5: promotion sweep runs immediately after population reaping so
         # we never promote a corpse and the sub-main gauge stays honest.
         _promotion.tick_promotion(world)
@@ -241,7 +261,27 @@ class Simulation:
         _lighthouse.tick_lighthouse(world)
         # Back to Agent A: food drains, dusk creature spawn, dumb supernaturals.
         _food.tick(world)
+        # v9 — AI Director: recompute pressure + spawn/yellow knobs BEFORE the
+        # creature/yellow spawn paths read them. Cheap (gated cadence inside).
+        _director.tick_director(world)
         _creatures.maybe_spawn(world)  # reads world.last_phase before we bump it
+        # v7 — cave-dwelling spawn at NIGHT + barn repair progress.
+        _creatures.tick_cave_spawn(world)
+        # v9.1 — sustained NIGHT pressure: a second wave at midnight so the
+        # dusk cohort isn't the entire night's threat budget.
+        _creatures.tick_night_wave(world)
+        _creatures.tick_barn_repair(world)
+        # v8 — house destruction rebuild + talisman crack.
+        _creatures.tick_house_repair(world)
+        _creatures.tick_talisman_crack(world)
+        # v8 — cult conversion + endgame. Re-scan the event deque each tick;
+        # on_loss is idempotent per victim via _cult_loss_seen_* attrs so we
+        # can safely walk the full buffer (capped at 200) without double
+        # counting prior losses.
+        _cult.consume_events_for_pressure(world, list(world.events))
+        _cult.tick(world)
+        # v8 — homeless-driven construction of new houses.
+        _construction.tick_construction(world)
         _supernatural.roll(world)
 
         # 6) Bump last_phase now that maybe_spawn has consumed the edge.
@@ -253,6 +293,11 @@ class Simulation:
 
         # 7) Gauges + counters.
         self._emit_metrics(world)
+        # 7a) v9 — mind aggregate gauges (beliefs_active + goals_active by kind).
+        try:
+            _mind.emit_mind_gauges(world)
+        except Exception:
+            pass
 
         # 7b) v5 — drain Memory buffers if it's time. Swallow exceptions so a
         # DB hiccup never kills a tick.
