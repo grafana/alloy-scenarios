@@ -7,9 +7,9 @@ Profile every process on a Linux host with Grafana Alloy's `pyroscope.ebpf` comp
 - **`pyroscope.ebpf`** -- host-wide eBPF CPU sampler that profiles every process the Alloy container can see through the host PID namespace.
 - **Docker container discovery** -- `discovery.docker` enumerates running containers and `discovery.relabel` turns each container name into a `service_name` so the flame graph is grouped per workload.
 - **`pyroscope.write`** -- pushes the collected profiles to a local Pyroscope server.
-- **Two stress workloads** -- `stress-cpu` and `stress-mem` give the profiler something interesting to sample, and let you switch the service filter to see how the flame graph narrows.
+- **Two workloads** -- `stress-cpu` and `stress-mem` run a small, dependency-free Go load generator (`app/main.go`) that ships with the scenario, so the demo owns its workload instead of pulling a third-party stress image. They give the profiler something interesting to sample and let you switch the service filter to see how the flame graph changes.
 
-This is the "no-instrumentation" alternative to the `continuous-profiling/` scenario. That scenario scrapes a Go application's `/debug/pprof` endpoints; this one needs nothing from the workloads themselves.
+This is the "no-instrumentation" alternative to the `continuous-profiling/` scenario. That scenario scrapes a Go application's `/debug/pprof` endpoints; this one needs nothing from the workloads themselves -- the kernel samples them via eBPF with no `pprof` endpoint and no SDK.
 
 ## Overview
 
@@ -18,12 +18,14 @@ The example includes:
 - **alloy** -- runs with `privileged: true` and `pid: host` so the eBPF loader can attach perf events in the host kernel and follow PIDs of other containers.
 - **pyroscope** -- profile storage and query backend at port 4040.
 - **grafana** -- pre-configured with the Pyroscope datasource for flame graphs.
-- **stress-cpu** -- two CPU-stress workers (`stress --cpu 2`); the flame graph is dominated by integer-arithmetic loops.
-- **stress-mem** -- mixed workload (`stress --cpu 1 --vm 1 --vm-bytes 128M`) that pairs a CPU stressor with a memory allocator/writer so its CPU profile is visibly different from `stress-cpu`.
+- **stress-cpu** -- the bundled Go app in CPU mode (`go run . cpu`); tight arithmetic loops, so the flame graph is dominated by `main.cpuLoop`.
+- **stress-mem** -- the same app in memory mode (`go run . mem`); a rolling 128 MiB of allocations and writes, so its flame graph splits between `main.memLoop` and the Go runtime's allocation/`memclr` paths and looks visibly different from `stress-cpu`.
+
+Both run on the official, multi-arch `golang` image, so they build and run natively on amd64 and arm64 (Apple Silicon) -- the flame graph shows real Go frames rather than QEMU emulation internals.
 
 ## Prerequisites
 
-- A **Linux host** (kernel 5.4+ recommended). The eBPF loader needs to attach perf events on the host kernel; Docker Desktop on macOS or Windows runs Docker inside a small Linux VM, which works but may require extra setup. Running this scenario inside another container (nested Docker) is not supported -- the inner container cannot raise `RLIMIT_MEMLOCK` even when `privileged: true`.
+- A **Linux host** (kernel 5.4+ recommended), or **Docker Desktop** on macOS / Windows -- the eBPF loader attaches perf events on the Linux kernel that Docker Desktop runs the engine in, and this scenario has been verified working on Docker Desktop (Apple Silicon) out of the box. Running it inside another container (nested Docker) is *not* supported -- the inner container cannot raise `RLIMIT_MEMLOCK` even with `privileged: true`.
 - Docker and Docker Compose.
 - Root or `sudo` to start the `privileged` Alloy container.
 
@@ -61,8 +63,8 @@ To view flame graphs:
 1. Open Grafana at <http://localhost:3000>.
 2. Go to **Explore** and pick the **Pyroscope** datasource.
 3. Choose the profile type **`process_cpu` / cpu (nanoseconds)**.
-4. In the query, set the service filter to `service_name="stress-cpu"`. You should see a tall, narrow flame graph -- mostly tight integer-arithmetic loops inside the `stress` binary -- because `stress-cpu` does nothing but burn CPU.
-5. Change the filter to `service_name="stress-mem"`. The flame graph now splits between CPU stress functions and memory-touching paths (page faults, `memset`-style writes). Switching filters this way is the test for "the eBPF profiler attributes samples to the right container."
+4. In the query, set the service filter to `service_name="stress-cpu"`. You should see a tall, narrow flame graph dominated by `main.cpuLoop` (and the `math/rand` calls it makes) -- because `stress-cpu` does nothing but burn CPU.
+5. Change the filter to `service_name="stress-mem"`. The flame graph now splits between `main.memLoop` and the Go runtime's allocation paths (`runtime.mallocgc`, `runtime.memclrNoHeapPointers`, GC). Switching filters this way is the test for "the eBPF profiler attributes samples to the right container."
 
 You can also open Pyroscope's own UI directly at <http://localhost:4040> and use its service selector for the same comparison.
 

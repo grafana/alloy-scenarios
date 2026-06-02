@@ -52,19 +52,29 @@ services:
     depends_on:
       - pyroscope
 
-  # Sample workload #1: CPU stressor. Burns CPU in tight integer loops —
-  # the flame graph should be dominated by stress's hogcpu functions.
+  # Sample workload #1: CPU stressor. Runs our own dependency-free Go load
+  # generator (./app) in CPU mode — tight arithmetic loops, so the flame
+  # graph is dominated by main.cpuLoop. Built from the official, multi-arch
+  # golang image, so it runs natively on amd64 and arm64 (Apple Silicon)
+  # and the flame graph shows real frames rather than QEMU emulation.
   stress-cpu:
-    image: polinux/stress@sha256:b6144f84f9c15dac80deb48d3a646b55c7043ab1d83ea0a697c09097aaad21aa
+    image: golang:1.26@sha256:2981696eed011d747340d7252620932677929cce7d2d539602f56a8d7e9b660b
     container_name: stress-cpu
-    command: ["stress", "--cpu", "2"]
+    volumes:
+      - ./app:/app
+    working_dir: /app
+    command: go run . cpu
     restart: unless-stopped
 
-  # Sample workload #2: mixed CPU + memory stressor. Allocates and writes
-  # to a 128 MiB region while also running a CPU stressor so its flame
-  # graph differs from `stress-cpu`.
+  # Sample workload #2: memory stressor. Same Go app in memory mode —
+  # repeated 1 MiB allocations + writes with a rolling 128 MiB working set,
+  # so its flame graph splits between main.memLoop and the Go runtime's
+  # allocation/memclr paths and looks visibly different from stress-cpu.
   stress-mem:
-    image: polinux/stress@sha256:b6144f84f9c15dac80deb48d3a646b55c7043ab1d83ea0a697c09097aaad21aa
+    image: golang:1.26@sha256:2981696eed011d747340d7252620932677929cce7d2d539602f56a8d7e9b660b
     container_name: stress-mem
-    command: ["stress", "--cpu", "1", "--vm", "1", "--vm-bytes", "128M"]
+    volumes:
+      - ./app:/app
+    working_dir: /app
+    command: go run . mem
     restart: unless-stopped

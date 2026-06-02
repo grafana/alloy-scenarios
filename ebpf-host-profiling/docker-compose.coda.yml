@@ -1,12 +1,18 @@
 services:
   stress-cpu:
-    image: polinux/stress@sha256:b6144f84f9c15dac80deb48d3a646b55c7043ab1d83ea0a697c09097aaad21aa
+    image: golang:1.26@sha256:2981696eed011d747340d7252620932677929cce7d2d539602f56a8d7e9b660b
     container_name: stress-cpu
-    command: ["stress", "--cpu", "2"]
+    volumes:
+      - ./app:/app
+    working_dir: /app
+    command: go run . cpu
     restart: unless-stopped
 
   stress-mem:
-    image: polinux/stress@sha256:b6144f84f9c15dac80deb48d3a646b55c7043ab1d83ea0a697c09097aaad21aa
+    image: golang:1.26@sha256:2981696eed011d747340d7252620932677929cce7d2d539602f56a8d7e9b660b
     container_name: stress-mem
-    command: ["stress", "--cpu", "1", "--vm", "1", "--vm-bytes", "128M"]
+    volumes:
+      - ./app:/app
+    working_dir: /app
+    command: go run . mem
     restart: unless-stopped
