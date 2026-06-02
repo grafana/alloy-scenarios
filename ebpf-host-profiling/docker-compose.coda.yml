@@ -1,0 +1,12 @@
+services:
+  stress-cpu:
+    image: polinux/stress@sha256:b6144f84f9c15dac80deb48d3a646b55c7043ab1d83ea0a697c09097aaad21aa
+    container_name: stress-cpu
+    command: ["stress", "--cpu", "2"]
+    restart: unless-stopped
+
+  stress-mem:
+    image: polinux/stress@sha256:b6144f84f9c15dac80deb48d3a646b55c7043ab1d83ea0a697c09097aaad21aa
+    container_name: stress-mem
+    command: ["stress", "--cpu", "1", "--vm", "1", "--vm-bytes", "128M"]
+    restart: unless-stopped

@@ -1,0 +1,38 @@
+livedebugging {
+	enabled = true
+}
+
+// Discover Docker containers on the host so the eBPF profiler knows
+// which processes belong to which workload.
+discovery.docker "local_containers" {
+	host = "unix:///var/run/docker.sock"
+}
+
+// Turn the raw Docker container name (e.g. "/stress-cpu") into a clean
+// `service_name` label so the Pyroscope UI groups samples per workload.
+// The `__meta_docker_container_id` label is preserved automatically and
+// is what `pyroscope.ebpf` uses to map kernel samples back to a container.
+discovery.relabel "containers" {
+	targets = discovery.docker.local_containers.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "service_name"
+	}
+}
+
+// Host-wide eBPF CPU profiler. Runs in the Alloy container, attaches
+// perf events in the host kernel, and emits stack samples for every
+// process it can see (because the container shares the host PID namespace).
+pyroscope.ebpf "default" {
+	targets    = discovery.relabel.containers.output
+	forward_to = [pyroscope.write.default.receiver]
+}
+
+// Push the collected profiles to the local Pyroscope server.
+pyroscope.write "default" {
+	endpoint {
+		url = "http://pyroscope:4040"
+	}
+}
