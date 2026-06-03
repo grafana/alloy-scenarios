@@ -1,0 +1,80 @@
+services:
+  # Pyroscope: continuous profiling backend and UI
+  pyroscope:
+    image: grafana/pyroscope:${GRAFANA_PYROSCOPE_VERSION:-2.0.1}
+    ports:
+      - 4040:4040
+
+  # Grafana: visualize flame graphs via the Pyroscope datasource
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-13.0.1}
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+    ports:
+      - 3000:3000/tcp
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /etc/grafana/provisioning/datasources
+        cat <<EOF > /etc/grafana/provisioning/datasources/ds.yaml
+        apiVersion: 1
+        datasources:
+        - name: Pyroscope
+          type: grafana-pyroscope-datasource
+          access: proxy
+          orgId: 1
+          url: http://pyroscope:4040
+          basicAuth: false
+          isDefault: true
+          version: 1
+          editable: false
+        EOF
+        /run.sh
+    depends_on:
+      - pyroscope
+
+  # Alloy with pyroscope.ebpf. Needs the host PID namespace to see other
+  # containers' processes, privileged mode to load eBPF programs and read
+  # kernel symbols, and the Docker socket for container discovery.
+  alloy:
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.16.1}
+    privileged: true
+    pid: host
+    ports:
+      - 12345:12345
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    depends_on:
+      - pyroscope
+
+  # Sample workload #1: CPU stressor. Runs our own dependency-free Go load
+  # generator (./app) in CPU mode — tight arithmetic loops, so the flame
+  # graph is dominated by main.cpuLoop. Built from the official, multi-arch
+  # golang image, so it runs natively on amd64 and arm64 (Apple Silicon)
+  # and the flame graph shows real frames rather than QEMU emulation.
+  stress-cpu:
+    image: golang:1.26@sha256:2981696eed011d747340d7252620932677929cce7d2d539602f56a8d7e9b660b
+    container_name: stress-cpu
+    volumes:
+      - ./app:/app
+    working_dir: /app
+    command: go run . cpu
+    restart: unless-stopped
+
+  # Sample workload #2: memory stressor. Same Go app in memory mode —
+  # repeated 1 MiB allocations + writes with a rolling 128 MiB working set,
+  # so its flame graph splits between main.memLoop and the Go runtime's
+  # allocation/memclr paths and looks visibly different from stress-cpu.
+  stress-mem:
+    image: golang:1.26@sha256:2981696eed011d747340d7252620932677929cce7d2d539602f56a8d7e9b660b
+    container_name: stress-mem
+    volumes:
+      - ./app:/app
+    working_dir: /app
+    command: go run . mem
+    restart: unless-stopped
