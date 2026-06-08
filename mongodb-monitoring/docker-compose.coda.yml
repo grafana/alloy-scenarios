@@ -1,0 +1,51 @@
+services:
+  mongo:
+    image: mongo:8@sha256:a706cb4e493bcd0262f345b3b0c78732ca0e54301f0d7bbe2b66f26313ce7ccb
+    hostname: mongo
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # Initiates a single-node replica set (so replication/oplog metrics are
+  # exposed), then continuously inserts documents so the op-counters
+  # (mongodb_op_counters_total{type="insert"}) keep incrementing.
+  mongo-load:
+    image: mongo:8@sha256:a706cb4e493bcd0262f345b3b0c78732ca0e54301f0d7bbe2b66f26313ce7ccb
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    entrypoint:
+      - bash
+      - -c
+      - |
+        # Initiate the replica set once. Idempotent: a re-run after a restart
+        # simply logs "already initialized" and continues.
+        mongosh --host mongo --quiet --eval '
+          try {
+            rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "mongo:27017" }] })
+          } catch (e) {
+            print("replica set already initiated: " + e.codeName)
+          }
+        '
+        # Wait until this node has been elected the writable primary.
+        until mongosh --host mongo --quiet --eval 'db.hello().isWritablePrimary' | grep -q true; do
+          echo "waiting for primary..."
+          sleep 1
+        done
+        echo "primary ready - generating insert load"
+        # Insert a document every second into alloy.events. This loop must run
+        # for the life of the container: it drives the op-counters AND keeps the
+        # container alive (an exit would trip CI's no-exited-containers check).
+        while true; do
+          mongosh --host mongo --quiet alloy --eval '
+            db.events.insertOne({ at: new Date(), value: Math.random(), source: "alloy-demo" })
+          ' >/dev/null
+          sleep 1
+        done
