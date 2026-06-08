@@ -16,7 +16,7 @@ services:
       - "9001:9001"
 
   loki:
-    image: "grafana/loki:latest@sha256:73e905b51a7f917f7a1075e4be68759df30226e03dcb3cd2213b989cc0dc8eb4"
+    image: "grafana/loki:latest@sha256:191d4fdfb7264f16989f0a57f320872620a5a7c2ceeec6229212c4190ec49b86"
     restart: "unless-stopped"
     command: "-config.file=/etc/loki/server.yml"
     volumes:
