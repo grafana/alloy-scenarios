@@ -1,6 +1,6 @@
 services:
   rabbitmq:
-    image: rabbitmq:${RABBITMQ_VERSION:-4.3.0-management}
+    image: rabbitmq:${RABBITMQ_VERSION:-4.3.1-management}
     container_name: rabbitmq-monitoring-rabbitmq
     hostname: rabbitmq
     ports:
