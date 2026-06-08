@@ -54,7 +54,7 @@ services:
       - "9090:9090"
 
   grafana:
-    image: grafana/grafana:${GRAFANA_VERSION:-13.0.1}
+    image: grafana/grafana:${GRAFANA_VERSION:-13.0.2}
     container_name: vault-secrets-grafana
     environment:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
