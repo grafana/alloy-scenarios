@@ -62,7 +62,7 @@ services:
         condition: service_started
 
   loki:
-    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.10}
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.7.2}
     container_name: rabbitmq-monitoring-loki
     ports:
       - "3100:3100"

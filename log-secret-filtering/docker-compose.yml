@@ -21,7 +21,7 @@ services:
 
   # Loki for log aggregation
   loki:
-    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.10}
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.7.2}
     ports:
       - 3100:3100/tcp
     volumes:
