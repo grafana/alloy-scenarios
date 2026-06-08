@@ -1,7 +1,7 @@
 services:
   # Pyroscope: continuous profiling backend and UI
   pyroscope:
-    image: grafana/pyroscope:${GRAFANA_PYROSCOPE_VERSION:-2.0.1}
+    image: grafana/pyroscope:${GRAFANA_PYROSCOPE_VERSION:-2.0.3}
     ports:
       - 4040:4040
 
