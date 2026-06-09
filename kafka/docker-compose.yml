@@ -48,7 +48,12 @@ services:
       - ./logs:/temp/logs
     command: run --server.http.listen-addr=0.0.0.0:12345 --stability.level=experimental  --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
     depends_on:
-      - loki
+      loki:
+        condition: service_started
+      # loki.source.kafka builds its client at config-load time, so the broker
+      # must be reachable before Alloy starts or the initial load fails fatally.
+      kafka:
+        condition: service_healthy
 
   loki:
     image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.10}
