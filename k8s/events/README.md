@@ -48,7 +48,7 @@ Ensure you have the following:
 +------------------+     +---------------------------+      +------+       +---------+
 ```
 
-- **Kubernetes API**: Emits cluster-scoped events when pods start, fail, pull images, or terminate.
+- **Kubernetes API**: Emits cluster-scoped events when Pods start, fail, pull images, or stop.
 - **Alloy**: Watches events through `loki.source.kubernetes_events`, parses JSON, promotes labels, and pushes entries to Loki.
   Run one replica only. Multiple replicas would write duplicate lines for the same event.
 - **Loki**: Stores the event log entries.
@@ -98,21 +98,8 @@ Grafana and the Alloy UI aren't exposed on localhost.
 Run one port-forward command per service in a separate terminal, and leave that terminal open until you're done.
 Use a second terminal if you need Grafana and the Alloy UI at the same time.
 
-**Grafana**
-
-```sh
-kubectl port-forward -n meta svc/grafana 3000:80
-```
-
-Open http://localhost:3000.
-
-**Alloy UI**
-
-```sh
-kubectl port-forward -n meta svc/alloy 12345:12345
-```
-
-Open http://localhost:12345.
+- Grafana at http://localhost:3000: `kubectl port-forward -n meta svc/grafana 3000:80`
+- Alloy UI at http://localhost:12345: `kubectl port-forward -n meta svc/alloy 12345:12345`
 
 Run the command again when you start a new session.
 
