@@ -1,9 +1,10 @@
 import os
 
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace import TracerProvider, SpanProcessor
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry import baggage as otel_baggage
 from opentelemetry import trace
 
 # Logging setup
@@ -16,6 +17,32 @@ from opentelemetry._logs import set_logger_provider
 # Profiling setup (Pyroscope v2 + OTel span-profile linking)
 import pyroscope
 from pyroscope.otel import PyroscopeSpanProcessor
+
+
+class BaggageSpanProcessor(SpanProcessor):
+    """Copy selected W3C Baggage entries onto every span at start.
+
+    Baggage rides along with the trace context (the default propagator
+    injects/extracts the ``baggage`` HTTP header automatically), but it is
+    **not** written to spans by itself — without this processor the values
+    would cross every service boundary and still be invisible in Tempo.
+    Mirrors the contrib package ``opentelemetry-processor-baggage``;
+    reimplemented in a few lines so the demo carries no extra dependency.
+    Identical copies live in app/, war_map/, and ai_opponent/ telemetry.py
+    (each service is its own Docker build context).
+    """
+
+    # Allow-list, never copy-everything: baggage is caller-controlled in
+    # internet-facing systems, so stamping arbitrary entries onto spans
+    # would let clients inject attributes into your telemetry.
+    ALLOWED_KEYS = ("game.session.id", "player.faction", "game.actor")
+
+    def on_start(self, span, parent_context=None):
+        for key in self.ALLOWED_KEYS:
+            value = otel_baggage.get_baggage(key, parent_context)
+            if value is not None:
+                span.set_attribute(key, str(value))
+
 
 class GameTelemetry:
     def __init__(self, service_name, logging_endpoint="http://alloy:4318", tracing_endpoint="http://alloy:4317"):
@@ -72,6 +99,9 @@ class GameTelemetry:
         )
         
         trace.get_tracer_provider().add_span_processor(span_processor)
+        # Stamp allow-listed baggage entries onto every span — see
+        # BaggageSpanProcessor docstring.
+        trace.get_tracer_provider().add_span_processor(BaggageSpanProcessor())
         self.tracer = trace.get_tracer(__name__)
 
     def _setup_profiling(self):

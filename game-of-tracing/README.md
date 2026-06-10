@@ -40,9 +40,12 @@ This game teaches several key concepts in distributed tracing:
 
 2. **OpenTelemetry Concepts**
    - Trace context propagation
-   - Span creation and attributes
+   - W3C Baggage (cross-service game context on every span)
+   - Span creation, attributes, and span events
+   - HTTP semantic conventions
    - Service naming and resource attributes
    - Manual instrumentation techniques
+   - Metric exemplars linking metrics to traces
 
 3. **Observability Patterns**
    - Trace sampling strategies
@@ -188,6 +191,29 @@ Learn how services interact:
 - Army movement paths
 - Battle resolution chains
 
+### 3. Baggage: Context That Travels With the Trace
+Trace context tells you *which* trace a span belongs to; **W3C Baggage** lets you carry your own key/values along the same ride. When you click an action, `war-map` sets `game.session.id`, `player.faction`, and `game.actor` as baggage. The default propagator serializes it into the `baggage` HTTP header next to `traceparent` — every downstream location service receives it with zero extra code.
+
+Baggage is not written to spans automatically, though. Each service's `telemetry.py` registers a tiny `BaggageSpanProcessor` that copies an **allow-list** of baggage keys onto every span at start (the same idea as the contrib `opentelemetry-processor-baggage` package). Two details worth teaching:
+
+- It works for the 5-second-delayed background spans too — `get_current()` captures baggage along with the active span, so an `army_movement` span created in a thread still knows its session.
+- The allow-list is deliberate. Baggage headers are caller-controlled; copying them wholesale onto spans would let any client inject attributes into your telemetry.
+
+Try it in Grafana → Explore → Tempo:
+```console
+{span.game.session.id="<your session id>"}
+```
+You'll get the *entire* downstream cascade of your actions — not just the spans `war-map` created. The AI opponent uses the same mechanism with `game.actor="ai"`:
+```console
+{span.game.actor="ai"}
+```
+
+### 4. Span Events: Points in Time Inside a Span
+An attribute describes the whole span; a **span event** is a timestamped annotation inside it. Open any battle trace and look at the `receive_army` span — you'll see `battle_started`, `casualties_calculated`, and (when a location changes hands) `territory_captured` events on the timeline, each with its own attributes. Failure paths use the same mechanism: failed deliveries record the exception (`span.record_exception()` produces an `exception` event with a stack trace) plus an `army_returned` / `resources_returned` event when the game refunds in-flight units.
+
+### 5. Semantic Conventions
+The HTTP client spans use the OpenTelemetry **HTTP semantic conventions** — `url.full`, `http.request.method`, `http.response.status_code` — instead of invented names. Conventions are what let convention-aware tooling (Tempo service-graph details, Grafana drilldowns, vendor dashboards) work on your data without per-app configuration. Game-domain attributes (`battle.occurred`, `game.session.id`, …) are namespaced custom attributes, which is exactly how the conventions intend you to mix standard and domain data.
+
 ## Observability Features
 
 ### 1. Resource Movement Tracing
@@ -207,6 +233,15 @@ Analyze combat events, outcomes, and participating forces.
 {span.player.action = true}
 ```
 Monitor player interactions and their impact on the game state.
+
+### 4. Follow One Army Across Hops
+```console
+{span.game.movement.id = "<uuid>"}
+```
+Every move or all-out attack mints a `movement_id` that is stamped on each hop's movement and battle spans — copy it from any movement span to follow the army's whole journey, including compensation events when a delivery fails and the army marches home.
+
+### 5. Metrics → Trace Exemplars
+The Python services configure a `TraceBasedExemplarFilter`, Prometheus runs with `--enable-feature=exemplar-storage`, and the dashboard panels have exemplars enabled — so metric samples recorded inside a sampled span carry that span's trace ID. On the dashboard, look for the small diamond dots on the battle/army panels: click one → **Query with Tempo** jumps straight from the metric sample to the exact trace that produced it. This closes the loop between the metrics and traces you've been exploring separately.
 
 <!-- INTERACTIVE page step3.md END -->
 
