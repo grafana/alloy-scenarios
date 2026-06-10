@@ -239,6 +239,18 @@ Game Start → Collect Resources → Create Army → Move Army → Battle → Vi
 {span.battle.occurred=true}
 ```
 
+#### 7. Follow One Army Across Every Hop
+Every `/move_army` / `/all_out_attack` generates a `movement_id` that is stamped (as `game.movement.id`) on each hop's movement and battle spans:
+```traceql
+{span.game.movement.id="<uuid>"}
+```
+
+#### 8. Separate AI Activity from Human Play
+The AI's decision cycles propagate `game.actor="ai"` via W3C Baggage, stamped onto every downstream span:
+```traceql
+{span.game.actor="ai"}
+```
+
 ### Tempo API Integration
 
 The replay system uses Tempo's HTTP API:

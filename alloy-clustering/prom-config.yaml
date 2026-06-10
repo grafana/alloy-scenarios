@@ -1,0 +1,5 @@
+# Prometheus only receives remote-write samples from the Alloy cluster; it does
+# not scrape anything itself. The three Alloy nodes own all of the scraping.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s

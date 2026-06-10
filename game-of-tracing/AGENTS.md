@@ -124,17 +124,25 @@ Incoming requests extract W3C trace context from headers; outgoing requests inje
 ctx = extract(request.headers)
 with tracer.start_as_current_span("name", context=ctx, ...) as span:
 
-# Outgoing (canonical helper at app/location_server.py:327-352):
+# Outgoing (canonical helper at app/location_server.py:762-820):
 inject(headers)
-requests.post(url, headers=headers, ...)
+requests.post(url, headers=headers, timeout=(3, 10), ...)
 ```
+
+The HTTP client helpers (`_make_request_with_trace` in `app/`, `make_api_request` in `war_map/` and `ai_opponent/`) use the **OTel HTTP semantic conventions** for attribute names — `url.full`, `http.request.method`, `http.response.status_code` — so convention-aware tooling (Tempo service-graph details, Grafana drilldowns) works without custom mapping. `_make_request_with_trace` also retries transport errors exactly once (2 s backoff, `retry_attempted` span event); duplicate deliveries are absorbed by `/receive_army`'s movement-id idempotency cache (see "Game-state integrity" below).
+
+### Baggage carries game context across every hop
+
+The services propagate **W3C Baggage** alongside the trace context. `war_map` sets `game.session.id`, `player.faction`, and `game.actor` via the `game_baggage()` context manager (`war_map/app.py:45`) before starting each player-action span; the AI sets `game.actor="ai"` + its faction per decision cycle. The default propagator injects/extracts the `baggage` HTTP header automatically — no per-service code.
+
+Baggage is *not* written to spans by itself. Each service's `telemetry.py` registers a small `BaggageSpanProcessor` that copies an **allow-list** of baggage keys onto every span at start (mirrors the contrib `opentelemetry-processor-baggage`; reimplemented inline so the demo carries no extra dependency). Net effect: TraceQL like `{span.game.session.id="<id>"}` matches a player action's entire downstream cascade — including the 5 s-delayed background-thread spans, because `get_current()` captures baggage too. The allow-list matters: in an internet-facing system the baggage header is caller-controlled, so copying it wholesale would let clients inject attributes into your telemetry.
 
 ### Background threads MUST capture context explicitly
 
 Python threads do not inherit OpenTelemetry context. The scenario's canonical pattern is to capture before spawning and attach inside the thread:
 
 ```python
-# app/location_server.py:209-271 (_continue_army_movement) — canonical example:
+# app/location_server.py:562-660 (_continue_army_movement) — canonical example:
 ctx = get_current()
 
 def move():
@@ -148,7 +156,23 @@ def move():
 Thread(target=move).start()
 ```
 
-The same pattern appears in `_transfer_resources_along_path` at `app/location_server.py:273-325`. If a background span shows up with a missing or different `trace_id`, the `get_current()` / `attach` / `detach` pair is the first thing to check.
+The same pattern appears in `_forward_resources` at `app/location_server.py:662-760`. If a background span shows up with a missing or different `trace_id`, the `get_current()` / `attach` / `detach` pair is the first thing to check.
+
+### Span events mark points in time inside a span
+
+Battle resolution in `/receive_army` emits timestamped **span events** — `battle_started`, `casualties_calculated`, `territory_captured` — visible on the Tempo trace timeline. Events differ from attributes: an attribute is a span-wide fact; an event is a point-in-time annotation with its own timestamp. Compensation paths emit `army_returned` / `resources_returned` events, and failed operations call `span.record_exception(e)` (full stack trace as an `exception` event) in addition to `set_status(ERROR)`.
+
+## Game-state integrity (movement, transfers, caps)
+
+The army/resource flows are deliberately written as a miniature distributed-transactions lesson:
+
+- **Debit-at-send.** `/move_army`, `/all_out_attack`, and resource sends debit the source *before* the 5 s in-flight delay, using guarded SQL (`UPDATE ... WHERE army = ?` / `WHERE resources >= ?`) so two concurrent requests can't dispatch the same units twice (optimistic concurrency; conflicting request gets a 409).
+- **Compensation.** If delivery fails at the *transport* level, the in-flight units are credited back (additively, so refunds compose with reinforcements) with an `army_returned` / `resources_returned` span event. A *lost battle* or a *captured caravan* is a game outcome, not a delivery failure — no refund (the `captured` response flag distinguishes the two).
+- **Idempotency.** Every movement carries a `movement_id` (UUID, also the `game.movement.id` span attribute); `/receive_army` keeps a short-lived per-process dedupe cache so a transport retry can never fight the same battle twice.
+- **Input validation.** `/receive_army` and `/receive_resources` reject non-integer/out-of-range amounts, unknown factions, and non-adjacent `source_location`s (armies only ever arrive from neighbours).
+- **Economy caps.** `rules["max_resources"]` (1000), `rules["max_army"]` (50), `rules["max_corpses"]` (200) in `app/game_config.py`, clamped centrally in `_update_location_state` / `_credit_*` — an idle game can't bank unbounded passive income.
+- **Game-over enforcement.** `war_map` rejects the five player-action endpoints with 409 once a winner is declared (`_reject_if_game_over`, `war_map/app.py:850`) and POSTs `/deactivate` to the AI exactly once (`_deactivate_ai_once`). Location servers stay permissive by design — in-flight movements should still resolve.
+- **Thread resilience.** All passive loops (village generation, barbarian growth, corpse tick, NW capital tick) wrap each iteration in try/except so a transient SQLite error can't kill the economy; `/health` on every location reports per-thread liveness.
 
 ## Span links — the headline feature
 
@@ -157,8 +181,8 @@ Span links are the mechanism that turns a sequence of discrete player actions in
 **Flow:**
 1. Player selects a faction → `war_map/app.py` creates a `game_session_id` (UUID).
 2. Every action handler (`/api/collect_resources`, `/api/create_army`, `/api/move_army`) does:
-   - Looks up the previous action for this session via `get_previous_action_context()` at `war_map/app.py:130-170`. That function reads `trace_id` and `span_id` from the `game_actions` SQLite table and rebuilds a `trace.SpanContext(..., is_remote=True, trace_flags=TraceFlags.SAMPLED)`.
-   - Wraps the context in a link via `create_span_link_from_context()` at `war_map/app.py:172-189`, attaching `link.type="game_sequence"`, `link.relation="follows"`, `game.sequence="true"`.
+   - Looks up the previous action for this session via `get_previous_action_context()` at `war_map/app.py:343`. That function reads `trace_id` and `span_id` from the `game_actions` SQLite table and rebuilds a `trace.SpanContext(..., is_remote=True, trace_flags=TraceFlags.SAMPLED)`.
+   - Wraps the context in a link via `create_span_link_from_context()` at `war_map/app.py:385`, attaching `link.type="game_sequence"`, `link.relation="follows"`, `game.sequence="true"`.
    - Starts its own action span with that link, then calls `store_game_action()` to record its own `trace_id`/`span_id` for the next action to link back to.
 3. The AI opponent uses the same primitive with a different link type — `link.type="ai_decision_trigger"` — to link its decision span to the action execution span it spawns (see `ai_opponent/ai_server.py`).
 4. The replay UI queries Tempo:
@@ -187,11 +211,18 @@ Span links are the mechanism that turns a sequence of discrete player actions in
 | `ai.territory_count` | observable gauge | `faction` |
 | `ai.total_army` | observable gauge | `faction` |
 
-### Span attributes used by the provisioned Grafana dashboard
-Preserve these when adding new spans — the dashboard's TraceQL filters depend on them:
-- `span.resource.movement = true`
-- `span.battle.occurred = true`
-- `span.player.action = true`
+### Span attributes that feed TraceQL queries
+Preserve these when adding or modifying spans — dashboards and the README's example queries depend on them. (TraceQL prefixes span attributes with `span.`; the Python code sets the un-prefixed name.)
+
+| Attribute | Set on | TraceQL |
+|---|---|---|
+| `battle.occurred = true` | every `/receive_army` span that resolves a battle | `{span.battle.occurred=true}` |
+| `player.action = true` | the five war_map player-action SERVER spans | `{span.player.action=true}` |
+| `resource.movement = true` | `resource_movement`, `/receive_resources`, `/send_resources_to_capital` spans | `{span.resource.movement=true}` |
+| `game.session.id` | every span in a player session (stamped from baggage) | `{span.game.session.id="<uuid>"}` |
+| `game.actor` | `"ai"` on every span in an AI decision cascade (from baggage) | `{span.game.actor="ai"}` |
+| `game.movement.id` | every hop/battle span of one army's journey | `{span.game.movement.id="<uuid>"}` |
+| `wall.battle = true` | battles at `wall`-type locations (WWA) | `{span.wall.battle=true}` |
 
 ## Common tasks
 
@@ -226,7 +257,8 @@ docker compose -f docker-compose.yml -f docker-compose-otel.yml up -d
 - **Grafana is auto-provisioned** via `grafana/datasources/defaults.yml`. Tempo is the default datasource; service map, traces-to-logs (Loki `trace_id` label), traces-to-metrics, and exemplars are pre-wired. Do not add datasources via UI — edit the YAML.
 - **Tempo metrics generator is enabled** in `tempo-config.yaml` with processors `service-graphs`, `span-metrics`, `local-blocks`, writing to `prometheus:9090/api/v1/write`. Ingester `max_block_duration: 5m` and 720h compactor retention are demo-tuned, not production values.
 - **`grafana-traces-app` plugin** is installed via `GF_INSTALL_PLUGINS` at container start. If Grafana is slow on first boot, that is why.
-- **`war-map` strips `X-Frame-Options`** in an `@app.after_request` hook (`war_map/app.py:191-194`) so the UI can be embedded in Grafana iframes. Intentional — do not remove.
+- **`war-map` strips `X-Frame-Options`** in an `@app.after_request` hook (`war_map/app.py:404-407`) so the UI can be embedded in Grafana iframes. Intentional — do not remove.
+- **`config.alloy` is a plain pass-through pipeline** (receiver → batch → exporters, no sampling). The `battle.occurred` / `player.action` / `resource.movement` attributes were designed so a tail-sampling policy can be layered in as an exercise — see the README's teaching notes.
 
 ## Keep docs current
 

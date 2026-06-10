@@ -24,6 +24,6 @@ while true; do
   printf '{"level":"%s","msg":"%s","app":{"name":"%s","version":"%s"}}\n' \
     "$level" "$msg" "$app" "$version"
   sleep 2
-done | kafka-console-producer.sh \
+done | /opt/kafka/bin/kafka-console-producer.sh \
     --bootstrap-server kafka:9092 \
     --topic alloy-logs
