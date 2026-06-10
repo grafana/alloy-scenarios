@@ -6,9 +6,11 @@ import threading
 import uuid
 import time
 import atexit
+from contextlib import contextmanager
 from flask import Flask, render_template, jsonify, request, redirect, url_for, session
 from telemetry import GameTelemetry
-from opentelemetry import trace
+from opentelemetry import baggage, trace
+from opentelemetry import context as otel_context
 from opentelemetry.trace import SpanKind
 from opentelemetry.propagate import inject
 
@@ -31,6 +33,41 @@ GAME_SESSIONS_DB = os.environ.get('GAME_SESSIONS_DB', 'game_sessions.db')  # Use
 GAME_OVER = False
 WINNER = None
 VICTORY_MESSAGE = None
+# Fires the AI /deactivate call exactly once per declared winner.
+AI_DEACTIVATED_ON_GAME_OVER = False
+
+# (connect, read) timeouts for outbound HTTP — a hung location server must
+# never block a war_map worker thread indefinitely.
+REQUEST_TIMEOUT = (3, 10)
+
+
+@contextmanager
+def game_baggage(game_session_id=None, faction=None, actor="player"):
+    """Attach game-context entries as W3C Baggage for the enclosed block.
+
+    Baggage travels with the trace context: ``inject(headers)`` writes a
+    ``baggage`` HTTP header alongside ``traceparent``, and every downstream
+    service's propagator extracts it automatically — no per-service code.
+    The BaggageSpanProcessor (telemetry.py) then stamps the allow-listed
+    entries onto every span started while the baggage is set, including
+    spans created later in background threads (``get_current()`` captures
+    baggage too). Net effect: TraceQL like {span.game.session.id="<id>"}
+    matches a player action's *entire* downstream cascade.
+
+    Set the baggage *before* starting the action span so the war_map span
+    itself gets stamped as well.
+    """
+    ctx = otel_context.get_current()
+    if game_session_id:
+        ctx = baggage.set_baggage("game.session.id", str(game_session_id), context=ctx)
+    if faction:
+        ctx = baggage.set_baggage("player.faction", str(faction), context=ctx)
+    ctx = baggage.set_baggage("game.actor", actor, context=ctx)
+    token = otel_context.attach(ctx)
+    try:
+        yield
+    finally:
+        otel_context.detach(token)
 
 # ----------------------------------------------------------------
 # Maps — in-UI picker metadata.
@@ -215,6 +252,9 @@ init_game_session_tracking()
 # initialized lazily on first call to _ensure_game_config_tables() — see
 # the in-process startup path later in this module.
 
+_store_action_lock = threading.Lock()
+
+
 def store_game_action(game_session_id, action_type, player_name, faction,
                      trace_id, span_id, location_id=None, target_location_id=None,
                      game_state=None, map_id=None):
@@ -230,30 +270,42 @@ def store_game_action(game_session_id, action_type, player_name, faction,
         except Exception:
             map_id = DEFAULT_MAP_ID
 
-    conn = sqlite3.connect(GAME_SESSIONS_DB)
-    cursor = conn.cursor()
+    # MAX+1 then INSERT is not atomic; the lock serialises writers in this
+    # process and the IntegrityError retry covers a UNIQUE collision from
+    # any other writer — a silently dropped row here breaks the span-link
+    # replay chain for the whole session.
+    with _store_action_lock:
+        conn = sqlite3.connect(GAME_SESSIONS_DB, timeout=15)
+        try:
+            cursor = conn.cursor()
+            for attempt in (1, 2):
+                cursor.execute(
+                    "SELECT MAX(action_sequence) FROM game_actions WHERE game_session_id = ?",
+                    (game_session_id,))
+                result = cursor.fetchone()
+                next_sequence = (result[0] or 0) + 1
 
-    # Get next sequence number
-    cursor.execute("SELECT MAX(action_sequence) FROM game_actions WHERE game_session_id = ?",
-                   (game_session_id,))
-    result = cursor.fetchone()
-    next_sequence = (result[0] or 0) + 1
+                logger.info(f"Storing action: session={game_session_id}, sequence={next_sequence}, action={action_type}, trace_id={trace_id}, span_id={span_id}, map_id={map_id}")
 
-    # Debug logging
-    logger.info(f"Storing action: session={game_session_id}, sequence={next_sequence}, action={action_type}, trace_id={trace_id}, span_id={span_id}, map_id={map_id}")
-
-    cursor.execute('''
-    INSERT INTO game_actions
-    (game_session_id, action_sequence, action_type, player_name, faction,
-     trace_id, span_id, location_id, target_location_id, timestamp, game_state_after, map_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (game_session_id, next_sequence, action_type, player_name, faction,
-          trace_id, span_id, location_id, target_location_id,
-          int(time.time()), json.dumps(game_state) if game_state else None, map_id))
-
-    conn.commit()
-    conn.close()
-    return next_sequence
+                try:
+                    cursor.execute('''
+                    INSERT INTO game_actions
+                    (game_session_id, action_sequence, action_type, player_name, faction,
+                     trace_id, span_id, location_id, target_location_id, timestamp, game_state_after, map_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (game_session_id, next_sequence, action_type, player_name, faction,
+                          trace_id, span_id, location_id, target_location_id,
+                          int(time.time()), json.dumps(game_state) if game_state else None, map_id))
+                    conn.commit()
+                    return next_sequence
+                except sqlite3.IntegrityError:
+                    if attempt == 2:
+                        raise
+                    logger.warning(
+                        f"Sequence collision for session {game_session_id} at {next_sequence}; retrying"
+                    )
+        finally:
+            conn.close()
 
 
 def get_session_map_id(session_id):
@@ -449,8 +501,14 @@ def _slot_port_pairs():
 # Note: GAME_OVER/WINNER/VICTORY_MESSAGE already declared near top of file.
 
 def get_db_connection():
-    """Create a connection to the SQLite database"""
-    conn = sqlite3.connect(DATABASE_FILE)
+    """Create a connection to the SQLite database.
+
+    game_state.db is shared with 8 location-server writers (WAL mode), so
+    mirror their timeout/busy_timeout settings — without them a busy writer
+    surfaces as an immediate 'database is locked' error here.
+    """
+    conn = sqlite3.connect(DATABASE_FILE, timeout=15)
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -726,30 +784,34 @@ def make_api_request(location_id, endpoint, method='GET', data=None):
     
     headers = {"Content-Type": "application/json"}
     if endpoint in important_endpoints:
-        # Create span only for important operations
+        # Create span only for important operations. Attribute names follow
+        # the OTel HTTP semantic conventions (url.full, http.request.method,
+        # http.response.status_code) so convention-aware tooling works
+        # without custom mapping.
         with tracer.start_as_current_span(
             "location_api_request",
             kind=SpanKind.CLIENT,
             attributes={
                 "location.id": location_id,
                 "location.endpoint": endpoint,
-                "http.method": method
+                "url.full": url,
+                "http.request.method": method
             }
         ) as span:
             inject(headers)  # Inject trace context into headers
             try:
                 if method == 'GET':
-                    response = requests.get(url, headers=headers)
+                    response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
                 else:  # POST
-                    response = requests.post(url, json=data, headers=headers)
-                
-                span.set_attribute("http.status_code", response.status_code)
+                    response = requests.post(url, json=data, headers=headers, timeout=REQUEST_TIMEOUT)
+
+                span.set_attribute("http.response.status_code", response.status_code)
                 response.raise_for_status()
                 result = response.json()
-                
+
                 if not result.get("success", True):
                     span.set_status(trace.StatusCode.ERROR, result.get("message", "Unknown error"))
-                
+
                 return result
             except requests.RequestException as e:
                 span.record_exception(e)
@@ -759,13 +821,48 @@ def make_api_request(location_id, endpoint, method='GET', data=None):
         # For status checks and other non-important operations, just make the request without tracing
         try:
             if method == 'GET':
-                response = requests.get(url, headers=headers)
+                response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
             else:  # POST
-                response = requests.post(url, json=data, headers=headers)
+                response = requests.post(url, json=data, headers=headers, timeout=REQUEST_TIMEOUT)
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
             return {"error": str(e)}
+
+def _deactivate_ai_once():
+    """POST /deactivate to the AI the first time a winner is declared.
+
+    Without this the AI keeps fighting forever after a wall-hold win — its
+    own self-stop only triggers when its capital flips, which never happens
+    on White Walkers Attack.
+    """
+    global AI_DEACTIVATED_ON_GAME_OVER
+    if AI_DEACTIVATED_ON_GAME_OVER:
+        return
+    AI_DEACTIVATED_ON_GAME_OVER = True
+    try:
+        requests.post(f"{AI_SERVICE_URL}/deactivate", timeout=5)
+        logger.info("AI deactivated: game over")
+    except Exception as e:
+        logger.warning(f"Failed to deactivate AI at game over: {e}")
+
+
+def _reject_if_game_over():
+    """Return a 409 response when a winner has been declared, else None.
+
+    war_map is the single enforcement point for player actions — location
+    servers stay permissive by design (they are also each other's clients
+    for in-flight movements that should still resolve).
+    """
+    if GAME_OVER:
+        return jsonify({
+            "success": False,
+            "game_over": True,
+            "winner": WINNER,
+            "message": VICTORY_MESSAGE or "The war is over.",
+        }), 409
+    return None
+
 
 def check_game_over(locations_data, map_id=None):
     """Dispatch to the right win-condition check based on the active map."""
@@ -786,12 +883,14 @@ def check_capital_capture_win(locations_data):
         GAME_OVER = True
         WINNER = 'northern'
         VICTORY_MESSAGE = "The Northern Kingdom has conquered the Southern Capital! Victory through unity!"
+        _deactivate_ai_once()
         return True
 
     if locations_data.get('northern_capital', {}).get('faction') == 'southern':
         GAME_OVER = True
         WINNER = 'southern'
         VICTORY_MESSAGE = "The Southern Kingdom has conquered the Northern Capital! Glory to the South!"
+        _deactivate_ai_once()
         return True
 
     logger.info("Game is not over")
@@ -814,6 +913,7 @@ def check_wall_hold_win(locations_data, map_id):
         if ticks >= threshold:
             GAME_OVER = True
             WINNER = faction
+            _deactivate_ai_once()
             if faction == "nights_watch":
                 VICTORY_MESSAGE = (
                     "The Night's Watch held the Wall! The Long Night is broken."
@@ -831,10 +931,11 @@ def check_wall_hold_win(locations_data, map_id):
 
 def reset_game_state():
     """Reset the game state"""
-    global GAME_OVER, WINNER, VICTORY_MESSAGE
+    global GAME_OVER, WINNER, VICTORY_MESSAGE, AI_DEACTIVATED_ON_GAME_OVER
     GAME_OVER = False
     WINNER = None
     VICTORY_MESSAGE = None
+    AI_DEACTIVATED_ON_GAME_OVER = False
 
 def reset_game_data():
     """Reset the game completely by resetting each location's state"""
@@ -1184,10 +1285,14 @@ def game_map():
 @app.route('/api/collect_resources', methods=['POST'])
 def collect_resources():
     """API endpoint to collect resources at a location"""
+    rejection = _reject_if_game_over()
+    if rejection:
+        return rejection
+
     # Get game session info for span linking
     game_session_id = session.get('game_session_id')
     current_sequence = session.get('action_sequence', 0)
-    
+
     # Get previous action context for linking
     links = []
     if game_session_id and current_sequence > 0:
@@ -1196,8 +1301,8 @@ def collect_resources():
             link = create_span_link_from_context(previous_span_context, "game_sequence")
             if link:
                 links.append(link)
-    
-    with tracer.start_as_current_span(
+
+    with game_baggage(game_session_id, session.get('faction')), tracer.start_as_current_span(
         "collect_resources",
         kind=SpanKind.SERVER,
         links=links,
@@ -1206,7 +1311,9 @@ def collect_resources():
             "player.faction": session.get('faction', 'Unknown'),
             "game.session.id": game_session_id,
             "game.action.type": "collect_resources",
-            "game.action.sequence": current_sequence + 1
+            "game.action.sequence": current_sequence + 1,
+            # Dashboard TraceQL filter: {span.player.action=true}
+            "player.action": True
         }
     ) as span:
         location_id = request.json.get('location_id')
@@ -1241,10 +1348,14 @@ def collect_resources():
 @app.route('/api/create_army', methods=['POST'])
 def create_army():
     """API endpoint to create an army at a location"""
+    rejection = _reject_if_game_over()
+    if rejection:
+        return rejection
+
     # Get game session info for span linking
     game_session_id = session.get('game_session_id')
     current_sequence = session.get('action_sequence', 0)
-    
+
     # Get previous action context for linking
     links = []
     if game_session_id and current_sequence > 0:
@@ -1253,8 +1364,8 @@ def create_army():
             link = create_span_link_from_context(previous_span_context, "game_sequence")
             if link:
                 links.append(link)
-    
-    with tracer.start_as_current_span(
+
+    with game_baggage(game_session_id, session.get('faction')), tracer.start_as_current_span(
         "create_army",
         kind=SpanKind.SERVER,
         links=links,
@@ -1263,7 +1374,8 @@ def create_army():
             "player.faction": session.get('faction', 'Unknown'),
             "game.session.id": game_session_id,
             "game.action.type": "create_army",
-            "game.action.sequence": current_sequence + 1
+            "game.action.sequence": current_sequence + 1,
+            "player.action": True
         }
     ) as span:
         location_id = request.json.get('location_id')
@@ -1298,13 +1410,17 @@ def create_army():
 @app.route('/api/move_army', methods=['POST'])
 def move_army():
     """API endpoint to move an army"""
+    rejection = _reject_if_game_over()
+    if rejection:
+        return rejection
+
     # Get game session info for span linking
     game_session_id = session.get('game_session_id')
     current_sequence = session.get('action_sequence', 0)
-    
+
     # Debug logging
     logger.info(f"move_army: session={game_session_id}, current_sequence={current_sequence}")
-    
+
     # Get previous action context for linking
     # Note: current_sequence is the last stored sequence number, so we look for that
     previous_span_context = None
@@ -1316,8 +1432,8 @@ def move_army():
             if link:
                 links.append(link)
                 logger.info(f"Created span link to previous action (sequence {current_sequence})")
-    
-    with tracer.start_as_current_span(
+
+    with game_baggage(game_session_id, session.get('faction')), tracer.start_as_current_span(
         "move_army",
         kind=SpanKind.SERVER,
         links=links,  # Add span links here
@@ -1326,7 +1442,8 @@ def move_army():
             "player.faction": session.get('faction', 'Unknown'),
             "game.session.id": game_session_id,
             "game.action.type": "move_army",
-            "game.action.sequence": current_sequence + 1
+            "game.action.sequence": current_sequence + 1,
+            "player.action": True
         }
     ) as span:
         # Debug: log current span info
@@ -1476,12 +1593,17 @@ def reset_game():
 @app.route('/api/send_resources_to_capital', methods=['POST'])
 def send_resources_to_capital():
     """API endpoint to send resources from a village to its capital"""
-    with tracer.start_as_current_span(
+    rejection = _reject_if_game_over()
+    if rejection:
+        return rejection
+
+    with game_baggage(session.get('game_session_id'), session.get('faction')), tracer.start_as_current_span(
         "send_resources_to_capital",
         kind=SpanKind.SERVER,
         attributes={
             "player.name": session.get('player_name', 'Unknown'),
-            "player.faction": session.get('faction', 'Unknown')
+            "player.faction": session.get('faction', 'Unknown'),
+            "player.action": True
         }
     ) as span:
         location_id = request.json.get('location_id')
@@ -1498,10 +1620,14 @@ def send_resources_to_capital():
 @app.route('/api/all_out_attack', methods=['POST'])
 def all_out_attack():
     """API endpoint to launch an all-out attack from a capital"""
+    rejection = _reject_if_game_over()
+    if rejection:
+        return rejection
+
     # Get game session info for span linking
     game_session_id = session.get('game_session_id')
     current_sequence = session.get('action_sequence', 0)
-    
+
     # Get previous action context for linking
     links = []
     if game_session_id and current_sequence > 0:
@@ -1510,8 +1636,8 @@ def all_out_attack():
             link = create_span_link_from_context(previous_span_context, "game_sequence")
             if link:
                 links.append(link)
-    
-    with tracer.start_as_current_span(
+
+    with game_baggage(game_session_id, session.get('faction')), tracer.start_as_current_span(
         "all_out_attack",
         kind=SpanKind.SERVER,
         links=links,
@@ -1520,7 +1646,8 @@ def all_out_attack():
             "player.faction": session.get('faction', 'Unknown'),
             "game.session.id": game_session_id,
             "game.action.type": "all_out_attack",
-            "game.action.sequence": current_sequence + 1
+            "game.action.sequence": current_sequence + 1,
+            "player.action": True
         }
     ) as span:
         location_id = request.json.get('location_id')
@@ -1756,90 +1883,6 @@ def replay_session_page(session_id):
         location_positions=LOCATION_POSITIONS_BY_MAP[map_id],
         location_connections=LOCATION_CONNECTIONS_BY_MAP[map_id],
     )
-    """Debug endpoint to verify restart cleared all data properly"""
-    verification_results = {
-        'game_state_reset': False,
-        'span_links_cleared': False,
-        'faction_assignments_cleared': False,
-        'ai_deactivated': False,
-        'database_reset': False
-    }
-    
-    try:
-        # Check game state
-        verification_results['game_state_reset'] = not GAME_OVER and WINNER is None and VICTORY_MESSAGE is None
-        
-        # Check span links database
-        conn = sqlite3.connect(GAME_SESSIONS_DB)
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM game_actions")
-        span_links_count = cursor.fetchone()[0]
-        conn.close()
-        verification_results['span_links_cleared'] = span_links_count == 0
-        
-        # Check faction assignments
-        db_conn = get_db_connection()
-        cursor = db_conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='war_map'")
-        table_exists = cursor.fetchone() is not None
-        
-        if table_exists:
-            cursor.execute("SELECT COUNT(*) FROM war_map")
-            faction_count = cursor.fetchone()[0]
-            verification_results['faction_assignments_cleared'] = faction_count == 0
-        else:
-            verification_results['faction_assignments_cleared'] = True
-        db_conn.close()
-        
-        # Check AI status
-        try:
-            response = requests.get(f"{AI_SERVICE_URL}/status", timeout=5)
-            if response.status_code == 200:
-                ai_status = response.json()
-                verification_results['ai_deactivated'] = not ai_status.get('active', False)
-            else:
-                verification_results['ai_deactivated'] = True  # Assume deactivated if can't reach
-        except:
-            verification_results['ai_deactivated'] = True  # Assume deactivated if can't reach
-        
-        # Check if location database reset to initial state
-        try:
-            locations_data = {}
-            for loc_id in _current_positions().keys():
-                data = make_api_request(loc_id, '')
-                if 'error' not in data:
-                    locations_data[loc_id] = data
-            
-            # Verify initial state
-            from game_config import LOCATIONS
-            database_reset = True
-            for loc_id, expected in LOCATIONS.items():
-                actual = locations_data.get(loc_id, {})
-                if (actual.get('faction') != expected['faction'] or
-                    actual.get('army') != expected['initial_army'] or
-                    actual.get('resources') != expected['initial_resources']):
-                    database_reset = False
-                    break
-            
-            verification_results['database_reset'] = database_reset
-        except Exception:
-            verification_results['database_reset'] = False
-        
-        # Overall status
-        all_clear = all(verification_results.values())
-        
-        return jsonify({
-            'success': True,
-            'all_systems_reset': all_clear,
-            'details': verification_results
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'details': verification_results
-        }), 500
 
 @app.route('/api/replay/session/<session_id>', methods=['GET'])
 def get_replay_session(session_id):
@@ -2269,6 +2312,10 @@ def _wall_tick_thread():
                             attributes={"faction": holder, "ticks": ticks},
                         )
                         logger.info(f"Wall-hold win detected for {holder} on {map_id}")
+                        # Declare the winner immediately (flips GAME_OVER and
+                        # deactivates the AI) instead of waiting for the next
+                        # UI poll to run the check.
+                        check_wall_hold_win({}, map_id)
                 else:
                     reset_wall_hold(map_id)
                     tick_span.set_attribute("wall.holder", "contested")
@@ -2285,4 +2332,8 @@ threading.Thread(target=_wall_tick_thread, daemon=True, name="wall-tick").start(
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port, debug=True) 
+    # use_reloader=False: Werkzeug's reloader forks a second process, which
+    # would start a second wall-tick thread — the WWA hold counter would then
+    # advance at 2x speed (win in 75 s instead of 150 s) in local runs.
+    # Docker is unaffected (it runs via `flask run` with FLASK_DEBUG=0).
+    app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
