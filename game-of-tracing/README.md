@@ -75,11 +75,14 @@ The Long Night has come. The human plays the **Night's Watch** (player faction);
 
 New mechanics:
 
-- **Wall settlements** run across the middle of the map. Defenders count **2×** when a wall is attacked, making them hard to dislodge.
+- **Wall settlements** run across the middle of the map. Defenders count **2×** when a wall is attacked, making them hard to dislodge. Each wall keep also produces **+5 resources every 15 s** for whoever holds it, and the owner can send the stockpile back to their capital — taking the Wall funds the war.
 - **Corpse economy.** White Walkers spend **corpses** (not resources) to raise new armies at their fortress. Corpses come from winning battles (every unit killed on either side becomes a corpse) plus a slow passive tick at the fortress itself. Cost: 5 corpses per unit.
 - **Barbarians** never attack. They accrue +1 army every 30 s — easy farm for White Walkers, but they also harass unguarded Night's Watch supply lines.
 
-**Win condition:** hold *every* wall settlement continuously for **5 ticks** (150 s, since the tick is 30 s). Any wall changing hands resets the counter.
+**Win conditions** (either side, whichever comes first):
+
+- **Storm the enemy capital.** Capture The Lands of Always Winter and the Night King falls; lose Castle Black and the Long Night wins.
+- **Hold the Wall:** hold *every* wall settlement continuously for **5 ticks** (150 s, since the tick is 30 s). Any wall changing hands resets the counter.
 
 Both maps share the same 8 location containers — the active map lives in `game_state.db`, and the `/reload` endpoint on each service rebinds the slot's identity when the player switches maps via the picker.
 

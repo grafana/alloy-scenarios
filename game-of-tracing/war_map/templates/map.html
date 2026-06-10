@@ -64,7 +64,7 @@
             <!-- Wall-hold HUD (WWA win-condition tracker) -->
             <div class="wall-hold-hud" id="wallHoldHud">
                 <h6><i class="fas fa-gavel me-1"></i>Wall Hold</h6>
-                <div class="small mb-1">Hold every keep for {{ wall_hold.threshold }} ticks to win.</div>
+                <div class="small mb-1">Hold every keep for {{ wall_hold.threshold }} ticks — or take the enemy fortress.</div>
                 <div class="hold-row nights_watch">
                     <span>Night's Watch</span>
                     <span class="ticks" id="hudHoldNightsWatch">
@@ -350,11 +350,8 @@
             } else {
                 gameOverTitle.textContent = "DEFEAT!";
                 gameOverTitle.classList.add('defeat-text');
-                if (gameState.winner === 'southern') {
-                    gameOverMessage.textContent = "The Southern Kingdom has conquered your capital! Glory to the South!";
-                } else {
-                    gameOverMessage.textContent = "The Northern Kingdom has conquered your capital! Victory through unity!";
-                }
+                gameOverMessage.textContent = gameState.victoryMessage ||
+                    `${(gameState.winner || 'The enemy').replace(/_/g, ' ')} has conquered your capital!`;
                 document.getElementById('victoryAnimation').classList.add('d-none');
                 document.getElementById('defeatAnimation').classList.remove('d-none');
             }
@@ -523,6 +520,7 @@
         // Show/hide buttons
         const isCapital = location.type === 'capital';
         const isVillage = location.type === 'village';
+        const isWall = location.type === 'wall';
         const isPlayerLocation = location.faction === gameState.playerFaction;
 
         document.getElementById('collectResourcesBtn').style.display =
@@ -532,7 +530,7 @@
         document.getElementById('allOutAttackBtn').style.display =
             (isCapital && isPlayerLocation) ? 'block' : 'none';
         document.getElementById('sendResourcesBtn').style.display =
-            (isVillage && isPlayerLocation) ? 'block' : 'none';
+            ((isVillage || isWall) && isPlayerLocation) ? 'block' : 'none';
 
         // Cooldown
         const cooldownSpan = document.getElementById('resourceCooldown');
