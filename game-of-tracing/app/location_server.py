@@ -10,10 +10,10 @@ The per-container SERVICE_NAME (used by Grafana dashboards) stays stable
 regardless of map — it's derived from ``LOCATION_NAME`` env / slot id, not
 from the logical location id.
 """
-import os, sqlite3, requests, random, time, threading, atexit
+import os, sqlite3, requests, random, time, threading, atexit, uuid
 from threading import Thread, Lock
 from datetime import datetime, timedelta
-from flask import Flask, jsonify, request
+from flask import Flask, g, jsonify, request
 from game_config import (
     MAPS,
     COSTS,
@@ -63,6 +63,15 @@ class LocationServer:
         self.last_resource_collection = {}
         self.resource_cooldown = {}
         self.lock = Lock()
+        # Idempotency cache for /receive_army: movement_id → (timestamp,
+        # response). Deliveries are retried on transport errors, so the same
+        # army could otherwise arrive (and fight) twice. Per-process and
+        # time-pruned — fine for a demo; a real system would use a durable
+        # idempotency store.
+        self._processed_movements = {}
+        # Passive background threads by name, surfaced via /health so a dead
+        # economy loop is visible instead of silently starving the game.
+        self._passive_threads = {}
 
         # SERVICE_NAME must stay stable across map switches so Grafana
         # dashboards keep their series. Prefer the explicit LOCATION_NAME env
@@ -219,12 +228,15 @@ class LocationServer:
     def _add_corpses(self, delta: int, faction: str = "white_walkers"):
         if delta <= 0:
             return
+        # Cap the pool: the passive tick runs forever, so an idle game must
+        # not bank an unbounded corpse economy (see rules["max_corpses"]).
+        cap = self._current_rules().get("max_corpses") or 10**9
         conn = self._get_db_connection()
         try:
             conn.execute(
                 "INSERT INTO faction_economy (faction, corpses) VALUES (?, ?) "
-                "ON CONFLICT(faction) DO UPDATE SET corpses = corpses + excluded.corpses",
-                (faction, delta),
+                "ON CONFLICT(faction) DO UPDATE SET corpses = MIN(corpses + excluded.corpses, ?)",
+                (faction, min(delta, cap), cap),
             )
             conn.commit()
         finally:
@@ -325,9 +337,20 @@ class LocationServer:
         return state
 
     def _update_location_state(self, location_id, resources=None, army=None, faction=None):
+        # Central clamp: every write path (passive ticks, battles, refunds)
+        # funnels through here, so the per-map economy caps are enforced in
+        # exactly one place. See rules["max_resources"] / rules["max_army"].
+        rules = self._current_rules()
+        max_resources = rules.get("max_resources")
+        max_army = rules.get("max_army")
+        if resources is not None and max_resources:
+            resources = min(resources, max_resources)
+        if army is not None and max_army:
+            army = min(army, max_army)
+
         set_clauses = []
         params = []
-        
+
         if resources is not None:
             set_clauses.append("resources = ?")
             params.append(resources)
@@ -355,8 +378,78 @@ class LocationServer:
         # Force metric collection on important state changes
         if faction is not None or resources is not None or army is not None:
             self.telemetry.collect_metrics()
-            
+
         return True
+
+    def _take_all_army(self, expected_army: int) -> bool:
+        """Optimistic-concurrency debit of this location's whole army.
+
+        Two near-simultaneous /move_army requests both read the same army
+        count; the guarded UPDATE only matches for the first one, so the
+        same troops can never march twice. Callers retry/409 on False.
+        """
+        conn = self._get_db_connection()
+        try:
+            cursor = conn.execute(
+                "UPDATE locations SET army = 0 WHERE id = ? AND army = ?",
+                (self.location_id, expected_army),
+            )
+            conn.commit()
+            taken = cursor.rowcount > 0
+        finally:
+            conn.close()
+        if taken:
+            self.telemetry.collect_metrics()
+        return taken
+
+    def _credit_army(self, location_id: str, amount: int):
+        """Additive army credit (refund/compensation path).
+
+        Additive UPDATE — not a read-then-write — so it composes with any
+        reinforcements that arrived while the refunded army was in flight.
+        """
+        cap = self._current_rules().get("max_army") or 10**9
+        conn = self._get_db_connection()
+        try:
+            conn.execute(
+                "UPDATE locations SET army = MIN(army + ?, ?) WHERE id = ?",
+                (amount, cap, location_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        self.telemetry.collect_metrics()
+
+    def _debit_resources(self, location_id: str, amount: int) -> bool:
+        """Guarded resource debit; False if the balance no longer covers it."""
+        conn = self._get_db_connection()
+        try:
+            cursor = conn.execute(
+                "UPDATE locations SET resources = resources - ? "
+                "WHERE id = ? AND resources >= ?",
+                (amount, location_id, amount),
+            )
+            conn.commit()
+            debited = cursor.rowcount > 0
+        finally:
+            conn.close()
+        if debited:
+            self.telemetry.collect_metrics()
+        return debited
+
+    def _credit_resources(self, location_id: str, amount: int):
+        """Additive resource credit (delivery or refund), capped per map rules."""
+        cap = self._current_rules().get("max_resources") or 10**9
+        conn = self._get_db_connection()
+        try:
+            conn.execute(
+                "UPDATE locations SET resources = MIN(resources + ?, ?) WHERE id = ?",
+                (amount, cap, location_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        self.telemetry.collect_metrics()
 
     def _find_path(self, target: str, path_type: PathType) -> Optional[List[str]]:
         """Unified pathfinding for both resources and armies on the active map."""
@@ -467,13 +560,22 @@ class LocationServer:
             return "stalemate", 0, defending_faction
 
     def _continue_army_movement(self, army_size: int, faction: str, current_loc: str,
-                              next_loc: str, remaining_path: List[str], is_attack_move: bool = False) -> Dict:
-        """Continue army movement to next location."""
+                              next_loc: str, remaining_path: List[str], is_attack_move: bool = False,
+                              movement_id: Optional[str] = None) -> Dict:
+        """Continue army movement to next location.
+
+        The caller has already debited the source (debit-at-send), so while
+        the thread sleeps the army exists only "in flight". If delivery
+        fails at the transport level the army marches home (compensation);
+        a *lost battle* is a game outcome, not a delivery failure — those
+        troops are dead, not refunded.
+        """
         # Capture the full context before spawning the thread
         ctx = get_current()
 
         def move():
             token = attach(ctx)
+            refunded = False
             try:
                 time.sleep(5)  # Wait 5 seconds before moving
 
@@ -484,45 +586,72 @@ class LocationServer:
                             "source_location": current_loc,
                             "target_location": next_loc,
                             "army_size": army_size,
-                            "is_attack_move": is_attack_move
+                            "is_attack_move": is_attack_move,
+                            "game.movement.id": movement_id or "",
                         }
                     ) as movement_span:
                         target_url = f"{self.get_location_url(next_loc)}/receive_army"
                         self.logger.info(f"Moving army from {current_loc} to {next_loc}")
-                        
-                        result = self._make_request_with_trace(
-                            'post',
-                            target_url,
-                            {
+
+                        try:
+                            result = self._make_request_with_trace(
+                                'post',
+                                target_url,
+                                {
+                                    "army_size": army_size,
+                                    "faction": faction,
+                                    "source_location": current_loc,
+                                    "remaining_path": remaining_path,
+                                    "is_attack_move": is_attack_move,
+                                    "movement_id": movement_id,
+                                },
+                                span_name="http_request.move_army"
+                            )
+                        except requests.RequestException as e:
+                            # Transport failure (or downstream rejection) —
+                            # the army never fought anywhere. March it home.
+                            self._credit_army(current_loc, army_size)
+                            refunded = True
+                            movement_span.record_exception(e)
+                            movement_span.add_event("army_returned", {
                                 "army_size": army_size,
-                                "faction": faction,
-                                "source_location": current_loc,
-                                "remaining_path": remaining_path,
-                                "is_attack_move": is_attack_move
-                            },
-                            span_name="http_request.move_army"
-                        )
-                        
+                                "returned_to": current_loc,
+                                "reason": "delivery_failed",
+                            })
+                            movement_span.set_status(
+                                trace.StatusCode.ERROR,
+                                f"Delivery to {next_loc} failed; army returned to {current_loc}",
+                            )
+                            self.logger.error(
+                                f"Army delivery to {next_loc} failed ({e}); "
+                                f"{army_size} units returned to {current_loc}"
+                            )
+                            return
+
                         if not result.get("success", False):
+                            # A lost battle is a game outcome, not a transport
+                            # failure — those troops are dead, not refunded.
                             movement_span.set_status(trace.StatusCode.ERROR, "Army movement failed")
                             movement_span.set_attribute("error", result.get("message", "Unknown error"))
                             self.logger.error(f"Army movement failed: {result.get('message', 'Unknown error')}")
                         else:
                             # Force metric collection after successful army movement
                             self.telemetry.collect_metrics()
-                
+
             except Exception as e:
-                self.logger.error(f"Failed to move army to {next_loc}: {str(e)}")
-                raise
+                # Never let an unexpected error evaporate the army silently.
+                if not refunded:
+                    self._credit_army(current_loc, army_size)
+                self.logger.error(f"Failed to move army to {next_loc}: {str(e)}; army returned")
             finally:
                 detach(token)
 
         # Start movement in background thread
         Thread(target=move).start()
-        
+
         # Force metric collection at the start of movement
         self.telemetry.collect_metrics()
-        
+
         # Return immediate response indicating movement has started
         return {
             "success": True,
@@ -530,19 +659,29 @@ class LocationServer:
             "is_attack_move": is_attack_move
         }
 
-    def _transfer_resources_along_path(self, resources: int, path: List[str]) -> bool:
-        """Transfer resources along a path with delays."""
-        if not path or len(path) < 2:
-            return False
-            
+    def _forward_resources(self, amount: int, faction: str, next_loc: str,
+                           payload_path: List[str]) -> None:
+        """Deliver ``amount`` resources to ``next_loc`` after the 5 s march delay.
+
+        Debit-at-send: the caller has already debited this location's row,
+        so while the thread sleeps the resources exist only "in flight".
+        Compensation rules:
+
+        - transport failure / downstream rejection → refund here
+          (``resources_returned`` span event);
+        - caravan captured by another faction → the new owner keeps it,
+          no refund (a game outcome, not a delivery failure).
+
+        ``faction`` is captured at call time, *not* re-read after the delay —
+        if this location changes hands mid-flight the caravan still belongs
+        to whoever dispatched it.
+        """
         # Capture the full context before spawning the thread
         ctx = get_current()
 
         def transfer():
-            current_loc = path[0]
-            next_loc = path[1]
-
             token = attach(ctx)
+            refunded = False
             try:
                 time.sleep(5)  # Wait before starting transfer
 
@@ -550,66 +689,131 @@ class LocationServer:
                     "resource_movement",
                     kind=SpanKind.SERVER,
                     attributes={
-                        "source_location": current_loc,
+                        "source_location": self.location_id,
                         "target_location": next_loc,
-                        "resources_amount": resources
+                        "resources_amount": amount,
+                        "faction": faction,
+                        "resource.movement": True,
                     }
                 ) as movement_span:
                     target_url = f"{self.get_location_url(next_loc)}/receive_resources"
-                    result = self._make_request_with_trace(
-                        'post',
-                        target_url,
-                        {
-                            "resources": resources,
-                            "source_location": current_loc,
-                            "remaining_path": path[1:],
-                            "faction": self._get_location_state(self.location_id)["faction"]
-                        },
-                        span_name="http_request.transfer_resources"
-                    )
+                    try:
+                        result = self._make_request_with_trace(
+                            'post',
+                            target_url,
+                            {
+                                "resources": amount,
+                                "source_location": self.location_id,
+                                "remaining_path": payload_path,
+                                "faction": faction,
+                            },
+                            span_name="http_request.transfer_resources"
+                        )
+                    except requests.RequestException as e:
+                        self._credit_resources(self.location_id, amount)
+                        refunded = True
+                        movement_span.record_exception(e)
+                        movement_span.add_event("resources_returned", {
+                            "resources_amount": amount,
+                            "reason": "delivery_failed",
+                        })
+                        movement_span.set_status(
+                            trace.StatusCode.ERROR,
+                            f"Delivery to {next_loc} failed; resources returned",
+                        )
+                        self.logger.error(
+                            f"Resource delivery to {next_loc} failed ({e}); "
+                            f"{amount} returned to {self.location_id}"
+                        )
+                        return
 
-                    if result.get("success", False):
-                        current_loc_resources = self._get_location_state(current_loc)['resources']
-                        self._update_location_state(current_loc, resources=current_loc_resources - resources)
+                    if result.get("captured"):
+                        movement_span.set_status(
+                            trace.StatusCode.ERROR,
+                            f"Resources captured at {next_loc}",
+                        )
+                    elif not result.get("success", False):
+                        self._credit_resources(self.location_id, amount)
+                        refunded = True
+                        movement_span.add_event("resources_returned", {
+                            "resources_amount": amount,
+                            "reason": result.get("message", "rejected"),
+                        })
+                        movement_span.set_status(trace.StatusCode.ERROR, "Resource transfer rejected")
+                    else:
                         # Force metric collection after successful resource transfer
                         self.telemetry.collect_metrics()
-                    else:
-                        movement_span.set_status(trace.StatusCode.ERROR, "Resource transfer failed")
 
             except Exception as e:
-                self.logger.error(f"Failed to send resources to {next_loc} from {current_loc}: {str(e)}")
+                if not refunded:
+                    self._credit_resources(self.location_id, amount)
+                self.logger.error(
+                    f"Failed to send resources to {next_loc} from {self.location_id}: {str(e)}"
+                )
             finally:
                 detach(token)
 
         Thread(target=transfer).start()
-        return True
+
+    # (connect, read) timeouts for every outbound call: a hung peer must
+    # never block a Flask worker thread indefinitely.
+    REQUEST_TIMEOUT = (3, 10)
 
     def _make_request_with_trace(self, method: str, url: str, json_data: Optional[Dict] = None, span_name: str = "http_request") -> Dict:
-        """Make HTTP request with trace context propagated in headers."""
+        """Make HTTP request with trace context propagated in headers.
+
+        Attribute names follow the OpenTelemetry HTTP semantic conventions
+        (``url.full``, ``http.request.method``, ``http.response.status_code``)
+        so tooling that understands the conventions — Tempo's service-graph
+        details, Grafana drilldowns — works without custom mapping.
+
+        Transport errors get exactly one retry after a 2 s backoff. Paired
+        with the idempotent ``/receive_army`` (movement_id dedupe), a retry
+        can never deliver the same army twice.
+        """
         headers = {"Content-Type": "application/json"}
 
         with self.tracer.start_as_current_span(
             span_name,
             kind=SpanKind.CLIENT,
-            attributes={"http.url": url}
+            attributes={
+                "url.full": url,
+                "http.request.method": method.upper(),
+            }
         ) as request_span:
             inject(headers)  # This will now inject the current request_span's context
-            
-            try:
-                if method.lower() == 'get':
-                    response = requests.get(url, headers=headers)
-                elif method.lower() == 'post':
-                    response = requests.post(url, json=json_data, headers=headers)
-                else:
-                    raise ValueError(f"Unsupported method: {method}")
-                
-                request_span.set_attribute("http.status_code", response.status_code)
-                response.raise_for_status()
-                return response.json()
-            except requests.RequestException as e:
-                request_span.set_status(trace.StatusCode.ERROR, str(e))
-                self.logger.error(f"Request failed: {str(e)}")
-                raise
+
+            last_exc = None
+            for attempt in (1, 2):
+                try:
+                    if method.lower() == 'get':
+                        response = requests.get(url, headers=headers, timeout=self.REQUEST_TIMEOUT)
+                    elif method.lower() == 'post':
+                        response = requests.post(url, json=json_data, headers=headers, timeout=self.REQUEST_TIMEOUT)
+                    else:
+                        raise ValueError(f"Unsupported method: {method}")
+
+                    request_span.set_attribute("http.response.status_code", response.status_code)
+                    response.raise_for_status()
+                    return response.json()
+                except (requests.ConnectionError, requests.Timeout) as e:
+                    last_exc = e
+                    if attempt == 1:
+                        request_span.add_event("retry_attempted", {"error": str(e)})
+                        self.logger.warning(f"Request to {url} failed ({e}); retrying once")
+                        time.sleep(2)
+                except requests.RequestException as e:
+                    # HTTP-level errors (4xx/5xx): the peer answered, so a
+                    # retry would not change the outcome. Fail fast.
+                    request_span.record_exception(e)
+                    request_span.set_status(trace.StatusCode.ERROR, str(e))
+                    self.logger.error(f"Request failed: {str(e)}")
+                    raise
+
+            request_span.record_exception(last_exc)
+            request_span.set_status(trace.StatusCode.ERROR, str(last_exc))
+            self.logger.error(f"Request failed after retry: {str(last_exc)}")
+            raise last_exc
 
     def _can_collect_resources(self) -> tuple[bool, Optional[str], Optional[int]]:
         """Check if location can collect resources.
@@ -642,6 +846,66 @@ class LocationServer:
     def _start_resource_cooldown(self):
         with self.lock:
             self.resource_cooldown[self.location_id] = datetime.now() + timedelta(seconds=5)
+
+    # Sanity ceiling for any single army/resource delivery. Generous on
+    # purpose (well above what honest play can produce) — it exists to stop
+    # a stray, duplicated, or hand-crafted request from minting absurd
+    # amounts, not to enforce game balance (the per-map caps do that).
+    MAX_TRANSFER = 10_000
+
+    def _validate_inbound_payload(self, data, amount_key: str) -> Optional[str]:
+        """Validate a /receive_army or /receive_resources payload.
+
+        Only sibling location services call these routes, but a replayed,
+        duplicated, or buggy request must never inject units out of thin
+        air. Returns an error message, or None if the payload is sound.
+        """
+        if not isinstance(data, dict):
+            return "Invalid payload"
+
+        amount = data.get(amount_key)
+        # bool is an int subclass in Python — reject it explicitly.
+        if not isinstance(amount, int) or isinstance(amount, bool):
+            return f"Invalid {amount_key}: must be an integer"
+        if amount <= 0 or amount > self.MAX_TRANSFER:
+            return f"Invalid {amount_key}: {amount} out of range"
+
+        faction = data.get('faction')
+        valid_factions = set(MAPS[self.map_id]["factions"]) | {"neutral"}
+        if faction not in valid_factions:
+            return f"Unknown faction: {faction!r}"
+
+        # Armies and caravans only ever arrive from adjacent locations.
+        source = data.get('source_location')
+        if source not in self.location_info["connections"]:
+            return f"{source!r} is not adjacent to {self.location_id}"
+
+        return None
+
+    def _check_duplicate_movement(self, movement_id: Optional[str]) -> Optional[Dict]:
+        """Return the cached response if this movement was already delivered.
+
+        Pairs with the transport retry in ``_make_request_with_trace``: if
+        the first delivery succeeded but its response was lost, the retry
+        re-sends the same ``movement_id`` and gets the cached result back
+        instead of fighting the battle twice.
+        """
+        if not movement_id:
+            return None
+        now = time.time()
+        with self.lock:
+            self._processed_movements = {
+                k: v for k, v in self._processed_movements.items()
+                if now - v[0] < 120
+            }
+            entry = self._processed_movements.get(movement_id)
+            return dict(entry[1]) if entry else None
+
+    def _record_movement_result(self, movement_id: Optional[str], response: Dict):
+        if not movement_id:
+            return
+        with self.lock:
+            self._processed_movements[movement_id] = (time.time(), dict(response))
 
     def get_location_url(self, location_id):
         """Return the HTTP base URL for reaching another location service.
@@ -679,37 +943,45 @@ class LocationServer:
 
     def _start_passive_generation(self):
         def generate_resources():
+            # The loop body is guarded so a transient failure (e.g. a SQLite
+            # busy timeout) can't kill the thread — a dead economy loop would
+            # silently starve this location for the rest of the game.
             while True:
-                time.sleep(15)
-                # Static identity guards against /reload moving this slot off
-                # of a village type entirely.
-                if self.location_info["type"] != "village":
-                    continue
-                # Live-DB guard: gate on the *current* faction, not the
-                # boot-time identity, so a captured Free Folk camp starts
-                # producing for the new owner the moment its row flips. The
-                # static ``self.location_info["faction"]`` is set at boot
-                # from MAPS config and never updates on battle.
-                location_state = self._get_location_state(self.location_id)
-                if location_state is None:
-                    continue
-                if location_state["faction"] == "barbarian":
-                    continue
-                amount = self._current_rules()["resource_generation"]["village"]
-                with self.tracer.start_as_current_span(
-                    "passive_resource_generation",
-                    attributes={
-                        "location.id": self.location_id,
-                        "resources_gained": amount,
-                        "game.map.id": self.map_id,
-                        "owner.faction": location_state["faction"],
-                    }
-                ):
-                    new_resources = location_state["resources"] + amount
-                    self._update_location_state(self.location_id, resources=new_resources)
-                    self.telemetry.collect_metrics()
+                try:
+                    time.sleep(15)
+                    # Static identity guards against /reload moving this slot off
+                    # of a village type entirely.
+                    if self.location_info["type"] != "village":
+                        continue
+                    # Live-DB guard: gate on the *current* faction, not the
+                    # boot-time identity, so a captured Free Folk camp starts
+                    # producing for the new owner the moment its row flips. The
+                    # static ``self.location_info["faction"]`` is set at boot
+                    # from MAPS config and never updates on battle.
+                    location_state = self._get_location_state(self.location_id)
+                    if location_state is None:
+                        continue
+                    if location_state["faction"] == "barbarian":
+                        continue
+                    amount = self._current_rules()["resource_generation"]["village"]
+                    with self.tracer.start_as_current_span(
+                        "passive_resource_generation",
+                        attributes={
+                            "location.id": self.location_id,
+                            "resources_gained": amount,
+                            "game.map.id": self.map_id,
+                            "owner.faction": location_state["faction"],
+                        }
+                    ):
+                        new_resources = location_state["resources"] + amount
+                        self._update_location_state(self.location_id, resources=new_resources)
+                        self.telemetry.collect_metrics()
+                except Exception as e:
+                    self.logger.error(f"Passive generation tick failed: {e}")
 
-        Thread(target=generate_resources, daemon=True).start()
+        thread = Thread(target=generate_resources, daemon=True, name="passive_generation")
+        thread.start()
+        self._passive_threads["passive_generation"] = thread
 
     def _start_barbarian_growth(self, interval_s: int):
         """Barbarian villages grow +1 army every ``interval_s`` seconds.
@@ -721,27 +993,32 @@ class LocationServer:
         """
         def grow():
             while True:
-                time.sleep(interval_s)
-                if self.location_info["faction"] != "barbarian":
-                    continue
-                with self.tracer.start_as_current_span(
-                    "barbarian_passive_growth",
-                    attributes={
-                        "location.id": self.location_id,
-                        "game.map.id": self.map_id,
-                        "army_gained": 1,
-                    }
-                ):
-                    state = self._get_location_state(self.location_id)
-                    if state is None:
+                try:
+                    time.sleep(interval_s)
+                    if self.location_info["faction"] != "barbarian":
                         continue
-                    # Only grow while still barbarian-controlled.
-                    if state["faction"] != "barbarian":
-                        continue
-                    self._update_location_state(self.location_id, army=state["army"] + 1)
-                    self.telemetry.collect_metrics()
+                    with self.tracer.start_as_current_span(
+                        "barbarian_passive_growth",
+                        attributes={
+                            "location.id": self.location_id,
+                            "game.map.id": self.map_id,
+                            "army_gained": 1,
+                        }
+                    ):
+                        state = self._get_location_state(self.location_id)
+                        if state is None:
+                            continue
+                        # Only grow while still barbarian-controlled.
+                        if state["faction"] != "barbarian":
+                            continue
+                        self._update_location_state(self.location_id, army=state["army"] + 1)
+                        self.telemetry.collect_metrics()
+                except Exception as e:
+                    self.logger.error(f"Barbarian growth tick failed: {e}")
 
-        Thread(target=grow, daemon=True).start()
+        thread = Thread(target=grow, daemon=True, name="barbarian_growth")
+        thread.start()
+        self._passive_threads["barbarian_growth"] = thread
 
     def _start_nights_watch_capital_resource_tick(self, interval_s: int, amount: int):
         """Passive resource generation at the Night's Watch capital (WWA only).
@@ -754,29 +1031,34 @@ class LocationServer:
         """
         def tick():
             while True:
-                time.sleep(interval_s)
-                if (self.location_info["faction"] != "nights_watch"
-                    or self.location_info["type"] != "capital"):
-                    continue
-                with self.tracer.start_as_current_span(
-                    "nights_watch_passive_resource",
-                    attributes={
-                        "location.id": self.location_id,
-                        "game.map.id": self.map_id,
-                        "resources_gained": amount,
-                    }
-                ):
-                    state = self._get_location_state(self.location_id)
-                    if state is None:
+                try:
+                    time.sleep(interval_s)
+                    if (self.location_info["faction"] != "nights_watch"
+                        or self.location_info["type"] != "capital"):
                         continue
-                    if state["faction"] != "nights_watch":
-                        continue
-                    self._update_location_state(
-                        self.location_id, resources=state["resources"] + amount
-                    )
-                    self.telemetry.collect_metrics()
+                    with self.tracer.start_as_current_span(
+                        "nights_watch_passive_resource",
+                        attributes={
+                            "location.id": self.location_id,
+                            "game.map.id": self.map_id,
+                            "resources_gained": amount,
+                        }
+                    ):
+                        state = self._get_location_state(self.location_id)
+                        if state is None:
+                            continue
+                        if state["faction"] != "nights_watch":
+                            continue
+                        self._update_location_state(
+                            self.location_id, resources=state["resources"] + amount
+                        )
+                        self.telemetry.collect_metrics()
+                except Exception as e:
+                    self.logger.error(f"Night's Watch resource tick failed: {e}")
 
-        Thread(target=tick, daemon=True).start()
+        thread = Thread(target=tick, daemon=True, name="nights_watch_resource_tick")
+        thread.start()
+        self._passive_threads["nights_watch_resource_tick"] = thread
 
     def _start_white_walker_corpse_tick(self, interval_s: int):
         """Passive corpse generation at the White Walker fortress.
@@ -785,26 +1067,39 @@ class LocationServer:
         when no battles are happening. Corpses accrue to the faction pool.
         """
         def tick():
+            # Guarded loop: if this thread died, the White Walker AI could
+            # never afford an army when no battles are happening.
             while True:
-                time.sleep(interval_s)
-                if self.location_info["faction"] != "white_walkers" or self.location_info["type"] != "capital":
-                    continue
-                with self.tracer.start_as_current_span(
-                    "white_walker_corpse_tick",
-                    attributes={
-                        "location.id": self.location_id,
-                        "game.map.id": self.map_id,
-                        "game.corpses.harvested": 1,
-                        "corpse.source": "passive",
-                    }
-                ):
-                    self._add_corpses(1, "white_walkers")
-                    self.telemetry.collect_metrics()
+                try:
+                    time.sleep(interval_s)
+                    if self.location_info["faction"] != "white_walkers" or self.location_info["type"] != "capital":
+                        continue
+                    with self.tracer.start_as_current_span(
+                        "white_walker_corpse_tick",
+                        attributes={
+                            "location.id": self.location_id,
+                            "game.map.id": self.map_id,
+                            "game.corpses.harvested": 1,
+                            "corpse.source": "passive",
+                        }
+                    ):
+                        self._add_corpses(1, "white_walkers")
+                        self.telemetry.collect_metrics()
+                except Exception as e:
+                    self.logger.error(f"Corpse tick failed: {e}")
 
-        Thread(target=tick, daemon=True).start()
+        thread = Thread(target=tick, daemon=True, name="white_walker_corpse_tick")
+        thread.start()
+        self._passive_threads["white_walker_corpse_tick"] = thread
 
     def reset_database(self):
         """Reset every location row + the corpse pool to the active map's initial state."""
+        # Re-read the active map *first*: war_map writes the new
+        # active_map_id before calling /reset, so resetting with this
+        # process's in-memory map id would repopulate the table with the
+        # previous map's rows.
+        self._load_identity()
+
         conn = self._get_db_connection()
         cursor = conn.cursor()
 
@@ -823,11 +1118,39 @@ class LocationServer:
 
         cursor.execute("DELETE FROM faction_economy")
 
+        # Seed corpse pools for corpse-currency factions so the AI's
+        # /faction_economy reads and the corpse gauge have a row from t=0
+        # instead of depending on the passive tick having fired first.
+        for faction in MAPS[self.map_id]["factions"]:
+            if get_army_currency(self.map_id, faction) == "corpses":
+                cursor.execute(
+                    "INSERT OR IGNORE INTO faction_economy (faction, corpses) VALUES (?, 0)",
+                    (faction,),
+                )
+
         conn.commit()
         conn.close()
         self.logger.info(f"Database reset to initial state for map {self.map_id}")
 
     def setup_routes(self):
+        @self.app.before_request
+        def _attach_incoming_context():
+            # Attach the extracted W3C context (trace + baggage) as the
+            # *current* context for the whole request. Handlers still pass
+            # context=extract(...) explicitly when starting their span, but
+            # that alone does not make the context current — and outbound
+            # inject() calls plus get_current() captures in background
+            # threads read the *current* context. Without this attach,
+            # baggage (game.session.id, game.actor, …) would stop at this
+            # service's handler span instead of flowing down the cascade.
+            g._otel_ctx_token = attach(extract(request.headers))
+
+        @self.app.teardown_request
+        def _detach_incoming_context(exc):
+            token = getattr(g, "_otel_ctx_token", None)
+            if token is not None:
+                detach(token)
+
         @self.app.route('/', methods=['GET'])
         def info():
             context = extract(request.headers)
@@ -865,7 +1188,14 @@ class LocationServer:
 
         @self.app.route('/health', methods=['GET'])
         def health():
-            return jsonify({"status": "ok"})
+            # Surface passive-thread liveness: the game can look healthy while
+            # an economy loop is dead, so make that observable here (and in
+            # `docker compose ps` once a healthcheck inspects the payload).
+            threads = {name: t.is_alive() for name, t in self._passive_threads.items()}
+            return jsonify({
+                "status": "ok" if all(threads.values()) else "degraded",
+                "threads": threads,
+            })
 
         @self.app.route('/collect_resources', methods=['POST'])
         def collect_resources():
@@ -1040,28 +1370,35 @@ class LocationServer:
                 try:
                     army_size = location_state["army"]
                     current_faction = location_state["faction"]
-                    
+                    movement_id = str(uuid.uuid4())
+
                     move_span.set_attribute("army_size", army_size)
                     move_span.set_attribute("faction", current_faction)
-                    
-                    # Update the source location's army to 0
-                    self._update_location_state(self.location_id, army=0)
-                    
-                    # Force metric collection after army leaves the location
-                    self.telemetry.collect_metrics()
-                    
+                    move_span.set_attribute("game.movement.id", movement_id)
+
+                    # Optimistic-concurrency debit: only succeeds if the army
+                    # count is still what we just read, so two simultaneous
+                    # move requests can't march the same troops twice.
+                    if not self._take_all_army(army_size):
+                        move_span.set_status(trace.StatusCode.ERROR, "Army changed during request")
+                        return jsonify({
+                            "success": False,
+                            "message": "Army changed while processing — try again"
+                        }), 409
+
                     result = self._continue_army_movement(
                         army_size,
                         current_faction,
                         self.location_id,
                         target_location,
                         remaining_path,
-                        is_attack_move
+                        is_attack_move,
+                        movement_id=movement_id
                     )
-                    
+
                     if not result.get("success", True):
                         move_span.set_status(trace.StatusCode.ERROR, result.get("message", "Unknown error"))
-                    
+
                     return jsonify(result)
                 except Exception as e:
                     move_span.record_exception(e)
@@ -1123,39 +1460,44 @@ class LocationServer:
                             "message": "No valid path to enemy capital"
                         }), 400
                     
+                    movement_id = str(uuid.uuid4())
                     attack_span.set_attribute("attack_path", str(attack_path))
                     attack_span.set_attribute("initial_army_size", army_size)
-                    
-                    # Set army to 0 before starting the attack
-                    self._update_location_state(self.location_id, army=0)
-                    
+                    attack_span.set_attribute("game.movement.id", movement_id)
+
                     if len(attack_path) > 1:
+                        # Optimistic-concurrency debit (see /move_army). If a
+                        # later hop fails at the transport level, the movement
+                        # thread credits the army back — no restore needed here.
+                        if not self._take_all_army(army_size):
+                            attack_span.set_status(trace.StatusCode.ERROR, "Army changed during request")
+                            return jsonify({
+                                "success": False,
+                                "message": "Army changed while processing — try again"
+                            }), 409
+
                         next_loc = attack_path[1]
-                        result = self._continue_army_movement(
+                        # remaining_path holds the hops *after* next_loc —
+                        # the same convention /receive_army uses when it
+                        # continues a movement (remaining_path[0] is always
+                        # the hop after the receiver, never the receiver).
+                        self._continue_army_movement(
                             army_size,
                             faction,
                             self.location_id,
                             next_loc,
-                            attack_path[1:],
-                            is_attack_move=True
+                            attack_path[2:],
+                            is_attack_move=True,
+                            movement_id=movement_id
                         )
-                        
-                        if not result.get("success", False):
-                            # If movement fails, restore the army
-                            self._update_location_state(self.location_id, army=army_size)
-                            attack_span.set_status(trace.StatusCode.ERROR, "Failed to start attack")
-                            return jsonify({
-                                "success": False,
-                                "message": f"Failed to start attack: {result.get('message', 'Unknown error')}"
-                            }), 400
-                        
+
                         return jsonify({
                             "success": True,
                             "message": f"All-out attack started with {army_size} troops",
                             "path": attack_path,
                             "army_size": army_size
                         })
-                    
+
                     return jsonify({
                         "success": False,
                         "message": "Invalid attack path"
@@ -1169,14 +1511,11 @@ class LocationServer:
         @self.app.route('/receive_army', methods=['POST'])
         def receive_army():
             try:
-                data = request.get_json()
+                data = request.get_json(silent=True)
                 self.logger.info(f"Received army at {self.location_id}: {data}")
-                
-                if not data or 'army_size' not in data or 'faction' not in data:
-                    return jsonify({"success": False, "message": "Invalid army data"}), 400
-                
+
                 context = extract(request.headers)
-                
+
                 with self.tracer.start_as_current_span(
                     "receive_army",
                     context=context,
@@ -1186,23 +1525,40 @@ class LocationServer:
                         "location_type": self.location_info["type"]
                     }
                 ) as battle_span:
+                    # Harden the inbound payload before touching any state —
+                    # see _validate_inbound_payload for what is rejected.
+                    error = self._validate_inbound_payload(data, 'army_size')
+                    if error:
+                        battle_span.set_status(trace.StatusCode.ERROR, error)
+                        return jsonify({"success": False, "message": error}), 400
+
+                    movement_id = data.get('movement_id')
+                    cached = self._check_duplicate_movement(movement_id)
+                    if cached is not None:
+                        # A transport retry re-delivered an army we already
+                        # processed — return the original outcome instead of
+                        # fighting the battle twice.
+                        battle_span.set_attribute("game.movement.duplicate", True)
+                        battle_span.set_attribute("game.movement.id", movement_id)
+                        return jsonify(cached)
+
                     attacking_army = data['army_size']
                     attacking_faction = data['faction']
-                    source_location = data.get('source_location', 'unknown')
+                    source_location = data['source_location']
                     remaining_path = data.get('remaining_path', [])
                     is_attack_move = data.get('is_attack_move', False)
-                    
+
                     location_state = self._get_location_state(self.location_id)
                     defending_army = location_state["army"]
                     defending_faction = location_state["faction"]
-                    
+
                     battle_span.set_attribute("source_location", source_location)
                     battle_span.set_attribute("attacking_army", attacking_army)
                     battle_span.set_attribute("defending_army", defending_army)
                     battle_span.set_attribute("remaining_path", str(remaining_path))
                     battle_span.set_attribute("is_attack_move", is_attack_move)
+                    battle_span.set_attribute("game.movement.id", movement_id or "")
 
-                    self.logger.info(f"Received army at {self.location_id}: {data}")
                     self.logger.info(f"Remaining path: {remaining_path}, is_attack_move: {is_attack_move}")
                     
                     if attacking_faction == defending_faction:
@@ -1214,25 +1570,27 @@ class LocationServer:
                             self._update_location_state(self.location_id, army=0)
                             battle_span.set_attribute("combined_army_size", attacking_army)
                             self.logger.info(f"Combined armies at {self.location_id}: {attacking_army} (village army was {defending_army})")
-                        
+
                         # Continue movement if there's a path remaining
                         if is_attack_move and remaining_path:
                             next_location = remaining_path[0]
-                            new_remaining_path = remaining_path[1:] if len(remaining_path) > 1 else []
+                            new_remaining_path = remaining_path[1:]
                             self.logger.info(f"Continuing attack from {self.location_id} to {next_location}, new path: {new_remaining_path}")
-                            
+
                             result = self._continue_army_movement(
                                 attacking_army,  # Use the potentially increased army size
                                 attacking_faction,
                                 self.location_id,
                                 next_location,
                                 new_remaining_path,
-                                is_attack_move
+                                is_attack_move,
+                                movement_id=movement_id
                             )
                             battle_span.set_attribute("result", "friendly_passage")
                             self.logger.info(f"Friendly passage result: {result}")
                             # Force metric collection after friendly passage
                             self.telemetry.collect_metrics()
+                            self._record_movement_result(movement_id, result)
                             return jsonify(result)
                         elif not is_attack_move:
                             # Normal army movement - combine armies
@@ -1242,33 +1600,58 @@ class LocationServer:
                             self.logger.info(f"Armies combined at {self.location_info['name']}: {new_army}")
                             # Force metric collection after combining armies
                             self.telemetry.collect_metrics()
-                            return jsonify({
+                            response = {
                                 "success": True,
                                 "message": f"Armies combined at {self.location_info['name']}",
                                 "current_army": new_army,
                                 "faction": defending_faction
-                            })
+                            }
+                            self._record_movement_result(movement_id, response)
+                            return jsonify(response)
                         else:
-                            # All-out attack reached friendly location with no remaining path
-                            # This shouldn't normally happen, but handle it gracefully
-                            if self.location_info["type"] == "capital":
-                                # If it's our own capital, stop here
+                            # All-out attack reached a friendly location with no
+                            # remaining path (e.g. the target flipped to our
+                            # faction mid-flight). The army garrisons here —
+                            # additively, never overwriting whoever already holds
+                            # the location.
+                            if self.location_info["type"] == "village":
+                                # The village garrison was zeroed and merged into
+                                # attacking_army above; write the merged stack back.
                                 self._update_location_state(self.location_id, army=attacking_army)
-                                battle_span.set_attribute("result", "returned_to_capital")
-                                self.logger.warning(f"All-out attack returned to own capital with {attacking_army} troops")
-                            else:
-                                # For villages, the army should already be zeroed out above
                                 battle_span.set_attribute("result", "attack_ended_at_village")
-                                self.logger.warning(f"All-out attack ended at friendly village {self.location_id}")
-                            
+                                self.logger.warning(f"All-out attack ended at friendly village {self.location_id}; {attacking_army} units garrison")
+                            else:
+                                new_army = defending_army + attacking_army
+                                self._update_location_state(self.location_id, army=new_army)
+                                battle_span.set_attribute("result", "returned_to_capital")
+                                self.logger.warning(f"All-out attack ended at {self.location_id} with {attacking_army} troops joining the garrison")
+
                             self.telemetry.collect_metrics()
-                            return jsonify({
+                            response = {
                                 "success": True,
                                 "message": f"Army movement ended at {self.location_info['name']}",
                                 "current_army": self._get_location_state(self.location_id)["army"],
                                 "faction": defending_faction
-                            })
+                            }
+                            self._record_movement_result(movement_id, response)
+                            return jsonify(response)
                     
+                    # ``battle.occurred`` feeds the dashboard TraceQL filter
+                    # ({span.battle.occurred=true}); set it before resolution
+                    # so even a crash mid-battle leaves a queryable span.
+                    battle_span.set_attribute("battle.occurred", True)
+
+                    # Span events mark *points in time* inside the span —
+                    # unlike attributes (span-wide facts), each event carries
+                    # its own timestamp and shows up on the trace timeline.
+                    battle_span.add_event("battle_started", attributes={
+                        "attacking_army": attacking_army,
+                        "defending_army": defending_army,
+                        "attacker_faction": attacking_faction,
+                        "defender_faction": defending_faction,
+                        "location_type": self.location_info["type"],
+                    })
+
                     battle_result, remaining_army, new_faction = self._handle_battle(
                         attacking_army,
                         attacking_faction,
@@ -1277,15 +1660,28 @@ class LocationServer:
                         location_type=self.location_info["type"],
                     )
 
+                    total_casualties = max(0, attacking_army + defending_army - remaining_army)
+                    battle_span.add_event("casualties_calculated", attributes={
+                        "total_casualties": total_casualties,
+                        "outcome": battle_result,
+                        "remaining_army": remaining_army,
+                    })
+
                     # Corpse harvesting: the White Walkers reap from any battle
                     # they win (either as attacker or defender). Corpses equal
                     # the total physical units that died on both sides.
                     if new_faction == "white_walkers":
-                        dead = max(0, attacking_army + defending_army - remaining_army)
-                        if dead > 0:
-                            self._add_corpses(dead, "white_walkers")
-                            battle_span.set_attribute("game.corpses.harvested", dead)
+                        if total_casualties > 0:
+                            self._add_corpses(total_casualties, "white_walkers")
+                            battle_span.set_attribute("game.corpses.harvested", total_casualties)
                             battle_span.set_attribute("corpse.source", "battle")
+
+                    if new_faction != defending_faction:
+                        battle_span.add_event("territory_captured", attributes={
+                            "previous_faction": defending_faction,
+                            "new_faction": new_faction,
+                            "location.id": self.location_id,
+                        })
 
                     self._update_location_state(
                         self.location_id,
@@ -1298,8 +1694,8 @@ class LocationServer:
                     battle_span.set_attribute("game.map.id", self.map_id)
                     if self.location_info["type"] == "wall":
                         battle_span.set_attribute("game.wall.held", new_faction != "neutral")
-                        battle_span.set_attribute("span.wall.battle", True)
-                    
+                        battle_span.set_attribute("wall.battle", True)
+
                     if battle_result == "attacker_victory" and is_attack_move and remaining_path:
                         self.logger.info(f"Continuing army movement at {self.location_id}: {remaining_army}")
                         self.logger.info(f"Battle victory - continuing to {remaining_path[0]}, path: {remaining_path[1:]}")
@@ -1308,11 +1704,13 @@ class LocationServer:
                             attacking_faction,
                             self.location_id,
                             remaining_path[0],
-                            remaining_path[1:] if len(remaining_path) > 1 else [],
-                            is_attack_move
+                            remaining_path[1:],
+                            is_attack_move,
+                            movement_id=movement_id
                         )
+                        self._record_movement_result(movement_id, result)
                         return jsonify(result)
-                    
+
                     if battle_result != "attacker_victory":
                         self.logger.warning(f"Battle result: {battle_result}")
                         battle_span.add_event("battle_result", attributes={
@@ -1321,16 +1719,18 @@ class LocationServer:
                             "defender_faction": defending_faction,
                             "remaining_army": remaining_army,
                         })
-                    
+
                     # Force metric collection after battle resolution
                     self.telemetry.collect_metrics()
-                    
-                    return jsonify({
+
+                    response = {
                         "success": battle_result == "attacker_victory",
                         "message": f"Battle at {self.location_info['name']}: {battle_result}",
                         "current_army": remaining_army,
                         "faction": new_faction
-                    })
+                    }
+                    self._record_movement_result(movement_id, response)
+                    return jsonify(response)
                     
             except Exception as e:
                 self.logger.error(f"Error in receive_army: {str(e)}")
@@ -1428,25 +1828,43 @@ class LocationServer:
                         }), 400
                     
                     span.set_attribute("path_to_capital", str(path))
-                    
-                    if self._transfer_resources_along_path(current_resources, path):
-                        self._start_resource_cooldown()
-                        self.logger.info(f"Resources sent to capital via {path}")
-                        # Force metric collection after initiating resource transfer
-                        self.telemetry.collect_metrics()
-                        return jsonify({
-                            "success": True,
-                            "message": f"Sending {current_resources} resources to capital via {' -> '.join(path)}",
-                            "path": path,
-                            "amount": current_resources
-                        })
-                    else:
-                        span.set_status(trace.StatusCode.ERROR, "Failed to start resource transfer")
-                        self.logger.error(f"Failed to start resource transfer")
+                    span.set_attribute("resource.movement", True)
+
+                    if current_resources <= 0:
+                        span.set_status(trace.StatusCode.ERROR, "No resources to send")
                         return jsonify({
                             "success": False,
-                            "message": "Failed to start resource transfer"
-                        }), 500
+                            "message": "No resources to send"
+                        }), 400
+
+                    if len(path) < 2:
+                        span.set_status(trace.StatusCode.ERROR, "Path too short")
+                        return jsonify({
+                            "success": False,
+                            "message": "Already at the capital"
+                        }), 400
+
+                    # Debit-at-send: guarded so a concurrent spend can't send
+                    # resources this village no longer has. If delivery fails,
+                    # _forward_resources credits the amount back.
+                    if not self._debit_resources(self.location_id, current_resources):
+                        span.set_status(trace.StatusCode.ERROR, "Resources changed during request")
+                        return jsonify({
+                            "success": False,
+                            "message": "Resources changed while processing — try again"
+                        }), 409
+
+                    self._forward_resources(current_resources, faction, path[1], path[1:])
+                    self._start_resource_cooldown()
+                    self.logger.info(f"Resources sent to capital via {path}")
+                    # Force metric collection after initiating resource transfer
+                    self.telemetry.collect_metrics()
+                    return jsonify({
+                        "success": True,
+                        "message": f"Sending {current_resources} resources to capital via {' -> '.join(path)}",
+                        "path": path,
+                        "amount": current_resources
+                    })
                 except Exception as e:
                     span.record_exception(e)
                     span.set_status(trace.StatusCode.ERROR, str(e))
@@ -1458,92 +1876,78 @@ class LocationServer:
         
         @self.app.route('/receive_resources', methods=['POST'])
         def receive_resources():
-            data = request.get_json()
-            if not data or 'resources' not in data or 'faction' not in data:
-                return jsonify({"success": False, "message": "Invalid resource data"}), 400
-            
+            data = request.get_json(silent=True)
+
             context = extract(request.headers)
-            
+
             with self.tracer.start_as_current_span(
                 "receive_resources",
                 context=context,
+                kind=SpanKind.SERVER,
                 attributes={
                     "location": self.location_id,
                     "location_type": self.location_info["type"],
-                    "sending_faction": data['faction'],
-                    "receiving_faction": self._get_location_state(self.location_id)["faction"],
-                    "resources_amount": data['resources']
+                    "resource.movement": True,
                 }
             ) as transfer_span:
+                # Harden the inbound payload before touching any state.
+                error = self._validate_inbound_payload(data, 'resources')
+                if error:
+                    transfer_span.set_status(trace.StatusCode.ERROR, error)
+                    return jsonify({"success": False, "message": error}), 400
+
                 incoming_resources = data['resources']
-                source_location = data.get('source_location', 'unknown')
+                source_location = data['source_location']
                 remaining_path = data.get('remaining_path', [])
                 faction = data['faction']
-                
-                transfer_span.set_attribute("source_location", source_location)
-                
+
                 location_state = self._get_location_state(self.location_id)
                 current_resources = location_state["resources"]
                 current_faction = location_state["faction"]
-                
+
+                transfer_span.set_attribute("source_location", source_location)
+                transfer_span.set_attribute("sending_faction", faction)
+                transfer_span.set_attribute("receiving_faction", current_faction)
+                transfer_span.set_attribute("resources_amount", incoming_resources)
+
                 if current_faction != faction:
+                    # Captured: the holding faction keeps the caravan. The
+                    # ``captured`` flag tells the sender this was a game
+                    # outcome, not a delivery failure — so no refund there.
                     transfer_span.set_status(trace.Status(trace.StatusCode.ERROR, f"Resources captured by {current_faction}"))
-                    self._update_location_state(self.location_id, resources=current_resources + incoming_resources)
-                    # Force metric collection after resource capture
-                    self.telemetry.collect_metrics()
+                    self._credit_resources(self.location_id, incoming_resources)
                     self.logger.error(f"Resources captured by {current_faction}")
                     return jsonify({
                         "success": False,
+                        "captured": True,
                         "message": f"Resources captured by {current_faction}!",
                         "current_resources": current_resources + incoming_resources
                     })
-                
-                new_resources = current_resources + incoming_resources
-                self._update_location_state(self.location_id, resources=new_resources)
-                # Force metric collection after receiving resources
-                self.telemetry.collect_metrics()
-                self.logger.info(f"Resources updated to {new_resources}")
-                
+
                 if len(remaining_path) > 1:
+                    # Intermediate friendly hop: relay onward without banking.
+                    # The caravan was debited at its origin (debit-at-send),
+                    # so crediting here and debiting again would create a
+                    # window where the resources exist twice.
                     next_loc = remaining_path[1]
-                    
-                    def continue_transfer():
-                        with self._start_movement_trace(
-                            "resource_movement",
-                            self.location_id,
-                            next_loc,
-                            resources=incoming_resources
-                        ) as movement_span:
-                            try:
-                                time.sleep(5)
-                                target_url = f"{self.get_location_url(next_loc)}/receive_resources"
-                                self.logger.info(f"Sending resources to {next_loc} with target URL: {target_url}")
-                                result = self._make_request_with_trace('post', target_url, {
-                                    "resources": incoming_resources,
-                                    "source_location": self.location_id,
-                                    "remaining_path": remaining_path[1:],
-                                    "faction": faction
-                                }, span_name="http_request.forward_resources")
-                                
-                                if not result.get("success", False):
-                                    movement_span.set_status(trace.Status(trace.StatusCode.ERROR, "Resource transfer failed"))
-                                
-                                current_state = self._get_location_state(self.location_id)
-                                self._update_location_state(self.location_id, 
-                                    resources=current_state["resources"] - incoming_resources)
-                                # Force metric collection after forwarding resources
-                                self.telemetry.collect_metrics()
-                                self.logger.info(f"Resources updated to {current_state['resources'] - incoming_resources}")
-                            except Exception as e:
-                                movement_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
-                                self.logger.error(f"Failed to forward resources to {next_loc}: {str(e)}")
-                    
-                    Thread(target=continue_transfer).start()
-                
+                    transfer_span.set_attribute("relay_to", next_loc)
+                    self.logger.info(f"Relaying {incoming_resources} resources via {self.location_id} to {next_loc}")
+                    self._forward_resources(incoming_resources, faction, next_loc, remaining_path[1:])
+                    return jsonify({
+                        "success": True,
+                        "message": f"Resources relaying through {self.location_info['name']}",
+                        "current_resources": current_resources
+                    })
+
+                # Final destination: bank the caravan.
+                new_resources = current_resources + incoming_resources
+                self._credit_resources(self.location_id, incoming_resources)
+                self.logger.info(f"Resources updated to {new_resources}")
+
                 transfer_span.set_attribute("final_resources", new_resources)
                 if self.location_info["type"] == "capital":
                     transfer_span.set_attribute("resources_reached_capital", True)
-                
+
                 self.logger.info(f"Resources received at {self.location_info['name']}")
                 return jsonify({
                     "success": True,

@@ -22,7 +22,7 @@ loki.process "log_data" {
 
 
   stage.json {
-    drop_malformed = true,
+    drop_malformed = true
     expressions = {
       level = "",
       msg   = "",

@@ -1211,6 +1211,24 @@ small.text-muted {
     line-height: 1;
 }
 
+/* ETA countdown under the traveling unit — seconds until the server
+   resolves this hop (animations are clocked to the server's march time) */
+.traveling-unit .unit-eta {
+    position: absolute;
+    bottom: -16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    color: #e6edf3;
+    background: rgba(13, 17, 23, 0.85);
+    border-radius: 8px;
+    padding: 1px 6px;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
 @keyframes unitBob {
     0%, 100% { margin-top: 0; }
     50% { margin-top: -4px; }
