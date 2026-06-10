@@ -134,6 +134,13 @@ MAPS = {
             "white_walker_passive_corpse_interval_s": 0,
             "tick_interval_s": 0,
             "win_hold_ticks": 0,
+            # Economy caps — passive generation runs forever, so an idle
+            # game must not bank unbounded resources/armies. Enforced
+            # centrally in location_server's _update_location_state /
+            # _credit_* helpers.
+            "max_resources": 1000,
+            "max_army": 50,
+            "max_corpses": 200,
         },
     },
     "white_walkers_attack": {
@@ -287,6 +294,10 @@ MAPS = {
             "nights_watch_capital_passive_interval_s": 10,
             "tick_interval_s": 30,
             "win_hold_ticks": 5,
+            # Economy caps (see war_of_kingdoms rules for rationale).
+            "max_resources": 1000,
+            "max_army": 50,
+            "max_corpses": 200,
         },
     },
 }

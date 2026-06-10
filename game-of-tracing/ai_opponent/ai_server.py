@@ -10,6 +10,7 @@ from telemetry import AITelemetry
 from opentelemetry import trace, baggage
 from opentelemetry.trace import SpanKind, Link
 from opentelemetry.propagate import inject
+from opentelemetry.context import attach, detach, get_current
 from datetime import datetime, timedelta
 from enum import Enum
 
@@ -1269,8 +1270,18 @@ def fetch_faction_corpses(faction):
     except Exception:
         return 0
 
+# (connect, read) timeouts — a hung location server must never freeze the
+# AI decision loop indefinitely.
+REQUEST_TIMEOUT = (3, 10)
+
+
 def make_api_request(location_id, endpoint, method='GET', data=None):
-    """Make an API request to a location server with trace context"""
+    """Make an API request to a location server with trace context.
+
+    Attribute names follow the OTel HTTP semantic conventions (url.full,
+    http.request.method, http.response.status_code) so convention-aware
+    tooling works without custom mapping.
+    """
     url = f"{get_location_url(location_id)}/{endpoint}"
     headers = {"Content-Type": "application/json"}
 
@@ -1280,18 +1291,19 @@ def make_api_request(location_id, endpoint, method='GET', data=None):
         attributes={
             "location.id": location_id,
             "location.endpoint": endpoint,
-            "http.method": method
+            "url.full": url,
+            "http.request.method": method
         }
     ) as span:
         inject(headers)  # Inject trace context
 
         try:
             if method == 'GET':
-                response = requests.get(url, headers=headers)
+                response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
             else:  # POST
-                response = requests.post(url, json=data, headers=headers)
+                response = requests.post(url, json=data, headers=headers, timeout=REQUEST_TIMEOUT)
 
-            span.set_attribute("http.status_code", response.status_code)
+            span.set_attribute("http.response.status_code", response.status_code)
             response.raise_for_status()
             result = response.json()
 
@@ -1443,6 +1455,17 @@ def ai_decision_loop():
 
     decision_count = 0
 
+    # Attach the AI's identity as W3C Baggage for the lifetime of the loop.
+    # Attaching (not just creating) the context matters: outbound inject()
+    # calls and child spans read the *current* context, so this is what
+    # makes every span in the cascade — including the ones created by the
+    # location services the AI calls — carry game.actor="ai".
+    loop_ctx = baggage.set_baggage("game.actor", "ai")
+    loop_ctx = baggage.set_baggage(
+        "player.faction", ai_state.faction or "unknown", context=loop_ctx
+    )
+    loop_token = attach(loop_ctx)
+
     while ai_state.active and not ai_state.stop_flag.is_set():
         decision_count += 1
 
@@ -1457,7 +1480,12 @@ def ai_decision_loop():
                 "session_start": ai_state.game_start_time.isoformat() if ai_state.game_start_time else None
             }
         ) as cycle_span:
-            parent_ctx = baggage.set_baggage("context", "parent")
+            # Current context = loop baggage (attached above) + the active
+            # cycle span; children created from it parent correctly *and*
+            # get stamped with the AI baggage by the BaggageSpanProcessor.
+            # (This previously set a meaningless `context=parent` baggage
+            # entry that was used purely as a context handle.)
+            parent_ctx = get_current()
             cycle_start_time = time.time()
             try:
                 # Get current game state
@@ -1532,6 +1560,8 @@ def ai_decision_loop():
                 cycle_span.set_status(trace.StatusCode.ERROR, str(e))
                 logger.error("Error in AI decision cycle", extra={"error": str(e), "cycle_number": decision_count})
                 time.sleep(5)
+
+    detach(loop_token)
 
 # ─── Flask Endpoints ───────────────────────────────────────────────────────────
 

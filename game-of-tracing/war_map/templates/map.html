@@ -262,9 +262,12 @@
     // Event feed log (client-side)
     let eventLog = [];
 
-    // Animation tracking -- prevents map refresh from destroying in-flight animations
-    let activeAnimations = 0;
-    let pendingRefresh = false;
+    // The server delivers every army/resource hop after exactly this long
+    // (time.sleep(5) in location_server.py). Animations are clocked to the
+    // same value so the traveling unit arrives, the clash plays, and the
+    // map state flips at the same moment — instead of the animation
+    // finishing seconds before (or after) the server resolves the hop.
+    const SERVER_HOP_MS = 5000;
 
     // DOM elements
     const mapContainer = document.getElementById('mapContainer');
@@ -689,19 +692,10 @@
                 const tgtName = gameState.locations[targetId].name;
                 addEvent(`Army moved from ${srcName} to ${tgtName}`, gameState.playerFaction, 'fa-people-arrows');
 
-                // Delay periodic refresh until animation completes (~4s max)
-                let updateCount = 0;
-                const maxUpdates = 6;
-                setTimeout(() => {
-                    const updateInterval = setInterval(() => {
-                        refreshMapData();
-                        updateCount++;
-                        if (updateCount >= maxUpdates) {
-                            clearInterval(updateInterval);
-                            setTimeout(checkGameStatus, 1000);
-                        }
-                    }, 2500);
-                }, 4500);
+                // The army arrives server-side after SERVER_HOP_MS; the
+                // animation's arrival callback refreshes the map at that
+                // moment. One extra status check catches a capital capture.
+                setTimeout(checkGameStatus, SERVER_HOP_MS + 1500);
 
                 if (result.game_over) {
                     gameState.gameOver = true;
@@ -747,15 +741,39 @@
         }
     }
 
+    // --- Connection-loss banner ---
+    function setConnectionLost(lost) {
+        const mapAlert = document.getElementById('mapAlert');
+        if (!mapAlert) return;
+        if (lost) {
+            mapAlert.textContent = 'Connection lost — retrying…';
+            mapAlert.classList.remove('d-none');
+        } else if (mapAlert.textContent.startsWith('Connection lost')) {
+            mapAlert.classList.add('d-none');
+        }
+    }
+
     async function refreshMapData() {
         try {
             const response = await fetch('/api/map_data');
             const data = await response.json();
 
+            const prevLocations = gameState.locations || {};
             gameState.locations = data.locations;
             gameState.gameOver = data.game_over;
             gameState.winner = data.winner;
             gameState.victoryMessage = data.victory_message;
+
+            // Surface territory flips that happened server-side (AI moves,
+            // the other player, delayed battles) — without this, opponent
+            // captures just silently teleport the marker color on a poll.
+            for (const [id, loc] of Object.entries(data.locations)) {
+                const old = prevLocations[id];
+                if (old && old.faction !== loc.faction) {
+                    showClashEffect(id, loc.faction === gameState.playerFaction ? 'capture' : 'attack');
+                    addEvent(`${loc.name} taken by ${loc.faction.replace('_', ' ')}`, loc.faction, 'fa-flag');
+                }
+            }
 
             // Update the Wall Hold HUD if present (White Walkers Attack).
             if (data.wall_hold) {
@@ -767,31 +785,23 @@
                 if (ww) ww.textContent = `${holds.white_walkers || 0}/${threshold}`;
             }
 
-            // Defer visual rebuild while animations are playing
-            if (activeAnimations > 0) {
-                pendingRefresh = true;
-                updateHUD(); // HUD is safe to update immediately
-                return;
-            }
+            setConnectionLost(false);
 
+            // Rebuild immediately — the map should always show the server's
+            // truth. In-flight units are separate DOM elements (children of
+            // mapContainer, not the markers layer), so a rebuild never
+            // destroys a running animation, and the source showing army=0
+            // the moment a march starts is accurate: the army really has
+            // left (debit-at-send on the server).
             refreshMap();
 
             const moveArmyModal = bootstrap.Modal.getInstance(document.getElementById('moveArmyModal'));
             if (moveArmyModal) moveArmyModal.hide();
+            return true;
         } catch (error) {
             console.error('Error refreshing map data:', error);
-            const mapAlert = document.getElementById('mapAlert');
-            mapAlert.textContent = 'Failed to refresh map data. Please try again.';
-            mapAlert.classList.remove('d-none');
-            setTimeout(() => { mapAlert.classList.add('d-none'); }, 5000);
-        }
-    }
-
-    // Flush a deferred refresh once all animations finish
-    function flushPendingRefresh() {
-        if (pendingRefresh && activeAnimations === 0) {
-            pendingRefresh = false;
-            refreshMap();
+            setConnectionLost(true);
+            return false;
         }
     }
 
@@ -816,9 +826,11 @@
 
         // Poll every 5 s so the wall-hold counter and resource HUD reflect
         // the wall-tick thread (30 s cadence) and AI moves within seconds
-        // rather than up to a minute later.
-        setInterval(refreshMapData, 5000);
-        setInterval(checkGameStatus, 5000);
+        // rather than up to a minute later. Self-scheduling (not
+        // setInterval) so a slow request never overlaps the next poll, and
+        // consecutive failures back off (5 s → 10 s → 30 s) behind a
+        // "connection lost" banner instead of hammering a down server.
+        schedulePoll();
 
         document.getElementById('sendResourcesBtn').addEventListener('click', () => {
             if (gameState.selectedLocation) sendResourcesToCapital(gameState.selectedLocation);
@@ -898,8 +910,6 @@
         const toLoc = gameState.locations[toLocId];
         if (!fromLoc || !toLoc) return;
 
-        activeAnimations++;
-
         const fromX = mapContainer.clientWidth * (fromLoc.x / 100);
         const fromY = mapContainer.clientHeight * (fromLoc.y / 100);
         const toX = mapContainer.clientWidth * (toLoc.x / 100);
@@ -925,17 +935,24 @@
             unit.appendChild(badge);
         }
 
+        // ETA countdown so the player can see how long until the hop
+        // resolves on the server (the march is a fixed SERVER_HOP_MS).
+        const eta = document.createElement('span');
+        eta.className = 'unit-eta';
+        unit.appendChild(eta);
+
         // Start position
         unit.style.left = `${fromX}px`;
         unit.style.top = `${fromY}px`;
         unit.style.transform = 'translate(-50%, -50%)';
         mapContainer.appendChild(unit);
 
-        // Calculate travel distance and duration -- longer for more drama
         const dx = toX - fromX;
         const dy = toY - fromY;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        const duration = Math.max(2000, Math.min(4000, distance * 6)); // 2s - 4s
+        // Clock the animation to the server's march time so arrival on
+        // screen coincides with arrival on the server (see SERVER_HOP_MS).
+        const duration = (opts && opts.durationMs) || SERVER_HOP_MS;
 
         // Add connection pulse dots along the path
         const pulseCount = Math.max(3, Math.round(distance / 80));
@@ -973,6 +990,11 @@
             const cy = fromY + dy * ease;
             unit.style.left = `${cx}px`;
             unit.style.top = `${cy}px`;
+
+            // Seconds until the server resolves this hop
+            const remaining = Math.ceil((duration - elapsed) / 1000);
+            const etaText = remaining > 0 ? `${remaining}s` : '';
+            if (eta.textContent !== etaText) eta.textContent = etaText;
 
             // Drop trail particles every ~60ms
             trailTimer += (now - (step._lastFrame || now));
@@ -1016,9 +1038,7 @@
                 unit.remove();
                 pulses.forEach(p => p.remove());
 
-                activeAnimations--;
                 if (onArrive) onArrive();
-                flushPendingRefresh();
             }
         }
 
@@ -1066,6 +1086,15 @@
         }
     }
 
+    // Refresh state right after a hop resolves on the server. The small
+    // delay covers the network gap between the animation clock and the
+    // server's delivery; the second refresh catches battle aftermath
+    // (chained movements, faction flips propagating).
+    function refreshAtArrival() {
+        setTimeout(refreshMapData, 300);
+        setTimeout(refreshMapData, 2000);
+    }
+
     // Animate army movement with travel + clash at arrival
     function animateArmyMove(sourceId, targetId, faction, isAttack) {
         animateTravelingUnit(sourceId, targetId, faction, 'army', () => {
@@ -1074,10 +1103,12 @@
             } else {
                 showClashEffect(targetId, 'reinforce');
             }
+            refreshAtArrival();
         });
     }
 
-    // Animate resource cart along a multi-hop path
+    // Animate resource cart along a multi-hop path. The server relays each
+    // hop back-to-back (5 s per hop), so the next leg starts immediately.
     function animateResourcePath(path, faction) {
         if (path.length < 2) return;
 
@@ -1092,8 +1123,9 @@
                         // Final destination — gold sparkle
                         showClashEffect(path[hopIndex + 1], 'capture');
                     }
+                    refreshAtArrival();
                     hopIndex++;
-                    setTimeout(nextHop, 300);
+                    nextHop();
                 });
             }
         }
@@ -1138,17 +1170,11 @@
     }
 
     function startResourceTransferUpdates(path) {
-        // Delay refresh until cart animation finishes (~4s per hop)
-        const animDelay = (path.length - 1) * 4500 + 1000;
-        let updateCount = 0;
-        const maxUpdates = path.length * 2;
-        setTimeout(() => {
-            const updateInterval = setInterval(() => {
-                refreshMapData();
-                updateCount++;
-                if (updateCount >= maxUpdates) clearInterval(updateInterval);
-            }, 2500);
-        }, animDelay);
+        // Per-hop refreshes happen in animateResourcePath's arrival
+        // callbacks; this is just a final settle after the whole path
+        // (server time = hops × SERVER_HOP_MS).
+        const settleDelay = (path.length - 1) * SERVER_HOP_MS + 2500;
+        setTimeout(refreshMapData, settleDelay);
     }
 
     function startCooldownTimer(seconds) {
@@ -1189,7 +1215,11 @@
                 showActionStatus('success', result.message);
                 addEvent(`All-out attack launched from ${gameState.locations[locationId].name}!`, gameState.playerFaction, 'fa-skull-crossbones');
 
-                // Animate army marching along the full attack path, hop by hop
+                // Animate army marching along the full attack path, hop by
+                // hop, clocked to the server (SERVER_HOP_MS per hop, hops
+                // are back-to-back). Each arrival shows the clash and
+                // refreshes the map — so if the army dies at an
+                // intermediate battle, the next refresh shows the truth.
                 const hops = (result.path && result.path.length >= 2) ? result.path.length - 1 : 0;
                 if (hops > 0) {
                     let hopIdx = 0;
@@ -1202,28 +1232,17 @@
                                 } else {
                                     showClashEffect(result.path[hopIdx + 1], 'reinforce');
                                 }
+                                refreshAtArrival();
                                 hopIdx++;
-                                setTimeout(nextAttackHop, 200);
+                                nextAttackHop();
                             });
                         }
                     }
                     nextAttackHop();
                 }
 
-                // Delay refreshes until animations finish (~4s per hop + buffer)
-                const animDelay = hops * 4500 + 1000;
-                let updateCount = 0;
-                const maxUpdates = Math.max(3, hops * 2);
-                setTimeout(() => {
-                    const updateInterval = setInterval(() => {
-                        refreshMapData();
-                        updateCount++;
-                        if (updateCount >= maxUpdates) {
-                            clearInterval(updateInterval);
-                            setTimeout(checkGameStatus, 1000);
-                        }
-                    }, 2000);
-                }, animDelay);
+                // Final settle + victory check after the last hop resolves.
+                setTimeout(checkGameStatus, hops * SERVER_HOP_MS + 1500);
 
                 if (result.game_over) {
                     gameState.gameOver = true;
@@ -1252,9 +1271,36 @@
                 checkGameOver();
                 addEvent(`Game over! ${status.winner.charAt(0).toUpperCase() + status.winner.slice(1)} wins!`, status.winner, 'fa-crown');
             }
+            return true;
         } catch (error) {
             console.error('Error checking game status:', error);
+            return false;
         }
+    }
+
+    // --- Polling loop with failure backoff ---
+    const POLL_BASE_MS = 5000;
+    let pollFailures = 0;
+
+    function pollDelay() {
+        if (pollFailures === 0) return POLL_BASE_MS;
+        if (pollFailures === 1) return 10000;
+        return 30000;
+    }
+
+    async function pollOnce() {
+        const mapOk = await refreshMapData();
+        const statusOk = await checkGameStatus();
+        if (mapOk && statusOk) {
+            pollFailures = 0;
+        } else {
+            pollFailures++;
+        }
+        setTimeout(pollOnce, pollDelay());
+    }
+
+    function schedulePoll() {
+        setTimeout(pollOnce, POLL_BASE_MS);
     }
 
     // Expose animation functions for debugging/testing
