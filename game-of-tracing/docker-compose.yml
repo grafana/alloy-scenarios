@@ -36,7 +36,7 @@ services:
 
   # Pyroscope v2 for continuous profiling
   pyroscope:
-    image: grafana/pyroscope:${GRAFANA_PYROSCOPE_VERSION:-2.0.1}
+    image: grafana/pyroscope:${GRAFANA_PYROSCOPE_VERSION:-2.0.3}
     ports:
       - "4040:4040"
     command:
@@ -48,7 +48,7 @@ services:
 
   # Grafana for visualization
   grafana:
-    image: grafana/grafana:${GRAFANA_VERSION:-13.0.1}
+    image: grafana/grafana:${GRAFANA_VERSION:-13.0.2}
     environment:
       - GF_SECURITY_ALLOW_EMBEDDING=true
       - GF_SECURITY_DISABLE_SANITIZE_HTML=true

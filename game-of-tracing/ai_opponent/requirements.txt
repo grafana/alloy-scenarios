@@ -3,5 +3,5 @@ requests==2.33.1
 opentelemetry-api==1.41.1
 opentelemetry-sdk==1.41.1
 opentelemetry-exporter-otlp==1.41.1
-pyroscope-io==1.0.6
+pyroscope-io==1.0.11
 pyroscope-otel==1.0.0

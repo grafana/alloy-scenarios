@@ -1,0 +1,42 @@
+// ###############################
+// #### Metrics Configuration ####
+// ###############################
+
+// Enable live debugging for the Alloy UI.
+livedebugging {
+	enabled = true
+}
+
+// Expose MongoDB metrics using the built-in prometheus.exporter.mongodb
+// component, which embeds the Percona mongodb_exporter.
+//
+// direct_connect talks straight to the single node. compatible_mode and
+// collect_all both default to true in Alloy and are set explicitly here so the
+// config is self-documenting:
+//   - compatible_mode emits the legacy metric names (e.g.
+//     mongodb_op_counters_total, mongodb_connections) alongside the modern
+//     mongodb_ss_* names.
+//   - collect_all enables every collector, including replica-set status, which
+//     produces the replication metrics (mongodb_mongod_replset_*). These only
+//     appear when MongoDB runs as a replica set, not as a standalone node.
+prometheus.exporter.mongodb "default" {
+	mongodb_uri     = "mongodb://mongo:27017/"
+	direct_connect  = true
+	compatible_mode = true
+	collect_all     = true
+}
+
+// Scrape the MongoDB exporter targets every 15 seconds.
+prometheus.scrape "mongodb" {
+	targets    = prometheus.exporter.mongodb.default.targets
+	forward_to = [prometheus.remote_write.default.receiver]
+
+	scrape_interval = "15s"
+}
+
+// Send the scraped metrics to the local Prometheus instance via remote write.
+prometheus.remote_write "default" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}
