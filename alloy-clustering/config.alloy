@@ -1,0 +1,64 @@
+// alloy-clustering
+//
+// All three Alloy nodes run this same config and form a cluster (clustering is
+// turned on with the --cluster.* flags in docker-compose.yml, not in this file).
+// The prometheus.scrape component below opts into clustering, so the cluster
+// shards the discovered target set across the nodes with consistent hashing:
+// every target is scraped by exactly one node. Stop a node and its targets are
+// reassigned to the survivors within seconds.
+
+// Discover the pool of synthetic scrape targets. All three nodes share the host
+// Docker socket, so each node sees the same containers and hashes them the same
+// way -- that shared, identical view is what makes the sharding consistent.
+discovery.docker "containers" {
+	host             = "unix:///var/run/docker.sock"
+	refresh_interval = "10s"
+}
+
+discovery.relabel "targets" {
+	targets = discovery.docker.containers.targets
+
+	// Keep only the containers tagged as clustering-demo targets.
+	rule {
+		source_labels = ["__meta_docker_container_label_clustering_target"]
+		regex         = "true"
+		action        = "keep"
+	}
+
+	// Use the container name (for example, alloy-clustering-target-3) as instance.
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "instance"
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "clustered-targets"
+	}
+}
+
+// Scrape the discovered targets. Because clustering is enabled, each node scrapes
+// only the targets the cluster assigns to it -- roughly 1/N of the pool.
+prometheus.scrape "clustered" {
+	targets         = discovery.relabel.targets.output
+	forward_to      = [prometheus.remote_write.default.receiver]
+	scrape_interval = "15s"
+
+	clustering {
+		enabled = true
+	}
+}
+
+// Stamp every sample with the node that scraped it. Query
+// count by (scraped_by) (up{job="clustered-targets"}) in Grafana to see the
+// distribution -- and watch it rebalance when you stop or start a node.
+prometheus.remote_write "default" {
+	external_labels = {
+		scraped_by = constants.hostname,
+	}
+
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}
