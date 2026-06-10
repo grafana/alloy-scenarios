@@ -27,9 +27,9 @@ The sub-agent is read-only (no Write/Edit tools) — it reports; the parent agen
 ## Tool preferences
 
 - **Use `Read`, not `cat`**, for the large files in this scenario. Use `offset` / `limit` to target line ranges rather than reading the whole file:
-  - `app/location_server.py` (~52 KB, ~1200 lines)
-  - `ai_opponent/ai_server.py` (~46 KB)
-  - `war_map/app.py` (~64 KB)
+  - `app/location_server.py` (~80 KB, ~1950 lines)
+  - `ai_opponent/ai_server.py` (~48 KB)
+  - `war_map/app.py` (~90 KB)
   - `war_map/templates/map.html` (~50 KB)
   - `war_map/templates/replay_session.html` (~28 KB)
   - `SPAN_LINKS.md` (~17 KB)
@@ -44,7 +44,7 @@ Before editing any service, open these files to ground yourself:
 |---|---|
 | Location server behavior | `app/telemetry.py`, relevant route handler in `app/location_server.py`, `app/game_config.py`, the service block in `docker-compose.yml` |
 | AI decision logic | `ai_opponent/telemetry.py`, `ai_opponent/ai_server.py`, `ai_opponent/README.md` |
-| UI, sessions, or replay | `war_map/telemetry.py`, `war_map/app.py` (especially `:130-189` for span-link plumbing), relevant template under `war_map/templates/` |
+| UI, sessions, or replay | `war_map/telemetry.py`, `war_map/app.py` (especially `:258-402` for span-link plumbing and `:45` for the baggage helper), relevant template under `war_map/templates/` |
 | Telemetry pipeline | `config.alloy` (default) or `config-otel.yaml` (OTel variant), `tempo-config.yaml`, `loki-config.yaml`, `prom-config.yaml` |
 | Datasources / dashboards | `grafana/datasources/defaults.yml`, `grafana/dashboards/*.json` |
 | Image versions | `../image-versions.env` |

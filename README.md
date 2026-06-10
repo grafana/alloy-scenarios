@@ -75,6 +75,7 @@ These scenarios collect and forward metrics with Alloy.
 
 | Scenario | Description |
 | -------- | ----------- |
+| [Alloy clustering](alloy-clustering/) | Run a three-node Alloy cluster that consistent-hashes `prometheus.scrape` targets across nodes. Stop a node and its targets redistribute to the survivors within seconds. |
 | [Blackbox probing](blackbox-probing/) | Monitor endpoint availability and response times with synthetic HTTP probes. |
 | [OTel metrics pipeline](otel-metrics-pipeline/) | Forward OpenTelemetry metrics from applications through Alloy. Alloy batches and transforms samples before it sends them to Prometheus. |
 
@@ -132,6 +133,7 @@ These scenarios monitor databases and in-memory caches.
 | -------- | ----------- |
 | [Elasticsearch monitoring](elasticsearch-monitoring/) | Monitor Elasticsearch cluster health, node status, and performance metrics. |
 | [Memcached monitoring](memcached-monitoring/) | Monitor Memcached instance metrics, including connections, memory usage, and command performance. |
+| [MongoDB monitoring](mongodb-monitoring/) | Monitor MongoDB op-counters, connection pool, and replica-set replication metrics with `prometheus.exporter.mongodb`. Runs a single-node replica set with an insert load generator. |
 | [MySQL monitoring](mysql-monitoring/) | Monitor MySQL database server metrics and performance indicators. |
 | [PostgreSQL monitoring](postgres-monitoring/) | Monitor PostgreSQL transaction statistics, connections, and server configuration. |
 | [RabbitMQ monitoring](rabbitmq-monitoring/) | Monitor RabbitMQ queue, connection, and channel metrics plus broker container logs. |

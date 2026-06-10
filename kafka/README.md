@@ -23,7 +23,7 @@ Ensure you have the following:
 ```
 
 - **Kafka producer**: The `kafka-producer` service runs `gen_log.sh` and publishes JSON log entries to the `alloy-logs` topic every two seconds.
-- **Kafka**: A single-node KRaft broker that runs the `bitnami/kafka:3.8` image and stores messages in the `alloy-logs` topic.
+- **Kafka**: A single-node KRaft broker that runs the official `apache/kafka` image and stores messages in the `alloy-logs` topic.
 - **Alloy**: Consumes messages from the Kafka topic, parses and restructures the JSON payload, and forwards processed entries to Loki.
 - **Loki**: Stores the processed log entries.
 - **Grafana**: Visualizes the logs.

@@ -1,5 +1,9 @@
 /*
- * Alloy Configuration for OpenTelemetry Trace Collection with Tail Sampling
+ * Alloy Configuration for OpenTelemetry Collection (traces, logs, metrics,
+ * profiles). All signals pass through unsampled: receiver → batch →
+ * exporters. The game's span attributes (battle.occurred, player.action,
+ * resource.movement) are designed to support a tail-sampling policy here
+ * if you want to experiment with one — see the scenario README.
  */
 
 // Receive OpenTelemetry traces
@@ -23,7 +27,7 @@ otelcol.processor.batch "default" {
   }
 }
 
-// Send sampled traces to Tempo
+// Send traces to Tempo
 otelcol.exporter.otlp "tempo" {
   client {
     endpoint = "tempo:4317"
