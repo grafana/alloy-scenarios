@@ -48,7 +48,9 @@ only **scrapes the subset assigned to it**. Every sample is stamped with a
 ## Prerequisites
 
 - Docker
-- Docker Compose
+- Docker Compose v2+ — the target pool is scaled with `deploy.replicas`, which
+  `docker compose up` honors on v2 and newer (legacy `docker-compose` v1 ignores
+  it; on v1, scale the pool with `docker compose up -d --scale target=9` instead).
 
 ## Running the demo
 
@@ -96,13 +98,16 @@ Stop one node and watch its targets move to the survivors:
 docker compose stop alloy-2
 ```
 
-- **Within seconds:** the `alloy-1` and `alloy-3` bands in **Targets scraped per
-  Alloy node** grow as they take over scraping `alloy-2`'s targets. (In the live
-  demo this took about 15 seconds.) **Targets monitored** never leaves `9` — no
-  target is dropped.
-- **After about a minute:** `alloy-2`'s now-stale series age out of the Prometheus
-  lookback window, so its band drops to zero and **Alloy nodes scraping** falls to
-  `2`.
+- **Within seconds:** the cluster reassigns `alloy-2`'s targets to `alloy-1` and
+  `alloy-3`, which begin scraping them right away — confirm the new ownership on
+  each node's Clustering page. **Targets monitored** never leaves `9`, so no
+  target is ever dropped.
+- **Over the next minute:** as `alloy-2`'s now-stale `up` series age out of the
+  Prometheus lookback window, **Targets scraped per Alloy node** reattributes its
+  share to the survivors — `alloy-2`'s band falls to zero while the `alloy-1` and
+  `alloy-3` bands grow to absorb it. The stacked total stays pinned at `9` the
+  whole time (no target is double-counted mid-handover), and **Alloy nodes
+  scraping** falls to `2`.
 
 Bring the node back and the cluster rebalances again:
 
@@ -114,9 +119,9 @@ docker compose start alloy-2
 third of the targets.
 
 > The dashboard sets Prometheus `--query.lookback-delta=1m` so a stopped node's
-> stale series clear in about a minute instead of the default five. That is why
-> the survivors visibly absorb the load right away, but the departed node's band
-> takes up to a minute to fall to zero.
+> stale series clear in about a minute instead of the default five. The cluster
+> hands the targets to the survivors within seconds, but the departed node's band
+> only falls to zero once its last samples age out of that window.
 
 ## How it works
 

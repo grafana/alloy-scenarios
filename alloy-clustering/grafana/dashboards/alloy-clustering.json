@@ -61,7 +61,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "editorMode": "code",
-          "expr": "count by (scraped_by) (up{job=\"clustered-targets\"} == 1)",
+          "expr": "count by (scraped_by) (topk by (instance) (1, timestamp(up{job=\"clustered-targets\"} == 1)))",
           "legendFormat": "{{scraped_by}}",
           "range": true,
           "refId": "A"
@@ -163,7 +163,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "editorMode": "code",
-          "expr": "up{job=\"clustered-targets\"} == 1",
+          "expr": "topk by (instance) (1, timestamp(up{job=\"clustered-targets\"} == 1))",
           "format": "table",
           "instant": true,
           "refId": "A"
