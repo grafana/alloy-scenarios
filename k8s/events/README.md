@@ -75,7 +75,7 @@ Ensure you have the following:
    helm install --values grafana-values.yml grafana grafana/grafana -n meta
    ```
 
-5. Wait until pods are ready:
+5. Wait until Pods are ready:
 
    ```sh
    kubectl get pods -n meta -w
