@@ -6,6 +6,7 @@ elasticsearch-monitoring
 faro-frontend-observability
 game-of-tracing
 gelf-log-ingestion
+java-profiling
 kafka
 linux
 log-api-gateway
