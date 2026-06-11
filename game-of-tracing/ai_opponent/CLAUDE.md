@@ -96,6 +96,12 @@ The AI opponent instruments its own causal chain **inside a single decision cycl
 
 The linking logic lives around `ai_server.py:888-901`. The AI does **not** participate in the cross-session `game_sequence` chain that `war_map` builds — that is player-only.
 
+## Baggage + HTTP client conventions
+
+Each `ai_decision_cycle` sets real W3C Baggage — `game.actor="ai"` and `player.faction=<ai faction>` — at the top of the cycle (`ai_decision_loop` in `ai_server.py`). The `BaggageSpanProcessor` in `telemetry.py` stamps these onto every span of the cycle, *including* spans created by the location services the AI calls (the propagator carries the `baggage` header automatically). TraceQL `{span.game.actor="ai"}` therefore isolates AI activity end-to-end. (Historically this line set a meaningless `context=parent` baggage entry used purely as a context handle — don't reintroduce that.)
+
+`make_api_request` uses OTel HTTP semantic-convention attributes (`url.full`, `http.request.method`, `http.response.status_code`) and a `(3, 10)` connect/read timeout so a hung location server can't freeze the decision loop.
+
 ## Environment
 
 | Var | Default | Purpose |

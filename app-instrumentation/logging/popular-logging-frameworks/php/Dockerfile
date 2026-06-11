@@ -1,4 +1,4 @@
-FROM php:8.5-cli-alpine@sha256:3cfccf28acfbb58ae991324612a3b0e2062a572026bb4dca030020e5295d1633
+FROM php:8.5-cli-alpine@sha256:14a7af749274ee78c85b32da9b9d3a6e8c14e7218f0eb23e9b5febde10255430
 
 WORKDIR /app
 
