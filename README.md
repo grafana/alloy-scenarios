@@ -68,6 +68,7 @@ These scenarios show distributed tracing with OpenTelemetry and Tempo.
 | [OpenTelemetry service graphs](otel-tracing-service-graphs/) | Generate service graphs with the Alloy `servicegraph` connector. |
 | [OpenTelemetry span metrics](otel-span-metrics/) | Generate RED metrics from OpenTelemetry traces with the span metrics connector. Request rate, error rate, and duration. |
 | [OpenTelemetry tail sampling](otel-tail-sampling/) | Apply tail sampling policies to OpenTelemetry traces with Alloy and Tempo. |
+| [Trace correlation with exemplars](trace-log-correlation-exemplars/) | Jump from a latency histogram to the exact trace behind it with OpenMetrics exemplars flowing through Alloy into Prometheus and Tempo. |
 
 ### Metrics
 

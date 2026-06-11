@@ -30,6 +30,7 @@ snmp
 syslog
 systemd-journal
 trace-delivery
+trace-log-correlation-exemplars
 vault-secrets
 windows
 windows-events
