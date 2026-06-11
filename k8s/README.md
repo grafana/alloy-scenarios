@@ -11,4 +11,5 @@ In this directory you will find a series of scenarios that demonstrate how to se
 | [Metrics](./metrics) | Monitor Kubernetes metrics with Grafana Alloy and Prometheus |
 | [Profiling](./profiling) | Monitor Kubernetes profiling with Grafana Alloy and Pyroscope |
 | [Tracing](./tracing) | Monitor Kubernetes tracing with Grafana Alloy and Tempo |
+| [kube-state-metrics + cAdvisor](./kube-state-metrics-cadvisor) | Scrape kube-state-metrics and the kubelet cAdvisor endpoint with a standalone Alloy DaemonSet — no k8s-monitoring chart |
 

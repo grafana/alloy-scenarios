@@ -145,7 +145,7 @@ The `k8s/` directory groups Helm-based and manifest-based examples for Alloy on 
 
 | Scenario | Description |
 | -------- | ----------- |
-| [Kubernetes](k8s/) | Scenarios for Alloy on Kubernetes with the k8s-monitoring Helm chart or plain manifests. See subdirectories for logs, metrics, profiling, tracing, and cluster events. |
+| [Kubernetes](k8s/) | Scenarios for Alloy on Kubernetes with the k8s-monitoring Helm chart or plain manifests. See subdirectories for logs, metrics, profiling, tracing, cluster events, and standalone kube-state-metrics + cAdvisor scraping. |
 
 ### Experimental OTel engine examples
 

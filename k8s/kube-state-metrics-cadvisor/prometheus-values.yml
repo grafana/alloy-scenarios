@@ -1,0 +1,20 @@
+server:
+  persistentVolume:
+    enabled: false
+  extraFlags:
+    - web.enable-remote-write-receiver
+
+alertmanager:
+  enabled: false
+
+# The point of this scenario is scraping kube-state-metrics and cAdvisor
+# with a standalone Alloy DaemonSet, so the collectors bundled with the
+# Prometheus chart stay disabled.
+kube-state-metrics:
+  enabled: false
+
+prometheus-node-exporter:
+  enabled: false
+
+prometheus-pushgateway:
+  enabled: false

@@ -22,5 +22,11 @@
   "events": [
     { "release": "loki",       "chart": "grafana/loki",                    "values": "loki-values.yml" },
     { "release": "grafana",    "chart": "grafana/grafana",                 "values": "grafana-values.yml" }
+  ],
+  "kube-state-metrics-cadvisor": [
+    { "release": "kube-state-metrics", "chart": "prometheus-community/kube-state-metrics", "values": "ksm-values.yml" },
+    { "release": "prometheus",         "chart": "prometheus-community/prometheus",         "values": "prometheus-values.yml" },
+    { "release": "grafana",            "chart": "grafana/grafana",                         "values": "grafana-values.yml" },
+    { "release": "alloy",              "chart": "grafana/alloy",                           "values": "alloy-values.yml" }
   ]
 }
