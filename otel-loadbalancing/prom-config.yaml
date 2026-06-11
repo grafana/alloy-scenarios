@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Scrape every Alloy instance's own metrics. The per-instance
+# otelcol_receiver/otelcol_exporter series are how you observe the load
+# balancer's split across the downstream tier.
+scrape_configs:
+  - job_name: 'alloy-lb'
+    static_configs:
+      - targets: ['alloy-lb:12345']
+
+  - job_name: 'alloy-downstream'
+    static_configs:
+      - targets: ['alloy-downstream-1:12345', 'alloy-downstream-2:12345']

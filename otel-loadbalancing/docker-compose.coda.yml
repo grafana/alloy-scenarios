@@ -1,0 +1,8 @@
+services:
+  # Emits one trace per second with exactly four spans, exporting every
+  # span in its own OTLP request -- the hard case a trace-aware load
+  # balancer exists to solve.
+  trace-generator:
+    build: ./app
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy-lb:4317
