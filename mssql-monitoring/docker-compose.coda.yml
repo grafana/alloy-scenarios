@@ -1,0 +1,48 @@
+services:
+  # SQL Server is amd64-only; the explicit platform lets Apple Silicon hosts
+  # run it under emulation instead of failing the pull. The image needs
+  # ~2 GB of memory and an EULA acceptance flag to start.
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2025-latest@sha256:cee0f4db03b5192de777d37a22455949d1c2c230bb48c0a732b88b0933117a72
+    platform: linux/amd64
+    hostname: mssql
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=Alloy-Demo-Pass123!
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-C", "-S", "localhost", "-U", "sa", "-P", "Alloy-Demo-Pass123!", "-Q", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # Creates the demo database and table, then inserts one row per second so
+  # the custom query metric (mssql_demo_events_rows) keeps climbing.
+  mssql-load:
+    image: mcr.microsoft.com/mssql/server:2025-latest@sha256:cee0f4db03b5192de777d37a22455949d1c2c230bb48c0a732b88b0933117a72
+    platform: linux/amd64
+    depends_on:
+      mssql:
+        condition: service_healthy
+    restart: unless-stopped
+    entrypoint:
+      - bash
+      - -c
+      - |
+        # Idempotent setup: safe to re-run after a container restart.
+        /opt/mssql-tools18/bin/sqlcmd -C -S mssql -U sa -P 'Alloy-Demo-Pass123!' \
+          -Q "IF DB_ID('demo') IS NULL CREATE DATABASE demo"
+        /opt/mssql-tools18/bin/sqlcmd -C -S mssql -U sa -P 'Alloy-Demo-Pass123!' -d demo \
+          -Q "IF OBJECT_ID('dbo.events','U') IS NULL CREATE TABLE dbo.events (id INT IDENTITY PRIMARY KEY, at DATETIME2 DEFAULT SYSUTCDATETIME(), value FLOAT)"
+        echo "demo schema ready - generating insert load"
+        # Insert a row every second. This loop must run for the life of the
+        # container: it drives the custom metric AND keeps the container
+        # alive (an exit would trip CI's no-exited-containers check).
+        while true; do
+          /opt/mssql-tools18/bin/sqlcmd -C -S mssql -U sa -P 'Alloy-Demo-Pass123!' -d demo \
+            -Q "INSERT INTO dbo.events (value) VALUES (RAND())" >/dev/null
+          sleep 1
+        done
