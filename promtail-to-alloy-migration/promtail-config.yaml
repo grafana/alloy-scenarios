@@ -1,0 +1,38 @@
+# The "before" configuration. Promtail reached end of life on March 2,
+# 2026; config.alloy in this directory is its `alloy convert` equivalent.
+# The README maps every block below to the Alloy component that replaces it.
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+# Promtail tracks how far it has read each file in a positions file.
+# Alloy keeps the same bookkeeping in its storage.path (WAL) instead.
+positions:
+  filename: /tmp/positions.yaml
+
+# clients -> loki.write: the push endpoint and the external label that
+# marks which collector shipped each line.
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    external_labels:
+      collector: promtail
+
+# scrape_configs -> local.file_match (target discovery) + loki.source.file
+# (tailing) + loki.process (pipeline stages).
+scrape_configs:
+  - job_name: demo-app
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: demo-app
+          __path__: /var/log/demo/*.log
+    pipeline_stages:
+      # - regex -> stage.regex: extract level and service from the line.
+      - regex:
+          expression: '.*level=(?P<level>\w+) service=(?P<service>\w+).*'
+      # - labels -> stage.labels: promote the captures to Loki labels.
+      - labels:
+          level:
+          service:

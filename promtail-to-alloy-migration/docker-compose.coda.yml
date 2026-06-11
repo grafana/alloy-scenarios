@@ -1,0 +1,10 @@
+services:
+  # Writes one structured logfmt line per second to /var/log/demo/app.log.
+  # Both collectors tail the same file, which is what makes their output
+  # directly comparable in Loki.
+  log-generator:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    volumes:
+      - ./main.py:/main.py
+      - ./logs:/var/log/demo
+    command: ["python3", "/main.py"]

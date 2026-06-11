@@ -23,6 +23,7 @@ otel-span-metrics
 otel-tail-sampling
 otel-tracing-service-graphs
 postgres-monitoring
+promtail-to-alloy-migration
 redis-monitoring
 routing
 self-monitoring
