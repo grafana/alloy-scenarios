@@ -12,13 +12,31 @@ target_port = int(os.getenv('TARGET_PORT', 5140))
 # Define the endpoint path
 endpoint_path = "/loki/api/v1/raw"
 
-# Create a TCP socket
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-try:
-    sock.connect((target_host, target_port))
-except socket.error as e:
-    print(f"Failed to connect to {target_host}:{target_port} - {e}")
-    exit(1)
+
+def connect_with_retry():
+    """Open a TCP connection to Alloy, retrying until it is ready.
+
+    `depends_on` in docker-compose only waits for the Alloy container to
+    start, not for its loki.source.api listener to bind port 9999. Without
+    a retry the simulator races Alloy on boot, hits "Connection refused",
+    and exits — so retry with backoff until the listener is up.
+    """
+    delay = 1
+    while True:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.connect((target_host, target_port))
+            print(f"Connected to {target_host}:{target_port}")
+            return sock
+        except socket.error as e:
+            sock.close()
+            print(f"Waiting for {target_host}:{target_port} - {e}; retrying in {delay}s")
+            time.sleep(delay)
+            delay = min(delay * 2, 10)  # exponential backoff, capped at 10s
+
+
+# Create a TCP socket, waiting for Alloy to become available
+sock = connect_with_retry()
 
 # Define log levels and messages
 log_levels = ["INFO", "WARNING", "ERROR", "DEBUG", "CRITICAL"]
@@ -81,8 +99,12 @@ while True:
         sock.sendall(http_request.encode())
         print(f"Sent JSON log message to {target_host}:{target_port} - {log_json}")
     except socket.error as e:
-        print(f"Failed to send log message - {e}")
-        break
+        # The connection dropped (e.g. Alloy restarted or reloaded its
+        # config). Reconnect and keep going rather than exiting.
+        print(f"Failed to send log message - {e}; reconnecting")
+        sock.close()
+        sock = connect_with_retry()
+        continue
 
     # Wait for a few seconds before sending the next message
     time.sleep(random.randint(3, 8))  # Send a message every 3-8 seconds
