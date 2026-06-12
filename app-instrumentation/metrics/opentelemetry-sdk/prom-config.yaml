@@ -1,0 +1,20 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Promote selected OTLP resource attributes to Prometheus labels so you can
+# filter and group by service and language in Metrics Drilldown.
+otlp:
+  promote_resource_attributes:
+    - service.instance.id
+    - service.name
+    - service.namespace
+    - service.version
+    - deployment.environment
+    - language
+
+storage:
+  tsdb:
+    # The SDKs export cumulative metrics on a timer; a generous out-of-order
+    # window keeps samples that arrive slightly late (e.g. on startup).
+    out_of_order_time_window: 30m

@@ -65,6 +65,7 @@ These scenarios show distributed tracing with OpenTelemetry and Tempo.
 | [Distributed tracing](trace-delivery/) | Learn distributed tracing through a sofa delivery workflow from order to doorstep. |
 | [Game of tracing](game-of-tracing/) | Play an interactive strategy game that teaches distributed tracing, sampling, and service graphs. |
 | [OpenTelemetry basic tracing](otel-basic-tracing/) | Collect and visualize OpenTelemetry traces with Alloy and Tempo. |
+| [OTel SDK tracing across languages](app-instrumentation/traces/opentelemetry-sdk/) | Instrument five languages (Python, Node.js, Go, Java, C#) with the OpenTelemetry tracing SDK and collect standalone traces through Alloy into Tempo. |
 | [OpenTelemetry service graphs](otel-tracing-service-graphs/) | Generate service graphs with the Alloy `servicegraph` connector. |
 | [OpenTelemetry span metrics](otel-span-metrics/) | Generate RED metrics from OpenTelemetry traces with the span metrics connector. Request rate, error rate, and duration. |
 | [OpenTelemetry tail sampling](otel-tail-sampling/) | Apply tail sampling policies to OpenTelemetry traces with Alloy and Tempo. |
@@ -77,6 +78,8 @@ These scenarios collect and forward metrics with Alloy.
 | -------- | ----------- |
 | [Alloy clustering](alloy-clustering/) | Run a three-node Alloy cluster that consistent-hashes `prometheus.scrape` targets across nodes. Stop a node and its targets redistribute to the survivors within seconds. |
 | [Blackbox probing](blackbox-probing/) | Monitor endpoint availability and response times with synthetic HTTP probes. |
+| [OTel SDK metrics across languages](app-instrumentation/metrics/opentelemetry-sdk/) | Instrument five languages (Python, Node.js, Go, Java, C#) with the OpenTelemetry metrics SDK and push them through Alloy to Prometheus. |
+| [Prometheus client metrics across languages](app-instrumentation/metrics/prometheus-client/) | Expose `/metrics` with native Prometheus client libraries in five languages and scrape them with Alloy. The pull-model counterpart to the OTel SDK scenario. |
 | [OTel metrics pipeline](otel-metrics-pipeline/) | Forward OpenTelemetry metrics from applications through Alloy. Alloy batches and transforms samples before it sends them to Prometheus. |
 
 ### Profiling

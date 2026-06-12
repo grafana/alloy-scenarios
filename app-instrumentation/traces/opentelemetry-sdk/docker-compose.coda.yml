@@ -1,0 +1,45 @@
+services:
+  python:
+    build: ./python
+    environment:
+      - OTEL_SERVICE_NAME=checkout
+      - OTEL_RESOURCE_ATTRIBUTES=service.namespace=onlinestore,service.version=1.0.0,deployment.environment=demo,language=python
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+    restart: unless-stopped
+
+  node:
+    build: ./node
+    environment:
+      - OTEL_SERVICE_NAME=catalog
+      - OTEL_RESOURCE_ATTRIBUTES=service.namespace=onlinestore,service.version=1.0.0,deployment.environment=demo,language=javascript
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+    restart: unless-stopped
+
+  go:
+    build: ./go
+    environment:
+      - OTEL_SERVICE_NAME=inventory
+      - OTEL_RESOURCE_ATTRIBUTES=service.namespace=onlinestore,service.version=1.0.0,deployment.environment=demo,language=go
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+    restart: unless-stopped
+
+  java:
+    build: ./java
+    environment:
+      - OTEL_SERVICE_NAME=orders
+      - OTEL_RESOURCE_ATTRIBUTES=service.namespace=onlinestore,service.version=1.0.0,deployment.environment=demo,language=java
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+    restart: unless-stopped
+
+  csharp:
+    build: ./csharp
+    environment:
+      - OTEL_SERVICE_NAME=shipping
+      - OTEL_RESOURCE_ATTRIBUTES=service.namespace=onlinestore,service.version=1.0.0,deployment.environment=demo,language=csharp
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
+      - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+    restart: unless-stopped
