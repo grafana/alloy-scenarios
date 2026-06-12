@@ -1,107 +1,149 @@
-# App Instrumentation — Prometheus client metrics across languages
+# Prometheus client metrics across languages
 
-This scenario shows how to expose **application metrics with native Prometheus client libraries** in five languages and collect them by **scraping** with Grafana Alloy. Each service plays a role in a fictional polyglot online store, exposes a `/metrics` endpoint, and Alloy pulls from all of them and remote-writes to Prometheus.
+This scenario shows how to expose metrics with native Prometheus client libraries in five languages and collect them by scraping with Grafana Alloy.
+Each service plays a role in a fictional online store, written in a different language, and serves a `/metrics` endpoint.
+Alloy scrapes all five endpoints and remote-writes the samples to Prometheus, where you explore them with **Metrics Drilldown**.
+The `config.alloy` file defines the pipeline.
 
-This is the **pull** half of a pair. Its sibling, [`../opentelemetry-sdk/`](../opentelemetry-sdk/), shows the same store instrumented with the **OpenTelemetry SDK** that **pushes** metrics over OTLP — same goal, opposite collection model.
+Each service runs on its own and updates its metrics in a loop about once a second.
+No service calls another.
+This scenario is the pull half of a pair.
+Its sibling, the OpenTelemetry SDK scenario, instruments the same store with the OpenTelemetry SDK, which pushes metrics over OTLP.
 
-## 🎯 Objectives
+## Before you begin
 
-- **One telemetry type, many languages**: see idiomatic Prometheus client instrumentation in Python, Node.js, Go, Java, and C#.
-- **The scrape (pull) model**: apps expose `/metrics`; Alloy scrapes them on a schedule and remote-writes to Prometheus.
-- **Explicit targets**: the Alloy config lists each service by name so the pull relationship is obvious.
+Ensure you have the following:
 
-## The store and its services
+- [Docker][docker] and [Docker Compose][docker-compose].
+- Ports 3000 for Grafana, 9090 for Prometheus, and 12345 for Alloy free on the host.
 
-Each app is standalone — it updates its metrics in a ~1 second background loop and serves `/metrics` on port **9100**.
+[docker]: https://docs.docker.com/get-docker/
+[docker-compose]: https://docs.docker.com/compose/install/
 
-| Language | Service role | `service_name` | Prometheus client library | Scrape target |
-|----------|-------------|----------------|---------------------------|---------------|
-| **Python** | Checkout / payments | `checkout` | `prometheus-client` | `python:9100` |
-| **Node.js** | Product catalog / search | `catalog` | `prom-client` | `node:9100` |
-| **Go** | Inventory / warehouse | `inventory` | `client_golang` (`promhttp`) | `go:9100` |
-| **Java** | Orders | `orders` | `io.prometheus:prometheus-metrics-core` (1.x) | `java:9100` |
-| **C#** | Shipping / fulfillment | `shipping` | `prometheus-net` | `csharp:9100` |
+## Compare with a related scenario
 
-Each service exposes the same conceptual instruments as the OTel sibling, using idiomatic Prometheus names (snake_case, `_total` for counters, seconds for durations):
+This scenario and its sibling collect the same store metrics with opposite collection models.
 
-| Metric kind | Example (checkout) |
-|-------------|--------------------|
-| Counter | `checkout_transactions_total{status, payment_method}` |
-| Histogram | `checkout_payment_duration_seconds` |
-| Gauge | `checkout_active_carts` |
-| Gauge | `checkout_queue_depth` |
+| Scenario | Instrumentation | Collection model |
+| -------- | --------------- | ---------------- |
+| Prometheus client metrics | Native Prometheus client libraries | Services expose `/metrics`; Alloy scrapes |
+| [OpenTelemetry SDK metrics](../opentelemetry-sdk/) | OpenTelemetry metrics SDK | Services push over OTLP; Alloy receives |
 
-## Directory structure
+## Understand the architecture
 
-```
-metrics/prometheus-client/
-├── config.alloy              # prometheus.scrape (5 static targets) → prometheus.remote_write
-├── prom-config.yaml          # minimal; Alloy pushes via remote_write
-├── docker-compose.yml        # 5 apps + Alloy + Prometheus + Grafana
-├── docker-compose.coda.yml   # just the 5 app services
-├── python/   (app.py, requirements.txt, Dockerfile)
-├── node/     (app.js, package.json, Dockerfile)
-├── go/       (main.go, go.mod, Dockerfile)
-├── java/     (pom.xml, src/main/java/store/App.java, Dockerfile)
-├── csharp/   (App.csproj, Program.cs, Dockerfile)
-└── README.md
+```text
++-------------------+         +-------+       +------------+       +---------+
+| 5 store services  |<--------|       |       |            |       |         |
+| Prometheus client | scrape  | Alloy |------>| Prometheus |------>| Grafana |
+| /metrics on :9100 |         |       | write |            |       |         |
++-------------------+         +-------+       +------------+       +---------+
 ```
 
-## 🚀 Quick start
+- **Store services**: Five containers named `python`, `node`, `go`, `java`, and `csharp`. Each instruments a store domain with its language's Prometheus client library and serves `/metrics` on port 9100.
+- **Alloy**: Scrapes all five endpoints every five seconds and remote-writes the samples to Prometheus.
+- **Prometheus**: Stores the samples through its remote-write endpoint.
+- **Grafana**: Explores the metrics with **Metrics Drilldown**.
 
-```bash
-git clone https://github.com/grafana/alloy-scenarios.git
-cd alloy-scenarios/app-instrumentation/metrics/prometheus-client
+Alloy lists the five targets statically and attaches a `service_name` and a `language` label to each one.
 
-docker compose up --build -d
-```
+| Language | Store role | Service name | Scrape target |
+| -------- | ---------- | ------------ | ------------- |
+| Python | Checkout and payments | `checkout` | `python:9100` |
+| Node.js | Product catalog | `catalog` | `node:9100` |
+| Go | Inventory | `inventory` | `go:9100` |
+| Java | Orders | `orders` | `java:9100` |
+| C# | Shipping | `shipping` | `csharp:9100` |
 
-Or from the repo root with pinned image versions:
+Every service exposes a counter, a histogram, and two gauges, named for its domain with idiomatic Prometheus names.
+The checkout service, for example, exposes `checkout_transactions_total`, `checkout_payment_duration_seconds`, `checkout_active_carts`, and `checkout_queue_depth`.
 
-```bash
-cd app-instrumentation/metrics/prometheus-client
-docker compose --env-file ../../../image-versions.env up --build -d
-```
+## Run the scenario
 
-This starts:
-- **5 language services** exposing `/metrics` on port 9100
-- **Alloy** scraping all five every 5 seconds and remote-writing to Prometheus
-- **Prometheus** storing the metrics (remote-write receiver enabled)
-- **Grafana** with the Metrics Drilldown app
+1. Clone the repository if you haven't already: `git clone https://github.com/grafana/alloy-scenarios.git`
 
-## 🔎 Explore the metrics
+2. Navigate to this scenario: `cd alloy-scenarios/app-instrumentation/metrics/prometheus-client`
 
-- Open **Metrics Drilldown**: http://localhost:3000/a/grafana-metricsdrilldown-app
-- Filter by the `service_name` label (`checkout`, `catalog`, …) or `language`.
-- Query Prometheus at http://localhost:9090, e.g. `sum by (service_name) (rate(checkout_transactions_total[1m]))`.
-- Watch the scrape in the Alloy UI at http://localhost:12345 — the `prometheus.scrape` component lists each target's health.
+3. Build and deploy the scenario: `docker compose up --build -d`
 
-## 🔧 How it works
+   To use the pinned image versions from `image-versions.env`, run `docker compose --env-file ../../../image-versions.env up --build -d` instead.
 
-The Alloy config (`config.alloy`) scrapes five explicit targets and remote-writes the result:
+4. Confirm all containers are up: `docker compose ps`
+   The first build takes a few minutes because the Java and C# images compile from source.
 
-```alloy
-prometheus.scrape "store_apps" {
-  targets = [
-    { "__address__" = "python:9100", "service_name" = "checkout",  "language" = "python" },
-    { "__address__" = "node:9100",   "service_name" = "catalog",   "language" = "javascript" },
-    { "__address__" = "go:9100",     "service_name" = "inventory", "language" = "go" },
-    { "__address__" = "java:9100",   "service_name" = "orders",    "language" = "java" },
-    { "__address__" = "csharp:9100", "service_name" = "shipping",  "language" = "csharp" },
-  ]
-  scrape_interval = "5s"
-  forward_to      = [prometheus.remote_write.local.receiver]
-}
+## Explore the services
 
-prometheus.remote_write "local" {
-  endpoint { url = "http://prometheus:9090/api/v1/write" }
-}
-```
+- **Grafana** at http://localhost:3000: **Metrics Drilldown** and **Explore**, with no login required. Open **Metrics Drilldown** at http://localhost:3000/a/grafana-metricsdrilldown-app.
+- **Prometheus** at http://localhost:9090: Metrics storage backend and query UI.
+- **Alloy UI** at http://localhost:12345: Pipeline graph, scrape target health, and live debug views.
 
-The `service_name` and `language` entries on each target become labels on every scraped series. Apps bind `/metrics` to `0.0.0.0:9100` so Alloy can reach them by their compose service name.
+## Understand the configuration
 
-## Customize
+The `config.alloy` pipeline has two components: `prometheus.scrape` and `prometheus.remote_write`.
 
-- **Add a language**: expose `/metrics` on `:9100`, add the app service to `docker-compose.yml`, and add one line to the `targets` list in `config.alloy`.
-- **Discover dynamically**: swap the static `targets` for `discovery.docker` + `discovery.relabel` to pick up containers automatically (see the logging scenario for that pattern).
-- **Relabel or filter**: add `prometheus.relabel` between the scrape and the remote-write to drop or rename series.
+1. **`prometheus.scrape`**: Lists the five services as static targets, one per container, and scrapes each `/metrics` endpoint every five seconds. The `service_name` and `language` entries on each target become labels on every scraped series. The component forwards the samples to `prometheus.remote_write`.
+2. **`prometheus.remote_write`**: Pushes the samples to Prometheus at `http://prometheus:9090/api/v1/write`.
+
+Prometheus runs with the `--web.enable-remote-write-receiver` flag so it accepts the write.
+Each service binds `/metrics` to `0.0.0.0:9100`, so Alloy can reach it by the container name on the Compose network.
+
+## Try it out
+
+1. Open **Metrics Drilldown** at http://localhost:3000/a/grafana-metricsdrilldown-app.
+
+2. Filter by the `service_name` label to focus on a single service, for example `checkout` or `inventory`.
+
+3. Open Prometheus at http://localhost:9090 and check that every target is healthy:
+
+   ```promql
+   up
+   ```
+
+   Each of the five targets returns `1`.
+
+4. Run a request-rate query:
+
+   ```promql
+   sum by (service_name) (rate(checkout_transactions_total[1m]))
+   ```
+
+5. To inspect the scrape in real time, open the Alloy UI at http://localhost:12345 and select `prometheus.scrape.store_apps` to view target health and use live debug.
+
+## Customize the scenario
+
+- **Add a language**: Serve `/metrics` on port 9100, add the service to `docker-compose.yml`, and add one target to the `targets` list in `prometheus.scrape` in `config.alloy`.
+- **Discover targets dynamically**: Replace the static `targets` list with `discovery.docker` and `discovery.relabel` to pick up containers automatically. The [Popular logging frameworks](../../logging/popular-logging-frameworks/) scenario uses that pattern.
+- **Drop or rename series**: Add a `prometheus.relabel` block between `prometheus.scrape` and `prometheus.remote_write` to filter or relabel the scraped samples.
+
+## Troubleshoot common problems
+
+Diagnose container startup failures, unhealthy scrape targets, and port conflicts.
+
+### Containers didn't start or exited unexpectedly
+
+Run `docker compose ps` to check the status of each container.
+If a container has exited, run `docker compose logs <SERVICE_NAME>` to read the failure reason.
+Replace _SERVICE_NAME_ with the service that exited, for example `java` or `alloy`.
+For Alloy, the most common cause is a syntax error in `config.alloy`.
+
+### A scrape target shows as down
+
+Open the Alloy UI at http://localhost:12345 and select `prometheus.scrape.store_apps` to check which target is down.
+A target is down when its service failed to start or doesn't serve `/metrics` on port 9100.
+Run `docker compose logs <SERVICE_NAME>` for the matching service to read the failure reason.
+
+### Port conflicts with other services
+
+Ports 3000, 9090, and 12345 must be free before you start the stack.
+If another service uses one of these ports, edit the port mapping in `docker-compose.yml` before you run `docker compose up --build -d`.
+
+## Stop the scenario
+
+Run `docker compose down` from the scenario directory.
+Run `docker compose down -v` to remove stored data as well.
+
+## Next steps
+
+- Alloy components: https://grafana.com/docs/alloy/latest/reference/components/
+- `prometheus.scrape` reference: https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.scrape/
+- OpenTelemetry SDK metrics scenario: [../opentelemetry-sdk/](../opentelemetry-sdk/)
+- Prometheus client libraries: https://prometheus.io/docs/instrumenting/clientlibs/
