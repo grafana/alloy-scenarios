@@ -85,7 +85,7 @@ Ensure you have the following:
    ```
 
    `prometheus-values.yml` enables the Prometheus remote write receiver and turns off bundled kube-state-metrics and node exporters.
-   The chart deploys those collectors instead.
+   k8s-monitoring deploys those collectors instead.
 
 6. Install Grafana:
 
@@ -145,7 +145,7 @@ Run the commands again when you start a new session.
 The `k8s-monitoring-values.yml` file sets collectors and destinations in chart values instead of `config.alloy`.
 
 - **`destinations.prometheus`**: Remote-writes metrics to `http://prometheus-server.meta.svc.cluster.local:80/api/v1/write`.
-- **`clusterMetrics`**: Enables cluster metric collection with kube-state-metrics, kubelet, cAdvisor, and node exporters.
+- **`clusterMetrics`**: Enables cluster metric collection with kube-state-metrics, kubelet, cAdvisor, and node exporters through the `alloy-metrics` collector.
 - **`annotationAutodiscovery`**: Scrapes Pods that carry Prometheus-style scrape annotations through the `alloy-metrics` collector.
 - **`collectors`**: Deploys `alloy-metrics` with the `clustered` and `statefulset` presets.
 - **`telemetryServices.kube-state-metrics`**: Deploys kube-state-metrics for Kubernetes object metrics.
@@ -208,14 +208,12 @@ If the Grafana or Alloy Pod restarted, export `POD_NAME` again before you port-f
 
 ## Stop the scenario
 
-```sh
-kind delete cluster
-```
+Run `kind delete cluster` to tear down the local Kind cluster and all workloads.
 
 ## Next steps
 
 - Kubernetes Monitoring Helm chart: https://github.com/grafana/k8s-monitoring-helm
+- Alloy components: https://grafana.com/docs/alloy/latest/reference/components/
 - Prometheus remote write: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write
 - Logs scenario: [Monitor Kubernetes logs with Grafana Alloy and Loki](../logs)
-- Alloy components: https://grafana.com/docs/alloy/latest/reference/components/
 - More examples: https://github.com/grafana/alloy-scenarios
