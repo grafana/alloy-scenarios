@@ -1,6 +1,6 @@
 services:
   mongo:
-    image: mongo:8@sha256:1286be0f98b0da2575280a7a07e50446dfd707d683fd8e51937526b6e3c65fd9
+    image: mongo:8@sha256:49f1d7b87c2ddf918372be5defe7edff8c46703d0b2a56023a3f825e32e1250c
     hostname: mongo
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     ports:
@@ -16,7 +16,7 @@ services:
   # exposed), then continuously inserts documents so the op-counters
   # (mongodb_op_counters_total{type="insert"}) keep incrementing.
   mongo-load:
-    image: mongo:8@sha256:1286be0f98b0da2575280a7a07e50446dfd707d683fd8e51937526b6e3c65fd9
+    image: mongo:8@sha256:49f1d7b87c2ddf918372be5defe7edff8c46703d0b2a56023a3f825e32e1250c
     depends_on:
       mongo:
         condition: service_healthy
