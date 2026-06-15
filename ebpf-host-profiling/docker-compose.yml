@@ -40,7 +40,7 @@ services:
   # containers' processes, privileged mode to load eBPF programs and read
   # kernel symbols, and the Docker socket for container discovery.
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.16.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.0}
     privileged: true
     pid: host
     ports:
