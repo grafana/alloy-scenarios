@@ -1,0 +1,64 @@
+// #############################################
+// #### Traces + Exemplar-Carrying Metrics  ####
+// #############################################
+
+// Enable live debugging for the Alloy UI.
+livedebugging {
+	enabled = true
+}
+
+// ---- Trace pipeline: app -> Alloy -> Tempo ----
+
+// Receive OpenTelemetry traces from the demo app.
+otelcol.receiver.otlp "default" {
+	grpc {}
+	http {}
+
+	output {
+		traces = [otelcol.processor.batch.default.input]
+	}
+}
+
+// Batch processor to improve performance.
+otelcol.processor.batch "default" {
+	output {
+		traces = [otelcol.exporter.otlp.tempo.input]
+	}
+}
+
+// Send traces to Tempo -- the destination the exemplar links point at.
+otelcol.exporter.otlp "tempo" {
+	client {
+		endpoint = "tempo:4317"
+
+		tls {
+			insecure = true
+		}
+	}
+}
+
+// ---- Metric pipeline: app /metrics -> Alloy -> Prometheus ----
+
+// Scrape the demo app. Exemplars only exist in the OpenMetrics exposition
+// format, so the scrape negotiates OpenMetrics first -- with plain
+// Prometheus text the trace IDs would be silently absent.
+prometheus.scrape "demo_app" {
+	targets = [{
+		__address__ = "demo-app:8080",
+	}]
+	forward_to = [prometheus.remote_write.default.receiver]
+
+	scrape_interval  = "10s"
+	scrape_protocols = ["OpenMetricsText1.0.0", "PrometheusText0.0.4"]
+}
+
+// Forward metrics AND their exemplars to Prometheus. send_exemplars is
+// the default, but it is the load-bearing setting of this scenario, so
+// it is spelled out.
+prometheus.remote_write "default" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+
+		send_exemplars = true
+	}
+}
