@@ -65,6 +65,7 @@ These scenarios show distributed tracing with OpenTelemetry and Tempo.
 | [Distributed tracing](trace-delivery/) | Learn distributed tracing through a sofa delivery workflow from order to doorstep. |
 | [Game of tracing](game-of-tracing/) | Play an interactive strategy game that teaches distributed tracing, sampling, and service graphs. |
 | [OpenTelemetry basic tracing](otel-basic-tracing/) | Collect and visualize OpenTelemetry traces with Alloy and Tempo. |
+| [OpenTelemetry load balancing](otel-loadbalancing/) | Shard traces across two tail-sampling Alloy instances with `otelcol.exporter.loadbalancing` -- same trace ID, same backend. |
 | [OpenTelemetry service graphs](otel-tracing-service-graphs/) | Generate service graphs with the Alloy `servicegraph` connector. |
 | [OpenTelemetry span metrics](otel-span-metrics/) | Generate RED metrics from OpenTelemetry traces with the span metrics connector. Request rate, error rate, and duration. |
 | [OpenTelemetry tail sampling](otel-tail-sampling/) | Apply tail sampling policies to OpenTelemetry traces with Alloy and Tempo. |
