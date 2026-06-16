@@ -4,7 +4,7 @@ This scenario shows how to collect system metrics and logs from a Linux host wit
 Alloy uses the `prometheus.exporter.unix` component to collect CPU, memory, disk, and network metrics.
 It also collects logs from the systemd journal and from common log files under `/var/log`.
 Alloy forwards metrics to Prometheus and log entries to Loki.
-Grafana includes pre-configured Prometheus and Loki data sources.
+Grafana includes provisioned Prometheus and Loki data sources.
 
 ## Before you begin
 
@@ -19,6 +19,19 @@ Ensure you have the following:
 [docker]: https://docs.docker.com/get-docker/
 [docker-compose]: https://docs.docker.com/compose/install/
 
+## Compare with a related scenario
+
+| Aspect          | `linux/`                                                                                 | [`systemd-journal/`](../systemd-journal/)      |
+| --------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Scope           | Metrics, journal, and flat files                                                         | Journal only                                   |
+| Pipeline        | Pass-through ingest for all journal units and priorities                                 | Drops noisy units and info or debug priorities |
+| Stack           | Prometheus, Loki, Grafana, and Alloy                                                     | Loki, Grafana, and Alloy only                  |
+| Labels promoted | `unit`, `boot_id`, `instance`, `machine_id`, `transport`, and `level` on journal entries | `unit`, `priority`, and `hostname`             |
+| Demo intent     | Monitor a Linux host end to end                                                          | Show advanced journal filtering recipes        |
+
+Use this scenario for full Linux host observability with metrics and logs.
+Use `systemd-journal/` when you need focused journal filtering with fewer moving parts.
+
 ## Understand the architecture
 
 ```text
@@ -31,7 +44,7 @@ Ensure you have the following:
 
 - **Linux host**: The machine where you run Docker.
   Alloy uses `prometheus.exporter.unix` and the log sources in `config.alloy` to read metrics and logs from the environment available to the container.
-- **Alloy**: Scrapes Node Exporter metrics from the host, tails log files and the systemd journal, and remote-writes both signals to their respective backends.
+- **Alloy**: Collects system metrics with `prometheus.exporter.unix`, tails log files and the systemd journal, and remote-writes both signals to their respective backends.
 - **Prometheus**: Stores the scraped system metrics.
 - **Loki**: Stores the log entries.
 - **Grafana**: Visualizes metrics and logs.
@@ -70,30 +83,30 @@ The `config.alloy` pipeline runs two parallel paths: one for metrics and one for
 
 Metrics path:
 
-1. **`prometheus.exporter.unix`**: Exposes Node Exporter metrics for the host.
+1. **`prometheus.exporter.unix.integrations_node_exporter`**: Exposes Unix system metrics from the environment available to the Alloy process.
    The configuration disables the `ipvs`, `btrfs`, `infiniband`, `xfs`, and `zfs` collectors, and enables the `meminfo` collector.
-2. **`discovery.relabel`**: Adds `instance` and `job` labels to all metric targets before Alloy scrapes them.
-3. **`prometheus.scrape`**: Scrapes the exporter every 15 seconds and forwards samples to `prometheus.remote_write.local`.
-4. **`prometheus.remote_write`**: Sends all metrics to Prometheus at `http://prometheus:9090/api/v1/write`.
+2. **`discovery.relabel.integrations_node_exporter`**: Adds `instance` and `job` labels to all metric targets before Alloy scrapes them.
+3. **`prometheus.scrape.integrations_node_exporter`**: Scrapes the exporter every 15 seconds and forwards samples to `prometheus.remote_write.local`.
+4. **`prometheus.remote_write.local`**: Sends all metrics to Prometheus at `http://prometheus:9090/api/v1/write`.
 
 Logs path:
 
-The logs path has two parallel sources that both forward to `loki.write`.
+The logs path has two parallel sources that both forward to `loki.write.local`.
 
 Journal source:
 
-1. **`discovery.relabel`**: Defines relabel rules for journal entries and promotes `unit`, `boot_id`, `instance`, `machine_id`, `transport`, and `level` as Loki labels.
-2. **`loki.source.journal`**: Reads the systemd journal for the last 24 hours with `max_age = "24h0m0s"` and forwards entries to `loki.write.local`.
+1. **`discovery.relabel.logs_integrations_integrations_node_exporter_journal_scrape`**: Defines relabel rules for journal entries and promotes `unit`, `boot_id`, `instance`, `machine_id`, `transport`, and `level` as Loki labels.
+2. **`loki.source.journal.logs_integrations_integrations_node_exporter_journal_scrape`**: Reads the systemd journal for the last 24 hours with `max_age = "24h0m0s"` and forwards entries to `loki.write.local`.
 
 File source:
 
-1. **`local.file_match`**: Discovers log files at `/var/log/{syslog,messages,*.log}` and sets `instance` and `job` labels on each target.
-2. **`loki.source.file`**: Tails the matched files and forwards entries to `loki.write.local`.
+1. **`local.file_match.logs_integrations_integrations_node_exporter_direct_scrape`**: Discovers log files at `/var/log/{syslog,messages,*.log}` and sets `instance` and `job` labels on each target.
+2. **`loki.source.file.logs_integrations_integrations_node_exporter_direct_scrape`**: Tails the matched files and forwards entries to `loki.write.local`.
 
-Both log sources converge at **`loki.write`**, which pushes all log entries to Loki at `http://loki:3100/loki/api/v1/push`.
+Both log sources converge at **`loki.write.local`**, which pushes all log entries to Loki at `http://loki:3100/loki/api/v1/push`.
 
 The metrics and logs paths don't share components.
-The journal and file sources both send data to the same `loki.write` component.
+The journal and file sources both send data to the same `loki.write.local` component.
 `livedebugging{}` uses default settings so you can inspect both paths in the Alloy UI without extra configuration.
 
 ## Try it out
@@ -104,8 +117,10 @@ The journal and file sources both send data to the same `loki.write` component.
    Select the **Prometheus** data source and click **Import**.
    The dashboard provides CPU, memory, disk, and network panels pre-built against the metrics this scenario collects.
 
-2. To explore logs, open the Loki Explore view in Grafana at `http://localhost:3000/a/grafana-lokiexplore-app`.
-   Run `{job="integrations/node_exporter"}` to see log entries that Alloy collects from the journal and log files.
+2. To explore logs, open **Explore** in Grafana at http://localhost:3000 and select the **Loki** data source.
+   Run `{job="integrations/node_exporter"}` to see log entries from the journal and file sources.
+   In the default Docker setup without host bind mounts, this query may return little or no data because Alloy reads from paths inside the container.
+   Add bind mounts for `/var/log` and journal directories as described in **Customize the scenario** to collect host logs.
 
 3. To inspect both pipelines in real time, open the Alloy UI at http://localhost:12345.
    Select `prometheus.scrape.integrations_node_exporter`, `loki.source.journal.logs_integrations_integrations_node_exporter_journal_scrape`, or `loki.source.file.logs_integrations_integrations_node_exporter_direct_scrape` from the component graph to use live debug.
@@ -157,8 +172,8 @@ For Alloy specifically, the most common cause is a syntax error in `config.alloy
 ### No data appears in Grafana after a few minutes
 
 Open the Alloy UI at http://localhost:12345 and check that all components show a healthy status.
-Select the relevant source component and use live debug to confirm data passes through the pipeline.
-If the pipeline looks healthy but Grafana shows nothing, confirm that you select the correct data source in **Explore**.
+Select the relevant source component and use live debug to check that data passes through the pipeline.
+If the pipeline looks healthy but Grafana shows nothing, check that you select the correct data source in **Explore**.
 
 ### Port conflicts with other services
 
@@ -168,7 +183,7 @@ If another service uses one of these ports, edit the port mapping in `docker-com
 ### Metrics reflect a VM rather than the host machine
 
 On macOS and Windows, Docker Desktop runs containers inside a Linux virtual machine.
-The default `docker-compose.yml` doesn't mount host `/proc` or `/sys`, so Node Exporter reports the container or virtual machine CPU, memory, and disk, not your physical machine.
+The default `docker-compose.yml` doesn't mount host `/proc` or `/sys`, so `prometheus.exporter.unix` reports the container or virtual machine CPU, memory, and disk, not your physical machine.
 You should expect this behavior.
 To monitor your actual host, add bind mounts to `docker-compose.yml` or run Alloy natively on a Linux machine.
 
@@ -180,12 +195,13 @@ Run `journalctl --disk-usage` on the host to confirm whether journal data exists
 
 ## Stop the scenario
 
-```sh
-docker compose down
-```
+Run `docker compose down` from the `linux` directory.
 
 ## Next steps
 
 - Alloy components: https://grafana.com/docs/alloy/latest/reference/components/
+- `prometheus.exporter.unix` reference: https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.exporter.unix/
+- `loki.source.journal` reference: https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.journal/
 - Linux install guide: https://grafana.com/docs/alloy/latest/set-up/install/linux/
+- Journal filtering recipes: [`systemd-journal/`](../systemd-journal/)
 - More examples: https://github.com/grafana/alloy-scenarios

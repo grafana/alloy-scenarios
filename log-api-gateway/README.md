@@ -3,7 +3,7 @@
 This scenario shows how to use Grafana Alloy as a centralized log gateway with the `loki.source.api` component.
 Instead of scraping logs from files or containers, Alloy exposes a Loki-compatible push API endpoint that applications can send logs to directly.
 Alloy enriches incoming logs with a `gateway=alloy` label and forwards them to Loki.
-Grafana includes a pre-configured Loki data source for querying the logs.
+Grafana includes a provisioned Loki data source for querying the logs.
 
 When you start the stack, a log-producer container runs automatically.
 It simulates `auth-service`, `order-service`, and `notification-service`, posting logs to Alloy every 0.5–2 seconds.
@@ -17,6 +17,19 @@ Ensure you have the following:
 
 [docker]: https://docs.docker.com/get-docker/
 [docker-compose]: https://docs.docker.com/compose/install/
+
+## Compare with a related scenario
+
+| Aspect          | `log-api-gateway/`                        | [`logs-file/`](../logs-file/)                    |
+| --------------- | ----------------------------------------- | ------------------------------------------------ |
+| Ingestion model | Applications push logs to Alloy over HTTP | Alloy tails log files from disk                  |
+| Alloy component | `loki.source.api`                         | `local.file_match` and `loki.source.file`        |
+| Processing      | Adds a static `gateway=alloy` label       | Direct forward with no processing stage          |
+| Demo app        | Python producer POSTs Loki push JSON      | Python script writes to a shared log file        |
+| Use case        | Central gateway for many push clients     | Monitor files Alloy can read from the filesystem |
+
+Use this scenario when applications already send logs with the Loki push API format.
+Use `logs-file/` when Alloy should discover and tail files instead.
 
 ## Understand the architecture
 
@@ -32,7 +45,7 @@ Ensure you have the following:
   Each request includes stream labels `service_name` (one of the three demo services) and `environment="demo"`.
 - **Alloy**: Receives logs via `loki.source.api` on port 3500, adds a `gateway=alloy` label in `loki.process.enrich`, and forwards them to Loki.
 - **Loki**: Stores and indexes the log entries.
-- **Grafana**: Visualizes logs from the pre-configured Loki data source.
+- **Grafana**: Visualizes logs from the provisioned Loki data source.
 
 ## Run the scenario
 
@@ -80,7 +93,10 @@ The `config.alloy` pipeline in this scenario has a single logs path with three s
 2. **`loki.process.enrich`**: Adds a static `gateway=alloy` label via `stage.static_labels`.
 3. **`loki.write.local`**: Forwards enriched logs to Loki at `http://loki:3100/loki/api/v1/push`.
 
-`livedebugging{}` is enabled so you can inspect the pipeline in the Alloy UI without extra configuration.
+`livedebugging` is enabled so you can inspect the pipeline in the Alloy UI.
+
+The demo producer sends logs in Loki push API format.
+Each request includes a `streams` array with label sets and timestamped log lines:
 
 ```json
 {
@@ -137,8 +153,8 @@ This scenario runs Alloy with `--stability.level=experimental` because `loki.sou
 ### No data appears in Grafana after a few minutes
 
 Open the Alloy UI at http://localhost:12345 and check that all components show a healthy status.
-Select `loki.source.api.default` and use live debug to confirm push requests pass through the pipeline.
-If the pipeline looks healthy but Grafana shows nothing, confirm that you select the **Loki** data source in **Explore**.
+Select `loki.source.api.default` and use live debug to check that push requests pass through the pipeline.
+If the pipeline looks healthy but Grafana shows nothing, check that you select the **Loki** data source in **Explore**.
 
 ### Port conflicts with other services
 
@@ -149,17 +165,17 @@ If another service uses one of these ports, edit the port mapping in `docker-com
 
 The `log-producer` container posts to `http://alloy:3500/loki/api/v1/push` inside the Docker network.
 If Alloy isn't ready when the producer starts, you may see connection errors in the producer logs.
-Run `docker compose logs log-producer` and confirm you see `Starting log producer...` without repeated errors.
+Run `docker compose logs log-producer` and check that you see `Starting log producer...` without repeated errors.
 If errors persist, restart the producer after Alloy is healthy: `docker compose restart log-producer`.
 
 ## Stop the scenario
 
-```sh
-docker compose down
-```
+Run `docker compose down` from the `log-api-gateway` directory.
 
 ## Next steps
 
 - Alloy components: https://grafana.com/docs/alloy/latest/reference/components/
+- `loki.source.api` reference: https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.api/
 - Loki push API: https://grafana.com/docs/loki/latest/reference/loki-http-api/#ingest-logs
+- File tailing alternative: [`logs-file/`](../logs-file/)
 - More examples: https://github.com/grafana/alloy-scenarios
