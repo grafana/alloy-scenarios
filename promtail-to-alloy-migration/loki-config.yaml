@@ -1,0 +1,46 @@
+
+# This is a complete configuration to deploy Loki backed by the filesystem.
+# The index will be shipped to the storage via tsdb-shipper.
+
+auth_enabled: false
+
+limits_config:
+  allow_structured_metadata: true
+  volume_enabled: true
+
+server:
+  http_listen_port: 3100
+
+common:
+  ring:
+    instance_addr: 0.0.0.0
+    kvstore:
+      store: inmemory
+  replication_factor: 1
+  path_prefix: /tmp/loki
+
+schema_config:
+  configs:
+  - from: 2020-05-15
+    store: tsdb
+    object_store: filesystem
+    schema: v13
+    index:
+      prefix: index_
+      period: 24h
+
+storage_config:
+  tsdb_shipper:
+    active_index_directory: /tmp/loki/index
+    cache_location: /tmp/loki/index_cache
+  filesystem:
+    directory: /tmp/loki/chunks
+
+pattern_ingester:
+  enabled: true
+
+# Note: We are setting the max chunk age far lower than the default expected value
+# This is due to the fact this scenario is used within the LogCLI demo and we need a short flush time.
+# To show how logcli stats --since 24h '{service_name="Delivery World", package_size="Large"}' works.
+ingester:
+  max_chunk_age: 5m # Should be 2 hours
