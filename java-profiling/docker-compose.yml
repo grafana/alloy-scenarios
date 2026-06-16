@@ -1,0 +1,73 @@
+services:
+  # Pyroscope: continuous profiling backend and UI
+  pyroscope:
+    image: grafana/pyroscope:${GRAFANA_PYROSCOPE_VERSION:-2.0.3}
+    ports:
+      - 4040:4040
+
+  # Grafana: visualize flame graphs via the Pyroscope datasource
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-13.0.2}
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+    ports:
+      - 3000:3000/tcp
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /etc/grafana/provisioning/datasources
+        cat <<EOF > /etc/grafana/provisioning/datasources/ds.yaml
+        apiVersion: 1
+        datasources:
+        - name: Pyroscope
+          type: grafana-pyroscope-datasource
+          access: proxy
+          orgId: 1
+          url: http://pyroscope:4040
+          basicAuth: false
+          isDefault: true
+          version: 1
+          editable: false
+        EOF
+        /run.sh
+    depends_on:
+      - pyroscope
+
+  # The JVM workload under profile: two deterministic hot paths
+  # (Main.burnCpu and Main.churnAllocations) so the flame graphs have
+  # recognizable frames. The fixed container_name lets the Alloy service
+  # join this exact container's PID namespace below.
+  java-app:
+    build: ./app
+    container_name: java-app
+    restart: unless-stopped
+    volumes:
+      # Shared with Alloy: the JVM attach handshake (/tmp/.java_pid<PID>)
+      # and the async-profiler library Alloy extracts both live in /tmp,
+      # and must be visible to BOTH containers at the same path.
+      - jvm-tmp:/tmp
+
+  # Alloy with pyroscope.java. async-profiler attaches to a running JVM,
+  # which requires Alloy to (a) see the JVM's PID namespace -- hence
+  # pid: "container:java-app" -- (b) ptrace it -- hence SYS_PTRACE -- and
+  # (c) share /tmp with it for the attach socket and the profiler library.
+  alloy:
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.16.1}
+    pid: "container:java-app"
+    cap_add:
+      - SYS_PTRACE
+    ports:
+      - 12345:12345
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy
+      - jvm-tmp:/tmp
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    depends_on:
+      - pyroscope
+      - java-app
+
+volumes:
+  jvm-tmp:

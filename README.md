@@ -89,6 +89,7 @@ These scenarios collect continuous profiles from applications.
 | -------- | ----------- |
 | [Continuous profiling](continuous-profiling/) | Collect and visualize CPU, memory, and goroutine profiles from Go applications with Grafana Pyroscope. |
 | [eBPF host profiling](ebpf-host-profiling/) | Profile every process on a Linux host with `pyroscope.ebpf` -- no language agents, no application code changes. Uses Docker container discovery to attribute samples per workload. |
+| [Java profiling](java-profiling/) | Attach async-profiler to a running JVM with `pyroscope.java` -- CPU and allocation flame graphs with no agent jar and no code changes. |
 
 ### Secrets and configuration
 

@@ -1,0 +1,62 @@
+// #################################
+// #### Profiling Configuration ####
+// #################################
+
+// Enable live debugging for the Alloy UI.
+livedebugging {
+	enabled = true
+}
+
+// Discover processes visible to Alloy. Because the container runs with
+// pid: "container:java-app", the only foreign process in view is the
+// demo JVM -- exactly the one to profile.
+discovery.process "all" {
+	refresh_interval = "5s"
+
+	discover_config {
+		exe         = true
+		commandline = true
+	}
+}
+
+// Keep only java processes and name the application. service_name is the
+// label Pyroscope groups profiles under.
+discovery.relabel "java" {
+	targets = discovery.process.all.targets
+
+	rule {
+		source_labels = ["__meta_process_exe"]
+		regex         = ".*/java$"
+		action        = "keep"
+	}
+
+	rule {
+		target_label = "service_name"
+		replacement  = "java-app"
+	}
+}
+
+// Attach async-profiler to the discovered JVM and collect CPU and
+// allocation profiles. The "itimer" event needs no perf_event access,
+// so it works in restricted environments such as CI runners; switch to
+// event = "cpu" for perf-based sampling where the kernel allows it.
+pyroscope.java "jvm" {
+	targets    = discovery.relabel.java.output
+	forward_to = [pyroscope.write.default.receiver]
+
+	profiling_config {
+		interval    = "15s"
+		cpu         = true
+		event       = "itimer"
+		sample_rate = 100
+		alloc       = "512k"
+		lock        = "10ms"
+	}
+}
+
+// Push the collected profiles to the local Pyroscope server.
+pyroscope.write "default" {
+	endpoint {
+		url = "http://pyroscope:4040"
+	}
+}

@@ -1,0 +1,14 @@
+services:
+  # The JVM workload under profile: two deterministic hot paths
+  # (Main.burnCpu and Main.churnAllocations) so the flame graphs have
+  # recognizable frames. The fixed container_name lets the Alloy service
+  # in the main compose file join this exact container's PID namespace.
+  java-app:
+    build: ./app
+    container_name: java-app
+    restart: unless-stopped
+    volumes:
+      - jvm-tmp:/tmp
+
+volumes:
+  jvm-tmp:
