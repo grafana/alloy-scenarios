@@ -1,0 +1,30 @@
+# Minimal single-binary Tempo for local trace storage. Receives OTLP from the
+# minimal collector and stores blocks on local disk. Not production config.
+stream_over_http_enabled: true
+server:
+  http_listen_port: 3200
+  log_level: info
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "tempo:4317"
+        http:
+          endpoint: "tempo:4318"
+
+ingester:
+  max_block_duration: 5m               # cut the headblock quickly so traces appear fast
+
+compactor:
+  compaction:
+    block_retention: 1h                # short retention for a demo
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks

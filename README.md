@@ -166,6 +166,15 @@ Refer to the [OTel examples README](otel-examples/) for details.
 | [PII redaction](otel-examples/pii-redaction/) | Scrub personally identifiable information, credit cards, emails, and IP addresses from traces and logs with OpenTelemetry Transformation Language `replace_pattern`. |
 | [Resource enrichment](otel-examples/resource-enrichment/) | Attach host, OS, and Docker metadata to all signals with `resourcedetection`. |
 
+### Custom builds
+
+These scenarios build your own Alloy components and ship them in a custom image.
+Refer to the [Custom builds README](custom-builds/) for the compile-in model and build-time expectations.
+
+| Scenario | Description |
+| -------- | ----------- |
+| [Minimal OTel collector](custom-builds/minimal-otel/) | Build a collector with only the OTel parts you need using the OpenTelemetry Collector Builder (OCB). The image is ~41 MB versus ~670 MB for full Alloy. |
+
 ## Contribute
 
 Contributions of scenarios and improvements are welcome.
