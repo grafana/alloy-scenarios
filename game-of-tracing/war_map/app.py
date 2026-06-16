@@ -97,7 +97,7 @@ MAPS_META = {
         "display_name": "White Walkers Attack",
         "description": (
             "The Long Night has come. As the Night's Watch, hold every Wall "
-            "keep for 5 ticks before the White Walkers do. Single-player."
+            "keep for 5 ticks — or storm the enemy fortress. Single-player."
         ),
         "single_player": True,
         "player_faction": "nights_watch",
@@ -832,9 +832,9 @@ def make_api_request(location_id, endpoint, method='GET', data=None):
 def _deactivate_ai_once():
     """POST /deactivate to the AI the first time a winner is declared.
 
-    Without this the AI keeps fighting forever after a wall-hold win — its
-    own self-stop only triggers when its capital flips, which never happens
-    on White Walkers Attack.
+    Without this the AI keeps fighting forever after a wall-hold win or a
+    Castle Black capture — its own self-stop only triggers when its *own*
+    capital flips.
     """
     global AI_DEACTIVATED_ON_GAME_OVER
     if AI_DEACTIVATED_ON_GAME_OVER:
@@ -864,36 +864,64 @@ def _reject_if_game_over():
     return None
 
 
+# Original owner of each capital, per map. A capital held by any other
+# non-neutral faction means the captor has won. Keep in sync with the
+# capital-type locations in app/game_config.py's MAPS[map_id]["locations"].
+CAPITALS_BY_MAP = {
+    "war_of_kingdoms": {
+        "southern_capital": "southern",
+        "northern_capital": "northern",
+    },
+    "white_walkers_attack": {
+        "nights_watch_fortress": "nights_watch",
+        "white_walker_fortress": "white_walkers",
+    },
+}
+
+CAPITAL_CAPTURE_MESSAGES = {
+    ("war_of_kingdoms", "northern"): "The Northern Kingdom has conquered the Southern Capital! Victory through unity!",
+    ("war_of_kingdoms", "southern"): "The Southern Kingdom has conquered the Northern Capital! Glory to the South!",
+    ("white_walkers_attack", "nights_watch"): "The Lands of Always Winter have fallen! The Night King is destroyed and the Long Night is over.",
+    ("white_walkers_attack", "white_walkers"): "Castle Black has fallen. The dead pour south — the Long Night has come for Westeros.",
+}
+
+
 def check_game_over(locations_data, map_id=None):
-    """Dispatch to the right win-condition check based on the active map."""
+    """Dispatch to the right win-condition checks based on the active map.
+
+    Capital capture ends the game on every map. White Walkers Attack adds
+    hold-the-walls as a second, slower path to victory.
+    """
     if map_id is None:
         map_id = get_active_map_id()
+    if check_capital_capture_win(locations_data, map_id):
+        return True
     if map_id == "white_walkers_attack":
-        # WWA games end only via hold-the-walls. Capital captures do not end
-        # the game (the capital can change hands mid-match).
         return check_wall_hold_win(locations_data, map_id)
-    return check_capital_capture_win(locations_data)
+    return False
 
 
-def check_capital_capture_win(locations_data):
-    """Classic WoK win: take the enemy capital."""
+def check_capital_capture_win(locations_data, map_id=None):
+    """Decisive win on every map: take a capital from its original owner."""
     global GAME_OVER, WINNER, VICTORY_MESSAGE
 
-    if locations_data.get('southern_capital', {}).get('faction') == 'northern':
+    if map_id is None:
+        map_id = get_active_map_id()
+
+    for capital_id, original_owner in CAPITALS_BY_MAP.get(map_id, {}).items():
+        captor = locations_data.get(capital_id, {}).get('faction')
+        if not captor or captor in (original_owner, 'neutral', 'barbarian'):
+            continue
         GAME_OVER = True
-        WINNER = 'northern'
-        VICTORY_MESSAGE = "The Northern Kingdom has conquered the Southern Capital! Victory through unity!"
+        WINNER = captor
+        VICTORY_MESSAGE = CAPITAL_CAPTURE_MESSAGES.get(
+            (map_id, captor),
+            f"{captor.replace('_', ' ').title()} has captured the enemy capital!",
+        )
         _deactivate_ai_once()
         return True
 
-    if locations_data.get('northern_capital', {}).get('faction') == 'southern':
-        GAME_OVER = True
-        WINNER = 'southern'
-        VICTORY_MESSAGE = "The Southern Kingdom has conquered the Northern Capital! Glory to the South!"
-        _deactivate_ai_once()
-        return True
-
-    logger.info("Game is not over")
+    logger.debug("Game is not over")
     return False
 
 
@@ -1479,7 +1507,7 @@ def move_army():
         )
         
         # Check if this move resulted in a victory condition
-        if target_id in ['southern_capital', 'northern_capital'] and result.get('success'):
+        if target_id in CAPITALS_BY_MAP.get(get_active_map_id(), {}) and result.get('success'):
             locations_data = {}
             for loc_id in _current_positions().keys():
                 data = make_api_request(loc_id, '')

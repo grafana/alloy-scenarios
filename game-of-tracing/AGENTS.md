@@ -77,7 +77,7 @@ Overriding `DATABASE_FILE` (game_state) or `GAME_SESSIONS_DB` (game_sessions) en
 | Map id | Players | Factions | Win | Notable rules |
 |---|---|---|---|---|
 | `war_of_kingdoms` (default) | 2 | `southern`, `northern`, `neutral` | Capture enemy capital | Classic — 30 resources per army, 20 resource/collect at capitals, village passive +10/15 s |
-| `white_walkers_attack` | 1 (player is `nights_watch`) | `nights_watch`, `white_walkers`, `barbarian`, `neutral` | Hold every `wall` keep for 5 × 30 s ticks | `wall` settlement type doubles defenders; WW spends 5 corpses per army (no resources); barbarian villages grow +1 army every 30 s; WW fortress passively +1 corpse every 15 s |
+| `white_walkers_attack` | 1 (player is `nights_watch`) | `nights_watch`, `white_walkers`, `barbarian`, `neutral` | Capture the enemy fortress, or hold every `wall` keep for 5 × 30 s ticks | `wall` settlement type doubles defenders and earns its holder +5 resources/15 s (sendable to the capital); WW spends 5 corpses per army (no resources); barbarian villages grow +1 army every 30 s; WW fortress passively +1 corpse every 15 s |
 
 Each map also defines a **slot assignments** dict (`slot_1` → logical location id) so the 8 physical containers can serve either map. See "Slot identity" below.
 
