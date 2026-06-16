@@ -151,13 +151,16 @@ The `k8s-monitoring-values.yml` file sets collectors and destinations in chart v
 
 1. Start the Grafana port-forward, then open http://localhost:3000.
 
-2. Deploy a sample instrumented application in `prod` to generate traces:
+2. Deploy a workload in `prod` to generate traces.
+
+   Install Tempo distributed as an example workload:
 
    ```sh
    helm install tempo-distributed grafana/tempo-distributed -n prod
    ```
 
-   You can also deploy any application instrumented with the OpenTelemetry SDK that points at the Alloy OTLP endpoint in **Customize the scenario**.
+   This chart doesn't send application traces to Alloy by default.
+   Point any OpenTelemetry-instrumented app at the Alloy OTLP endpoint in **Customize the scenario**, or configure the demo workload to export traces there.
 
 3. In Grafana **Explore**, select the **Tempo** data source and search with TraceQL:
 
@@ -172,7 +175,8 @@ The `k8s-monitoring-values.yml` file sets collectors and destinations in chart v
 
 - **Toggle application observability**: Set `applicationObservability.enabled` in `k8s-monitoring-values.yml`.
 - **Point at your own Tempo**: Update the `destinations.tempo.url` value in `k8s-monitoring-values.yml` and remove the in-cluster Tempo Helm release.
-- **Send traces from your apps**: Set the OTLP exporter endpoint on instrumented workloads:
+- **Send traces from your apps**: Set the OTLP exporter endpoint on instrumented workloads.
+  Use gRPC on port 4317 or HTTP on port 4318:
 
   ```text
   OTEL_EXPORTER_OTLP_ENDPOINT=http://k8s-alloy-receiver.meta.svc.cluster.local:4317
@@ -217,14 +221,12 @@ If the Grafana or Alloy Pod restarted, export `POD_NAME` again before you port-f
 
 ## Stop the scenario
 
-```sh
-kind delete cluster
-```
+Run `kind delete cluster` to tear down the local Kind cluster and all workloads.
 
 ## Next steps
 
 - Kubernetes Monitoring Helm chart: https://github.com/grafana/k8s-monitoring-helm
+- Alloy components: https://grafana.com/docs/alloy/latest/reference/components/
 - Tempo documentation: https://grafana.com/docs/tempo/latest/
 - Logs scenario: [Monitor Kubernetes logs with Grafana Alloy and Loki](../logs)
-- Alloy components: https://grafana.com/docs/alloy/latest/reference/components/
 - More examples: https://github.com/grafana/alloy-scenarios

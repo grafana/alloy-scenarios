@@ -52,7 +52,7 @@ Ensure you have the following:
 - **Alloy**: Watches events through `loki.source.kubernetes_events`, parses JSON, promotes labels, and pushes entries to Loki.
   Run one replica only. Multiple replicas would write duplicate lines for the same event.
 - **Loki**: Stores the event log entries.
-- **Grafana**: Queries events through a pre-configured Loki data source.
+- **Grafana**: Queries events through a provisioned Loki data source.
 
 ## Run the scenario
 
@@ -122,7 +122,7 @@ The `alloy-config.yaml` ConfigMap defines three components:
    - `stage.structured_metadata` stores `name` as structured metadata instead of a label.
 3. **`loki.write.loki`**: Pushes entries to `http://loki-gateway.meta.svc.cluster.local/loki/api/v1/push`.
 
-`livedebugging{}` is enabled.
+`livedebugging` uses default settings.
 
 Indexed labels are `job`, `type`, `reason`, `namespace`, and `kind`.
 The `instance` label identifies the Alloy component.
@@ -183,7 +183,7 @@ For Alloy, check the `config.alloy` block in `alloy-config.yaml` for syntax erro
 
 ### No data appears in Grafana after a few minutes
 
-Open the Alloy UI and confirm components are healthy.
+Open the Alloy UI and check that components are healthy.
 Use live debug on `loki.source.kubernetes_events.cluster` to verify events arrive.
 In Grafana, select the **Loki** data source and run `{job="kubernetes-events"}`.
 If the cluster is idle, generate test events with the commands in **Try it out**.
@@ -201,17 +201,16 @@ Keep the Deployment at `replicas: 1` in `alloy-deployment.yaml`.
 
 ### Port-forward connection refused
 
-Confirm the Pod is `Running`, then rerun the port-forward command from **Access the services**.
+Check that the Pod is `Running`, then rerun the port-forward command from **Access the services**.
 
 ## Stop the scenario
 
-```sh
-kind delete cluster
-```
+Run `kind delete cluster` to tear down the local Kind cluster and all workloads.
 
 ## Next steps
 
-- `loki.source.kubernetes_events` reference: https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.kubernetes_events/
 - Alloy components: https://grafana.com/docs/alloy/latest/reference/components/
+- `loki.source.kubernetes_events` reference: https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.kubernetes_events/
+- `loki.process` reference: https://grafana.com/docs/alloy/latest/reference/components/loki/loki.process/
 - Logs scenario: [Monitor Kubernetes logs with Grafana Alloy and Loki](../logs)
 - More examples: https://github.com/grafana/alloy-scenarios

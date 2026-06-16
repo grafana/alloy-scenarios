@@ -123,10 +123,17 @@ The chart creates multiple Alloy Pods. Port-forward the `alloy-logs` Pod for the
   kubectl --namespace meta port-forward $POD_NAME 3000
   ```
 
-- Alloy UI at http://localhost:12345:
+- Alloy UI at http://localhost:12345 for Pod logs:
 
   ```sh
   export POD_NAME=$(kubectl get pods --namespace meta -l "app.kubernetes.io/name=alloy-logs,app.kubernetes.io/instance=k8s" -o jsonpath="{.items[0].metadata.name}")
+  kubectl --namespace meta port-forward $POD_NAME 12345
+  ```
+
+- Alloy UI for cluster events: port-forward the `alloy-singleton` Pod instead when you want to debug the events pipeline:
+
+  ```sh
+  export POD_NAME=$(kubectl get pods --namespace meta -l "app.kubernetes.io/name=alloy-singleton,app.kubernetes.io/instance=k8s" -o jsonpath="{.items[0].metadata.name}")
   kubectl --namespace meta port-forward $POD_NAME 12345
   ```
 
@@ -164,8 +171,9 @@ The `k8s-monitoring-values.yml` file sets collectors and destinations in chart v
    helm install tempo grafana/tempo-distributed -n prod
    ```
 
-4. Start the Alloy UI port-forward, then open http://localhost:12345.
-   Select an `alloy-logs` collector in the component graph to use live debug.
+4. Start the Alloy UI port-forward for `alloy-logs`, then open http://localhost:12345.
+   Select an `alloy-logs` collector in the component graph to use live debug for Pod logs.
+   Port-forward `alloy-singleton` instead if you want to inspect the cluster events pipeline.
 
 ## Customize the scenario
 
@@ -211,14 +219,12 @@ If the Grafana or Alloy Pod restarted, export `POD_NAME` again before you port-f
 
 ## Stop the scenario
 
-```sh
-kind delete cluster
-```
+Run `kind delete cluster` to tear down the local Kind cluster and all workloads.
 
 ## Next steps
 
 - Kubernetes Monitoring Helm chart: https://github.com/grafana/k8s-monitoring-helm
+- Alloy components: https://grafana.com/docs/alloy/latest/reference/components/
 - Loki deployment modes: https://grafana.com/docs/loki/latest/get-started/deployment-modes/
 - Events scenario: [Collect Kubernetes events with Grafana Alloy](../events)
-- Alloy components: https://grafana.com/docs/alloy/latest/reference/components/
 - More examples: https://github.com/grafana/alloy-scenarios

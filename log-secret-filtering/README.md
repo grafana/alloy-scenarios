@@ -4,7 +4,7 @@ This scenario shows how Grafana Alloy's `loki.secretfilter` component automatica
 A Python application continuously writes log lines to a shared log file.
 Some lines contain fake secrets such as AWS keys, database connection strings, GitHub tokens, JWTs, and Slack webhooks.
 Alloy tails the file, passes each line through `loki.secretfilter` using built-in Gitleaks patterns, and forwards redacted logs to Loki.
-Grafana queries them through a pre-configured Loki data source, with secrets shown as `<REDACTED:$SECRET_NAME>`.
+Grafana queries them through a provisioned Loki data source, with secrets shown as `<REDACTED:$SECRET_NAME>`.
 
 When you start the stack, a secret-logger container runs automatically.
 It appends a mix of normal and secret-containing log lines to `/logs/app.log` every 2 seconds.
@@ -18,6 +18,19 @@ Ensure you have the following:
 
 [docker]: https://docs.docker.com/get-docker/
 [docker-compose]: https://docs.docker.com/compose/install/
+
+## Compare with a related scenario
+
+| Aspect           | `log-secret-filtering/`                               | [`logs-file/`](../logs-file/) |
+| ---------------- | ----------------------------------------------------- | ----------------------------- |
+| Processing       | Redacts secrets with `loki.secretfilter` before write | Direct tail and forward       |
+| Secret detection | Built-in Gitleaks patterns                            | None                          |
+| Demo output      | Mix of fake credentials and normal log lines          | Random application log levels |
+| Alloy stability  | Requires `--stability.level=experimental`             | Default stability level       |
+| Use case         | Strip secrets before logs reach storage               | Basic file tailing to Loki    |
+
+Use this scenario when log lines may contain credentials or tokens that must not reach Loki.
+Use `logs-file/` for simple file tailing without redaction.
 
 ## Understand the architecture
 
@@ -74,7 +87,7 @@ The `config.alloy` pipeline has four stages:
 3. **`loki.secretfilter.default`**: Redacts secret patterns using `redact_with = "<REDACTED:$SECRET_NAME>"`.
 4. **`loki.write.local`**: Forwards redacted logs to Loki at `http://loki:3100/loki/api/v1/push`.
 
-`livedebugging{}` is enabled so you can inspect the pipeline in the Alloy UI without extra configuration.
+`livedebugging` is enabled so you can inspect the pipeline in the Alloy UI.
 
 The demo app writes to `./logs/app.log` on the host, which Alloy reads from `/tmp/logs/app.log` inside the container through a shared volume mount.
 
@@ -87,10 +100,7 @@ The demo app writes to `./logs/app.log` on the host, which Alloy reads from `/tm
    {job="secret-app"}
    ```
 
-   You should see log lines where secrets have been replaced, for example:
-
-   - `Found config: <REDACTED:aws-access-token> with secret`
-   - `Database connection: <REDACTED:generic-api-key>`
+   You should see log lines where secrets have been replaced with placeholders such as `<REDACTED:aws-access-token>` or `<REDACTED:generic-api-key>`.
 
    Normal log lines such as health checks and request timings pass through unchanged.
 
@@ -102,6 +112,7 @@ The demo app writes to `./logs/app.log` on the host, which Alloy reads from `/tm
 - **Change the redaction format**: Edit `redact_with` in `loki.secretfilter.default` in `config.alloy` to use a different placeholder pattern.
 - **Monitor a different log path**: Edit `path_targets` in `local.file_match.app_logs` in `config.alloy` to tail additional files under `/tmp/logs/`.
 - **Emit different secrets**: Edit the `secrets` and `normal` lists in `app/main.py` to change the fake credentials and routine log lines the demo app writes.
+- **Use a custom Gitleaks ruleset**: Set `gitleaks_config` in `loki.secretfilter.default` in `config.alloy` to point at a custom TOML rules file for consistent detection across Alloy versions.
 - **Adjust file discovery**: Change `sync_period` in `local.file_match.app_logs` if you add or rotate log files at runtime.
 
 ## Troubleshoot common problems
@@ -119,13 +130,13 @@ This scenario runs Alloy with `--stability.level=experimental` because `loki.sec
 ### No data appears in Grafana after a few minutes
 
 Open the Alloy UI at http://localhost:12345 and check that all components show a healthy status.
-Select `loki.source.file.log_scrape` and use live debug to confirm log entries pass through the pipeline.
-If the pipeline looks healthy but Grafana shows nothing, confirm that you select the **Loki** data source in **Explore** and run `{job="secret-app"}`.
+Select `loki.source.file.log_scrape` and use live debug to check that log entries pass through the pipeline.
+If the pipeline looks healthy but Grafana shows nothing, check that you select the **Loki** data source in **Explore** and run `{job="secret-app"}`.
 
 ### Log file isn't being collected
 
 The `secret-logger` container writes to `/logs/app.log` and Alloy reads from `/tmp/logs/app.log` through the shared `./logs` volume in `docker-compose.yml`.
-Run `docker compose logs secret-logger` to confirm the app is running.
+Run `docker compose logs secret-logger` and check that the app is running.
 On the host, check that `./logs/app.log` exists and is growing after the stack starts.
 
 ### Port conflicts with other services
@@ -135,12 +146,11 @@ If another service uses one of these ports, edit the port mapping in `docker-com
 
 ## Stop the scenario
 
-```sh
-docker compose down
-```
+Run `docker compose down` from the `log-secret-filtering` directory.
 
 ## Next steps
 
-- loki.secretfilter reference: https://grafana.com/docs/alloy/latest/reference/components/loki/loki.secretfilter/
 - Alloy components: https://grafana.com/docs/alloy/latest/reference/components/
+- `loki.secretfilter` reference: https://grafana.com/docs/alloy/latest/reference/components/loki/loki.secretfilter/
+- File tailing without redaction: [`logs-file/`](../logs-file/)
 - More examples: https://github.com/grafana/alloy-scenarios

@@ -251,14 +251,12 @@ If the Grafana or Alloy Pod restarted, export `POD_NAME` again before you port-f
 
 ## Stop the scenario
 
-```sh
-kind delete cluster
-```
+Run `kind delete cluster` to tear down the local Kind cluster and all workloads.
 
 ## Next steps
 
 - Kubernetes Monitoring Helm chart: https://github.com/grafana/k8s-monitoring-helm
+- Alloy components: https://grafana.com/docs/alloy/latest/reference/components/
 - Pyroscope documentation: https://grafana.com/docs/pyroscope/latest/
 - Metrics scenario: [Monitor Kubernetes metrics with Grafana Alloy and Prometheus](../metrics)
-- Alloy components: https://grafana.com/docs/alloy/latest/reference/components/
 - More examples: https://github.com/grafana/alloy-scenarios
