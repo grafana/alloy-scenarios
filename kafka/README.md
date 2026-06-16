@@ -59,17 +59,17 @@ Ensure you have the following:
 
 ## Understand the Alloy pipeline
 
-The `config.alloy` pipeline has three components: `loki.source.kafka`, `loki.process`, and `loki.write`.
+The `config.alloy` pipeline has three components: `loki.source.kafka.kafka`, `loki.process.log_data`, and `loki.write.local`.
 
-1. **`loki.source.kafka`**: Connects to the Kafka broker at `kafka:9092`, subscribes to the `alloy-logs` topic with Kafka protocol version `3.8.0`, and attaches `source="kafka"` and `component="loki.source.kafka"` labels to each message before Alloy forwards entries to `loki.process.log_data`.
-2. **`loki.process`**: Runs four pipeline stages to restructure the payload.
+1. **`loki.source.kafka.kafka`**: Connects to the Kafka broker at `kafka:9092`, subscribes to the `alloy-logs` topic with Kafka protocol version `3.8.0`, and attaches `source="kafka"` and `component="loki.source.kafka"` labels to each message before Alloy forwards entries to `loki.process.log_data`.
+2. **`loki.process.log_data`**: Runs four pipeline stages to restructure the payload.
    - The first `stage.json` extracts `level`, `msg`, and the nested `app` object from the raw message and drops entries that aren't valid JSON.
    - The second `stage.json` runs against the extracted `app` field and maps `name` to `app_name` and `version` to `app_version`.
    - `stage.template` writes a new JSON log line to the `new_json` field from the four extracted values.
    - `stage.output` sends the `new_json` value as the final log line to `loki.write.local`.
-3. **`loki.write`**: Pushes the processed entries to Loki at `http://loki:3100/loki/api/v1/push`.
+3. **`loki.write.local`**: Pushes the processed entries to Loki at `http://loki:3100/loki/api/v1/push`.
 
-`livedebugging{}` uses default settings so you can inspect the pipeline in the Alloy UI without extra configuration.
+`livedebugging` is enabled so you can inspect the pipeline in the Alloy UI.
 
 The two-pass JSON extraction is the key design decision here.
 The raw payload nests `app` as an object inside the top-level JSON, so a single `stage.json` pass can't extract both the top-level fields and the nested fields in one step.
@@ -91,9 +91,9 @@ A second `stage.json` with `source = "app"` targets only the previously extracte
 
 ## Customize the scenario
 
-- **Use a different Kafka topic**: Change the `topics` value in `loki.source.kafka` in `config.alloy` and update the `--topic` flag on the `kafka-console-producer.sh` command in `gen_log.sh` to match.
-- **Add label extraction**: Add a `stage.labels` block to `loki.process` in `config.alloy` to promote `level` or `app_name` to Loki labels, which makes filters faster at query time.
-- **Connect to another Kafka cluster**: Update the `brokers` value in `loki.source.kafka` in `config.alloy` to point at your broker addresses and remove the `kafka` and `kafka-producer` services from `docker-compose.yml`.
+- **Use a different Kafka topic**: Change the `topics` value in `loki.source.kafka.kafka` in `config.alloy` and update the `--topic` flag in `gen_log.sh` to match.
+- **Add label extraction**: Add a `stage.labels` block to `loki.process.log_data` in `config.alloy` to promote `level` or `app_name` to Loki labels, which makes filters faster at query time.
+- **Connect to another Kafka cluster**: Update the `brokers` value in `loki.source.kafka.kafka` in `config.alloy` to point at your broker addresses and remove the `kafka` and `kafka-producer` services from `docker-compose.yml`.
 - **Adjust the message rate**: Edit the `sleep 2` value in `gen_log.sh` to produce messages more or less frequently.
 
 ## Troubleshoot common problems
@@ -110,9 +110,11 @@ For Alloy specifically, the most common cause is a syntax error in `config.alloy
 ### No data appears in Grafana after a few minutes
 
 Open the Alloy UI at http://localhost:12345 and check that all components show a healthy status.
-Select `loki.source.kafka.kafka` and use live debug to confirm messages arrive from the broker.
+Select `loki.source.kafka.kafka` and use live debug to check that messages arrive from the broker.
 If the component shows a connection error, check that the `kafka` container is healthy with `docker compose ps`.
 The broker can take up to about a minute to become ready on first start.
+If Alloy exited on startup, check `docker compose logs alloy`.
+Alloy builds its Kafka client when the config loads, so the broker must be healthy before Alloy starts.
 
 ### Port conflicts with other services
 
@@ -128,4 +130,5 @@ Run `docker compose down -v` from the `kafka` directory to remove the Kafka data
 
 - Alloy components: https://grafana.com/docs/alloy/latest/reference/components/
 - `loki.source.kafka` reference: https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.kafka/
+- `loki.process` reference: https://grafana.com/docs/alloy/latest/reference/components/loki/loki.process/
 - More examples: https://github.com/grafana/alloy-scenarios

@@ -1,0 +1,74 @@
+// ###############################
+// #### Downstream Tier Alloy ####
+// ###############################
+//
+// Both downstream instances run this identical configuration: receive the
+// shard of traces the load balancer routes here, make a tail-sampling
+// decision per WHOLE trace, and forward the keepers to Tempo.
+
+// Enable live debugging for the Alloy UI.
+livedebugging {
+	enabled = true
+}
+
+// Receive the trace shard from the load-balancer tier.
+otelcol.receiver.otlp "default" {
+	grpc {}
+
+	output {
+		traces = [otelcol.processor.tail_sampling.default.input]
+	}
+}
+
+// Tail sampling: both policies are deterministic (no probabilistic
+// fallback), which makes the scenario verifiable -- a sampled trace can
+// only be complete in Tempo if every one of its spans reached this same
+// instance. Errors and slow traces are kept; healthy fast traces are
+// dropped, which is the point of tail sampling.
+otelcol.processor.tail_sampling "default" {
+	// How long to buffer spans before deciding. Late spans of a trace must
+	// arrive within this window.
+	decision_wait = "5s"
+
+	// Keep every trace that contains an error span.
+	policy {
+		name = "errors"
+		type = "status_code"
+
+		status_code {
+			status_codes = ["ERROR"]
+		}
+	}
+
+	// Keep every trace slower than 2 seconds end-to-end.
+	policy {
+		name = "slow"
+		type = "latency"
+
+		latency {
+			threshold_ms = 2000
+		}
+	}
+
+	output {
+		traces = [otelcol.processor.batch.default.input]
+	}
+}
+
+// Batch processor to improve performance.
+otelcol.processor.batch "default" {
+	output {
+		traces = [otelcol.exporter.otlp.tempo.input]
+	}
+}
+
+// Send sampled traces to the shared Tempo instance.
+otelcol.exporter.otlp "tempo" {
+	client {
+		endpoint = "tempo:4317"
+
+		tls {
+			insecure = true
+		}
+	}
+}

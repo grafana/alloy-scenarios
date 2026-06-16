@@ -1,7 +1,7 @@
 services:
   # Nginx web server serving the demo frontend page
   web:
-    image: nginx:latest@sha256:5aca99593157f4ae539a5dec1092a0ad8762f8e2eb1789085a13a0f5622369f6
+    image: nginx:latest@sha256:608a100c71651bf5b773c89083b4a1ad7ef4b2bd05d7a7e552271e03123692ad
     ports:
       - 8080:80
     volumes:
@@ -9,7 +9,7 @@ services:
 
   # Alloy telemetry pipeline — receives Faro Web SDK telemetry and forwards logs to Loki
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.16.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.0}
     ports:
       - 12345:12345
       - 12347:12347

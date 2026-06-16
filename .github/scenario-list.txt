@@ -18,6 +18,7 @@ mongodb-monitoring
 mysql-monitoring
 nginx-monitoring
 otel-basic-tracing
+otel-loadbalancing
 otel-metrics-pipeline
 otel-span-metrics
 otel-tail-sampling

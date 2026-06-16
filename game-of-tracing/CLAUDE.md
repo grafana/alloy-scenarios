@@ -10,7 +10,7 @@
 
 ### Two maps, one stack
 
-The scenario ships **two maps** selected via an in-UI picker at game start: `war_of_kingdoms` (default 2-player) and `white_walkers_attack` (single-player Night's Watch vs AI White Walkers with `wall` keeps, corpse economy, and a 5-tick hold-to-win condition). Both reuse the same 8 location containers — each container has a constant `SLOT_ID` env and picks up its logical identity from `MAPS[active_map_id]["slot_assignments"][SLOT_ID]` in `app/game_config.py`. Changing maps writes a new `active_map_id` to the shared `game_config` table and POSTs `/reload` to every slot.
+The scenario ships **two maps** selected via an in-UI picker at game start: `war_of_kingdoms` (default 2-player) and `white_walkers_attack` (single-player Night's Watch vs AI White Walkers with income-producing `wall` keeps, a corpse economy, and two win paths — capture the enemy fortress or hold the Wall for 5 ticks). Both reuse the same 8 location containers — each container has a constant `SLOT_ID` env and picks up its logical identity from `MAPS[active_map_id]["slot_assignments"][SLOT_ID]` in `app/game_config.py`. Changing maps writes a new `active_map_id` to the shared `game_config` table and POSTs `/reload` to every slot.
 
 ## Sub-agent dispatch
 
