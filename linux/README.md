@@ -68,7 +68,7 @@ Use `systemd-journal/` when you need focused journal filtering with fewer moving
 
    - Deploy the scenario: `./run-example.sh linux`
 
-3. Confirm all containers are up: `cd alloy-scenarios/linux && docker compose ps`
+3. From the `linux` directory, confirm all containers are up: `docker compose ps`
 
 ## Explore the services
 
@@ -115,6 +115,7 @@ The journal and file sources both send data to the same `loki.write.local` compo
    Go to **Dashboards → Import**.
    Enter dashboard ID `1860` or download the JSON from https://grafana.com/api/dashboards/1860/revisions/37/download.
    Select the **Prometheus** data source and click **Import**.
+   If panels are empty, set the **job** variable to `integrations/node_exporter`.
    The dashboard provides CPU, memory, disk, and network panels pre-built against the metrics this scenario collects.
 
 2. To explore logs, open **Explore** in Grafana at http://localhost:3000 and select the **Loki** data source.
@@ -131,7 +132,7 @@ The journal and file sources both send data to the same `loki.write.local` compo
 - **Adjust the scrape interval**: Edit the `scrape_interval` value in `prometheus.scrape.integrations_node_exporter` in `config.alloy` to collect metrics more or less frequently.
   The default is 15 seconds.
 - **Enable additional Node Exporter collectors**: Remove collector names from the `disable_collectors` list in `prometheus.exporter.unix.integrations_node_exporter` in `config.alloy` to expose metrics for `xfs`, `zfs`, `btrfs`, or other subsystems present on your host.
-- **Monitor the Docker host**: Linux hosts only. Add bind mounts for `/proc`, `/sys`, and `/var/log` to the `alloy` service in `docker-compose.yml` so Alloy reads the host instead of the container.
+- **Monitor the Docker host**: Linux hosts only. Add bind mounts for `/proc`, `/sys`, `/var/log`, and journal paths such as `/var/log/journal` or `/run/log/journal` to the `alloy` service in `docker-compose.yml` so Alloy reads the host instead of the container.
 
 ## Deploy on a real Linux server
 
@@ -154,7 +155,7 @@ The journal and file sources both send data to the same `loki.write.local` compo
    }
    ```
 
-   Replace _`<PROMETHEUS_HOST>`_ and _`<LOKI_HOST>`_ with your Prometheus and Loki host names or IP addresses.
+   Replace `<PROMETHEUS_HOST>` and `<LOKI_HOST>` with your Prometheus and Loki host names or IP addresses.
 
 3. Start Alloy on your Linux server. Refer to https://grafana.com/docs/alloy/latest/configure/linux/ and https://grafana.com/docs/alloy/latest/set-up/run/linux/ for more information.
 
