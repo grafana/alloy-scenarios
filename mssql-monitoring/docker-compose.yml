@@ -1,7 +1,8 @@
 services:
-  # SQL Server is amd64-only; the explicit platform lets Apple Silicon hosts
-  # run it under emulation instead of failing the pull. The image needs
-  # ~2 GB of memory and an EULA acceptance flag to start.
+  # SQL Server is amd64-only. The explicit platform pulls the amd64 image on
+  # Apple Silicon, but the Mac must also use Rosetta emulation (not QEMU) or
+  # SQL Server segfaults on startup -- see the README's Apple Silicon section.
+  # The image needs ~2 GB of memory and an EULA acceptance flag to start.
   mssql:
     image: mcr.microsoft.com/mssql/server:2025-latest@sha256:cee0f4db03b5192de777d37a22455949d1c2c230bb48c0a732b88b0933117a72
     platform: linux/amd64

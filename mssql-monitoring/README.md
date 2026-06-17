@@ -10,7 +10,26 @@ A small load generator creates a `demo` database and inserts one row per second,
 
 - Docker and Docker Compose installed
 - ~2 GB of free memory for the SQL Server container
-- The `mcr.microsoft.com/mssql/server` image is amd64-only; Apple Silicon hosts run it under emulation (Rosetta), which the compose file requests via `platform: linux/amd64`
+- The `mcr.microsoft.com/mssql/server` image is amd64-only. The compose file sets `platform: linux/amd64` so it runs on Apple Silicon, but on a Mac you must also switch Docker Desktop to Rosetta emulation first — see [Apple Silicon (M-series Macs)](#apple-silicon-m-series-macs) below.
+
+### Apple Silicon (M-series Macs)
+
+SQL Server is an amd64-only binary. The `platform: linux/amd64` line in the compose file only tells Docker which image to pull — it does **not** choose how that image is emulated. Docker Desktop's default emulator (QEMU) **crashes SQL Server on startup**: the `mssql` container exits with code `139` and the logs show:
+
+```
+qemu: uncaught target signal 11 (Segmentation fault) - core dumped
+```
+
+Because `mssql-load` and `alloy` use `depends_on: condition: service_healthy`, they then report `dependency mssql failed to start` — that message is the gate working correctly, not a bug in the scenario; the real failure is the SQL Server crash above.
+
+To fix it, switch Docker Desktop to Apple's Rosetta emulation (one-time setting):
+
+1. **Docker Desktop → Settings → General**.
+2. Enable **Use Virtualization framework**.
+3. Enable **Use Rosetta for x86_64/amd64 emulation**.
+4. **Apply & restart** Docker Desktop, then `docker compose up -d` again.
+
+Rosetta runs the amd64 SQL Server binary reliably; QEMU does not. Intel Macs, Linux, and Windows on x86_64 run the image natively and need none of this.
 
 ## Getting Started
 
