@@ -1,7 +1,7 @@
 services:
   # Tempo for tracing (single backend shared by both downstream Alloys)
   tempo:
-    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.4}
+    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.7}
     command: ["-config.file=/etc/tempo.yaml"]
     ports:
       - 3200:3200/tcp
