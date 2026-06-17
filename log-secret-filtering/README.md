@@ -67,7 +67,7 @@ Use `logs-file/` for simple file tailing without redaction.
 
    - Deploy the scenario: `./run-example.sh log-secret-filtering`
 
-3. Confirm all containers are up: `cd alloy-scenarios/log-secret-filtering && docker compose ps`
+3. From the `log-secret-filtering` directory, confirm all containers are up: `docker compose ps`
 
    You should see `secret-logger`, `alloy`, `loki`, and `grafana`.
 
