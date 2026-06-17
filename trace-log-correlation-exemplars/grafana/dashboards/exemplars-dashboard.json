@@ -1,0 +1,53 @@
+{
+  "uid": "checkout-exemplars",
+  "title": "Checkout Latency with Exemplars",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Checkout latency p95 — the dots are exemplars, click one to open its trace in Tempo",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(checkout_duration_seconds_bucket[1m])))",
+          "legendFormat": "p95",
+          "exemplar": true
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(checkout_duration_seconds_bucket[1m])))",
+          "legendFormat": "p50",
+          "exemplar": false
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Checkout request rate",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(checkout_duration_seconds_count[1m]))",
+          "legendFormat": "requests/s",
+          "exemplar": false
+        }
+      ]
+    }
+  ]
+}

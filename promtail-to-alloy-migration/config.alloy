@@ -1,0 +1,65 @@
+// ############################################
+// #### Promtail -> Alloy Migration Result ####
+// ############################################
+//
+// This is the Alloy equivalent of promtail-config.yaml, derived with:
+//
+//   alloy convert --source-format=promtail \
+//     --output=config.alloy promtail-config.yaml
+//
+// and then renamed/commented for readability (the converter emits the
+// same components with generated labels). Each component notes the
+// Promtail block it replaces. Promtail's positions file has no component
+// here: Alloy tracks read offsets in its --storage.path automatically.
+
+// Enable live debugging for the Alloy UI.
+livedebugging {
+	enabled = true
+}
+
+// scrape_configs.static_configs (with __path__) -> local.file_match.
+// The static labels (job) ride along on the target.
+local.file_match "demo" {
+	path_targets = [{
+		__path__ = "/var/log/demo/*.log",
+		job      = "demo-app",
+	}]
+}
+
+// The tailing engine inside scrape_configs -> loki.source.file.
+// Like Promtail, it adds the filename label automatically.
+loki.source.file "demo" {
+	targets    = local.file_match.demo.targets
+	forward_to = [loki.process.parse.receiver]
+}
+
+// pipeline_stages -> loki.process. The stage blocks are 1:1 with
+// Promtail's pipeline stages, same syntax for the regex itself.
+loki.process "parse" {
+	// pipeline_stages[0] "- regex" -> stage.regex
+	stage.regex {
+		expression = ".*level=(?P<level>\\w+) service=(?P<service>\\w+).*"
+	}
+
+	// pipeline_stages[1] "- labels" -> stage.labels
+	stage.labels {
+		values = {
+			level   = "",
+			service = "",
+		}
+	}
+
+	forward_to = [loki.write.default.receiver]
+}
+
+// clients -> loki.write: same push endpoint, and the external label that
+// marks which collector shipped each line (promtail vs alloy).
+loki.write "default" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+
+	external_labels = {
+		collector = "alloy",
+	}
+}

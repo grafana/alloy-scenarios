@@ -51,6 +51,7 @@ These scenarios focus on log collection, log parsing, log routing, and log redac
 | [Logs from file](logs-file/) | Tail log files with Alloy. |
 | [Logs over TCP](logs-tcp/) | Receive and process TCP logs in JSON format. |
 | [Popular logging frameworks](app-instrumentation/logging/popular-logging-frameworks/) | Parse logs from popular logging frameworks across 7 programming languages. |
+| [Promtail to Alloy migration](promtail-to-alloy-migration/) | Run Promtail (EOL March 2026) and its `alloy convert` equivalent side by side against one log file and verify identical results in Loki. |
 | [Structured log parsing](mail-house/) | Parse structured logs into labels and structured metadata. |
 | [Syslog monitoring](syslog/) | Monitor non-RFC5424 compliant syslog messages with `rsyslog` and Alloy. |
 | [systemd journal](systemd-journal/) | Forward systemd journal entries to Loki with filters and labels tuned for fast queries. |
@@ -70,6 +71,7 @@ These scenarios show distributed tracing with OpenTelemetry and Tempo.
 | [OpenTelemetry service graphs](otel-tracing-service-graphs/) | Generate service graphs with the Alloy `servicegraph` connector. |
 | [OpenTelemetry span metrics](otel-span-metrics/) | Generate RED metrics from OpenTelemetry traces with the span metrics connector. Request rate, error rate, and duration. |
 | [OpenTelemetry tail sampling](otel-tail-sampling/) | Apply tail sampling policies to OpenTelemetry traces with Alloy and Tempo. |
+| [Trace correlation with exemplars](trace-log-correlation-exemplars/) | Jump from a latency histogram to the exact trace behind it with OpenMetrics exemplars flowing through Alloy into Prometheus and Tempo. |
 
 ### Metrics
 
@@ -91,6 +93,7 @@ These scenarios collect continuous profiles from applications.
 | -------- | ----------- |
 | [Continuous profiling](continuous-profiling/) | Collect and visualize CPU, memory, and goroutine profiles from Go applications with Grafana Pyroscope. |
 | [eBPF host profiling](ebpf-host-profiling/) | Profile every process on a Linux host with `pyroscope.ebpf` -- no language agents, no application code changes. Uses Docker container discovery to attribute samples per workload. |
+| [Java profiling](java-profiling/) | Attach async-profiler to a running JVM with `pyroscope.java` -- CPU and allocation flame graphs with no agent jar and no code changes. |
 
 ### Secrets and configuration
 

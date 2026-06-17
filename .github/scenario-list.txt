@@ -6,6 +6,7 @@ elasticsearch-monitoring
 faro-frontend-observability
 game-of-tracing
 gelf-log-ingestion
+java-profiling
 kafka
 linux
 log-api-gateway
@@ -24,6 +25,7 @@ otel-span-metrics
 otel-tail-sampling
 otel-tracing-service-graphs
 postgres-monitoring
+promtail-to-alloy-migration
 redis-monitoring
 routing
 self-monitoring
@@ -31,6 +33,7 @@ snmp
 syslog
 systemd-journal
 trace-delivery
+trace-log-correlation-exemplars
 vault-secrets
 windows
 windows-events
