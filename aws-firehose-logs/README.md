@@ -20,19 +20,19 @@ Ensure you have the following:
 
 ## Understand the architecture
 
+A Python sender posts Firehose-formatted batches to Alloy, which parses CloudWatch envelopes and forwards log lines to Loki.
+
 ```text
 +------------------+       +---------------------------+       +------+       +---------+
 | firehose-sender  | POST  | Alloy                     | push  |      | query |         |
-| (Python)         |------>| (loki.source.awsfirehose) |------>| Loki |<------| Grafana |
+| Python           |------>| loki.source.awsfirehose   |------>| Loki |<------| Grafana |
 +------------------+       +---------------------------+       +------+       +---------+
 ```
 
-- **firehose-sender**: A Python container that generates synthetic CloudWatch-style log batches every five seconds and POSTs them to Alloy in the documented Firehose delivery format.
-  Records use a gzip-compressed, base64-encoded `data` field.
-- **Alloy**: Runs `loki.source.awsfirehose` on port 9999 at `/awsfirehose/api/v1/push`.
-  CloudWatch envelope discovery labels are promoted through `loki.relabel` rules attached to the source.
-- **Loki**: Stores the parsed log lines.
-- **Grafana**: Queries logs with a provisioned Loki data source.
+- **firehose-sender** generates synthetic CloudWatch-style log batches every five seconds and POSTs them in the documented Firehose delivery format with gzip-compressed, base64-encoded `data` fields.
+- **Alloy** runs `loki.source.awsfirehose` on port 9999 at `/awsfirehose/api/v1/push` and promotes CloudWatch envelope labels through `loki.relabel` rules attached to the source.
+- **Loki** stores the parsed log lines.
+- **Grafana** queries logs with a provisioned Loki data source.
 
 The sender alternates between three log streams:
 
@@ -59,9 +59,9 @@ The sender alternates between three log streams:
 
    - Deploy the scenario: `./run-example.sh aws-firehose-logs`
 
-3. Confirm all containers are up: `cd alloy-scenarios/aws-firehose-logs && docker compose ps`
+3. Check that all containers are up: `cd alloy-scenarios/aws-firehose-logs && docker compose ps`
 
-   You should see `alloy`, `loki`, `grafana`, and `firehose-sender`.
+   Expect `alloy`, `loki`, `grafana`, and `firehose-sender`.
 
 ## Explore the services
 
@@ -74,15 +74,12 @@ The sender alternates between three log streams:
 
 The `config.alloy` pipeline has three components:
 
-1. **`loki.relabel "firehose"`**: Defines rules that promote CloudWatch envelope discovery labels to indexed labels.
-   `__aws_cw_log_group` becomes `log_group`, `__aws_cw_log_stream` becomes `log_stream`, and `__aws_cw_msg_type` becomes `msg_type`.
-   These labels are exposed through the source's `relabel_rules` argument, not through a standalone relabel stage after the source.
-2. **`loki.source.awsfirehose "fake"`**: Listens on `0.0.0.0:9999` and accepts Firehose delivery payloads.
-   It auto-detects the CloudWatch subscription envelope and attaches `__aws_cw_*` discovery labels when present.
-   Parsed entries forward to `loki.write.local`.
+1. **`loki.relabel "firehose"`**: Promotes `__aws_cw_log_group` to `log_group`, `__aws_cw_log_stream` to `log_stream`, and `__aws_cw_msg_type` to `msg_type` through the source's `relabel_rules` argument.
+2. **`loki.source.awsfirehose "fake"`**: Listens on port 9999, accepts Firehose delivery payloads, and forwards parsed entries to `loki.write.local`.
 3. **`loki.write "local"`**: Pushes log lines to Loki at `http://loki:3100/loki/api/v1/push`.
 
-The `firehose-sender` service reads `ALLOY_FIREHOSE_URL`, `INTERVAL_SECONDS`, and `EVENTS_PER_BATCH` from environment variables in `docker-compose.yml`.
+The `firehose-sender` service reads `ALLOY_FIREHOSE_URL`, `INTERVAL_SECONDS`, and `EVENTS_PER_BATCH` from `docker-compose.yml`.
+`livedebugging` is enabled.
 
 ## Try it out
 
@@ -116,24 +113,17 @@ The `firehose-sender` service reads `ALLOY_FIREHOSE_URL`, `INTERVAL_SECONDS`, an
 
 ## Customize the scenario
 
-- **Change batch rate**: Edit `INTERVAL_SECONDS` or `EVENTS_PER_BATCH` for the `firehose-sender` service in `docker-compose.yml`.
-- **Enable access-key validation**: Set the `access_key` argument on `loki.source.awsfirehose` and send the matching `X-Amz-Firehose-Access-Key` header from your producer.
-- **Add TLS**: Add a `tls` block with `cert_file` and `key_file` under the source's `http` block for production deployments.
+Edit `INTERVAL_SECONDS` or `EVENTS_PER_BATCH` on the `firehose-sender` service to change batch rate.
 
 ## Troubleshoot common problems
 
-Diagnose missing logs, sender failures, and port conflicts.
+Use these steps when logs don't appear or ports conflict.
 
 ### No logs appear in Grafana after a minute
 
 Check that `firehose-sender` is running with `docker compose ps`.
-Read its output with `docker compose logs firehose-sender`. Connection errors to Alloy appear there.
+Read its output with `docker compose logs firehose-sender`.
 Open the Alloy UI at http://localhost:12345 and check that `loki.source.awsfirehose.fake` is healthy.
-
-### curl test returns an error
-
-Check that Alloy is listening on port 9999 with `docker compose ps`.
-The `data` field must be gzip-compressed JSON, then base64-encoded, matching the Firehose delivery format.
 
 ### Port conflicts with other services
 
