@@ -4,7 +4,8 @@ This scenario shows how to run a three-node Grafana Alloy cluster that shares a 
 With clustering enabled, the cluster hashes each target to exactly one node, so each node scrapes roughly one third of the pool.
 Stop a node and the survivors pick up its targets within seconds, without gaps, duplicate scrapes, or manual sharding.
 Grafana uses the same pattern to scrape [nearly 20M Prometheus metrics](https://grafana.com/blog/how-we-use-grafana-alloy-clustering-to-scrape-nearly-20m-prometheus-metrics/).
-The `config.alloy` file defines the scrape pipeline; enable clustering with `--cluster.*` flags in `docker-compose.yml`.
+The `config.alloy` file defines the scrape pipeline.
+Enable clustering with `--cluster.*` flags in `docker-compose.yml`.
 
 ## Before you begin
 
