@@ -62,7 +62,7 @@ Ensure you have the following:
 
 2. Navigate to this scenario: `cd alloy-scenarios/k8s/profiling`
 
-3. Create a local Kind cluster with the example configuration in `kind.yml`:
+3. Create a local Kind cluster:
 
    ```sh
    kind create cluster --config kind.yml
@@ -126,12 +126,13 @@ The chart creates multiple Alloy Pods. Port-forward the `alloy-profiles` Pod for
   kubectl --namespace meta port-forward $POD_NAME 12345
   ```
 
-Run the commands again when you start a new session.
+Run the port-forward commands again when you start a new session.
 
 ## Explore the services
 
 - **Grafana** at http://localhost:3000: Open the **Pyroscope** app or query profiles in **Explore** with the Pyroscope data source.
   Log in as `admin` / `adminadminadmin`. Refer to `grafana-values.yml` for credentials.
+- **Pyroscope app** at http://localhost:3000/a/grafana-pyroscope-app/explore: Browse profiles without writing queries.
 - **Alloy UI** at http://localhost:12345: Component graph and live debug views for the `alloy-profiles` collector.
 - **Pyroscope** at `pyroscope.meta.svc.cluster.local:4040`: Query through Grafana; Alloy reaches it inside the cluster.
 
@@ -187,7 +188,13 @@ The `k8s-monitoring-values.yml` file sets collectors and destinations in chart v
    EOF
    ```
 
-3. In Grafana, open the **Pyroscope** app or select the **Pyroscope** data source in **Explore**.
+   Wait until the Pod is ready:
+
+   ```sh
+   kubectl get pods -n meta -l app=ride-share-go -w
+   ```
+
+3. Open the Pyroscope app at http://localhost:3000/a/grafana-pyroscope-app/explore, or select the **Pyroscope** data source in **Explore**.
    You can view these profile types:
 
    - CPU profiles: flame graphs that show where CPU time is spent
@@ -217,7 +224,7 @@ The `k8s-monitoring-values.yml` file sets collectors and destinations in chart v
 After you edit `k8s-monitoring-values.yml`, upgrade the release:
 
 ```sh
-helm upgrade k8s grafana/k8s-monitoring --version "^4.0.0" -n meta --values k8s-monitoring-values.yml
+helm upgrade k8s grafana/k8s-monitoring --version "^4.0.0" -n meta --values ./k8s-monitoring-values.yml
 ```
 
 ## Troubleshoot common problems
