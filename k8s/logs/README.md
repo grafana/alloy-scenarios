@@ -39,7 +39,7 @@ Ensure you have the following:
 | Aspect                          | `k8s/logs/`                                  | `k8s/events/`                                                             |
 | ------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------- |
 | Alloy deployment                | `k8s-monitoring` Helm chart collector preset | Plain `kubectl apply` of ConfigMap, RBAC, and Deployment                  |
-| `loki.source.kubernetes_events` | Hidden inside the chart                      | In `alloy-config.yaml`                                                    |
+| `loki.source.kubernetes_events` | Hidden inside the chart                      | Visible directly in `alloy-config.yaml`                                   |
 | Scope                           | Pod logs and cluster events                  | Cluster events only with `type`, `reason`, `namespace`, and `kind` labels |
 | Best for                        | Production Kubernetes monitoring             | Learn or extend the events collector                                      |
 
@@ -137,7 +137,7 @@ The chart creates multiple Alloy Pods. Port-forward the `alloy-logs` Pod for the
   kubectl --namespace meta port-forward $POD_NAME 12345
   ```
 
-Run the commands again when you start a new session.
+Run the port-forward commands again when you start a new session.
 
 ## Explore the services
 
@@ -155,6 +155,7 @@ The `k8s-monitoring-values.yml` file sets collectors and destinations in chart v
 - **`clusterEvents`**: Enables cluster event collection with the `alloy-singleton` collector in the `meta` and `prod` namespaces.
 - **`podLogsViaKubernetesApi`**: Enables Pod log collection with the `alloy-logs` collector in the `meta` and `prod` namespaces.
   Sets `structuredMetadata` with `pod: pod` on Pod log entries.
+  `loki-values.yml` sets `allow_structured_metadata: true` so Loki accepts that metadata.
 - **`collectors`**: Deploys `alloy-singleton` with the `singleton` preset and `alloy-logs` with the `clustered` preset.
 
 ## Try it out
@@ -171,6 +172,8 @@ The `k8s-monitoring-values.yml` file sets collectors and destinations in chart v
    helm install tempo grafana/tempo-distributed -n prod
    ```
 
+   After Tempo Pods start, browse their logs in Explore Logs or query `{namespace="prod"}` in **Explore** with the **Loki** data source.
+
 4. Start the Alloy UI port-forward for `alloy-logs`, then open http://localhost:12345.
    Select an `alloy-logs` collector in the component graph to use live debug for Pod logs.
    Port-forward `alloy-singleton` instead if you want to inspect the cluster events pipeline.
@@ -185,7 +188,7 @@ The `k8s-monitoring-values.yml` file sets collectors and destinations in chart v
 After you edit `k8s-monitoring-values.yml`, upgrade the release:
 
 ```sh
-helm upgrade k8s grafana/k8s-monitoring --version "^4.0.0" -n meta --values k8s-monitoring-values.yml
+helm upgrade k8s grafana/k8s-monitoring --version "^4.0.0" -n meta --values ./k8s-monitoring-values.yml
 ```
 
 ## Troubleshoot common problems
