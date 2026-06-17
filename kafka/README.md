@@ -47,7 +47,7 @@ Ensure you have the following:
 
    - Deploy the scenario: `./run-example.sh kafka`
 
-3. Confirm all containers are up: `cd alloy-scenarios/kafka && docker compose ps`
+3. From the `kafka` directory, confirm all containers are up: `docker compose ps`
    Wait until the `kafka` container is healthy before you query logs in Grafana.
 
 ## Explore the services
@@ -91,7 +91,7 @@ A second `stage.json` with `source = "app"` targets only the previously extracte
 
 ## Customize the scenario
 
-- **Use a different Kafka topic**: Change the `topics` value in `loki.source.kafka.kafka` in `config.alloy` and update the `--topic` flag in `gen_log.sh` to match.
+- **Use a different Kafka topic**: Change the `topics` value in `loki.source.kafka.kafka` in `config.alloy` and update the `--topic` argument in the `kafka-console-producer.sh` command in `gen_log.sh` to match.
 - **Add label extraction**: Add a `stage.labels` block to `loki.process.log_data` in `config.alloy` to promote `level` or `app_name` to Loki labels, which makes filters faster at query time.
 - **Connect to another Kafka cluster**: Update the `brokers` value in `loki.source.kafka.kafka` in `config.alloy` to point at your broker addresses and remove the `kafka` and `kafka-producer` services from `docker-compose.yml`.
 - **Adjust the message rate**: Edit the `sleep 2` value in `gen_log.sh` to produce messages more or less frequently.
