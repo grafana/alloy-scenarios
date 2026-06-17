@@ -82,11 +82,11 @@ The checkout service, for example, emits `checkout.transactions.total`, `checkou
 
 ## Understand the configuration
 
-The `config.alloy` pipeline has three components: `otelcol.receiver.otlp`, `otelcol.processor.batch`, and `otelcol.exporter.otlphttp`.
+The `config.alloy` pipeline has three components: `otelcol.receiver.otlp "default"`, `otelcol.processor.batch "default"`, and `otelcol.exporter.otlphttp "prometheus"`.
 
-1. **`otelcol.receiver.otlp`**: Listens for OTLP metrics on port 4317 for gRPC and 4318 for HTTP, then forwards them to the batch processor.
-2. **`otelcol.processor.batch`**: Groups metrics to reduce the number of export requests, then forwards them to the exporter.
-3. **`otelcol.exporter.otlphttp`**: Sends the metrics to the Prometheus OTLP endpoint at `http://prometheus:9090/api/v1/otlp`.
+1. **`otelcol.receiver.otlp "default"`**: Listens for OTLP metrics on port 4317 for gRPC and 4318 for HTTP, then forwards them to the batch processor.
+2. **`otelcol.processor.batch "default"`**: Groups metrics to reduce the number of export requests, then forwards them to the exporter.
+3. **`otelcol.exporter.otlphttp "prometheus"`**: Sends the metrics to the Prometheus OTLP endpoint at `http://prometheus:9090/api/v1/otlp`.
 
 Prometheus runs with the `--web.enable-otlp-receiver` flag so it accepts the OTLP write.
 The `prom-config.yaml` file promotes the `service.name` and `language` resource attributes to labels, so you can group metrics by service and by language.
