@@ -66,7 +66,7 @@ Ensure you have the following:
 
 2. Navigate to this scenario: `cd alloy-scenarios/k8s/metrics`
 
-3. Create a local Kind cluster with the example configuration in `kind.yml`:
+3. Create a local Kind cluster:
 
    ```sh
    kind create cluster --config kind.yml
@@ -131,7 +131,7 @@ The chart creates multiple Alloy Pods. Port-forward the `alloy-metrics` Pod for 
   kubectl --namespace meta port-forward $POD_NAME 12345
   ```
 
-Run the commands again when you start a new session.
+Run the port-forward commands again when you start a new session.
 
 ## Explore the services
 
@@ -174,7 +174,7 @@ The `k8s-monitoring-values.yml` file sets collectors and destinations in chart v
 After you edit `k8s-monitoring-values.yml`, upgrade the release:
 
 ```sh
-helm upgrade k8s grafana/k8s-monitoring --version "^4.0.0" -n meta --values k8s-monitoring-values.yml
+helm upgrade k8s grafana/k8s-monitoring --version "^4.0.0" -n meta --values ./k8s-monitoring-values.yml
 ```
 
 ## Troubleshoot common problems
