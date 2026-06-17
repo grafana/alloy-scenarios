@@ -63,7 +63,7 @@ Ensure you have the following:
 
 2. Navigate to this scenario: `cd alloy-scenarios/k8s/tracing`
 
-3. Create a local Kind cluster with the example configuration in `kind.yml`:
+3. Create a local Kind cluster:
 
    ```sh
    kind create cluster --config kind.yml
@@ -129,7 +129,7 @@ The chart creates multiple Alloy Pods. Port-forward the `alloy-receiver` Pod for
   kubectl --namespace meta port-forward $POD_NAME 12345
   ```
 
-Run the commands again when you start a new session.
+Run the port-forward commands again when you start a new session.
 
 ## Explore the services
 
@@ -162,7 +162,7 @@ The `k8s-monitoring-values.yml` file sets collectors and destinations in chart v
    This chart doesn't send application traces to Alloy by default.
    Point any OpenTelemetry-instrumented app at the Alloy OTLP endpoint in **Customize the scenario**, or configure the demo workload to export traces there.
 
-3. In Grafana **Explore**, select the **Tempo** data source and search with TraceQL:
+3. After a workload exports OTLP traces to Alloy, open Grafana **Explore**, select the **Tempo** data source, and search with TraceQL:
 
    - All traces: `{}`
    - Filter by service name: `{resource.service.name="my-service"}`
@@ -180,14 +180,17 @@ The `k8s-monitoring-values.yml` file sets collectors and destinations in chart v
 
   ```text
   OTEL_EXPORTER_OTLP_ENDPOINT=http://k8s-alloy-receiver.meta.svc.cluster.local:4317
+  OTEL_EXPORTER_OTLP_PROTOCOL=grpc
   ```
+
+  For HTTP OTLP, use port 4318 and set `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`.
 
 - **Add demo workloads**: Install additional Helm releases in `prod`, similar to the Tempo distributed example in **Try it out**.
 
 After you edit `k8s-monitoring-values.yml`, upgrade the release:
 
 ```sh
-helm upgrade k8s grafana/k8s-monitoring --version "^4.0.0" -n meta --values k8s-monitoring-values.yml
+helm upgrade k8s grafana/k8s-monitoring --version "^4.0.0" -n meta --values ./k8s-monitoring-values.yml
 ```
 
 ## Troubleshoot common problems
@@ -205,7 +208,7 @@ For Alloy collectors, check the k8s-monitoring release with `helm status k8s -n 
 Open the Alloy UI and check that the `alloy-receiver` collector is healthy.
 Use live debug to verify traces arrive.
 In Grafana, select the **Tempo** data source in **Explore** and run `{}`.
-If `prod` has no instrumented workloads, install the demo app from **Try it out**.
+If no traces appear, verify a workload exports OTLP to the Alloy receiver endpoint from **Customize the scenario**.
 
 ### Kubernetes Monitoring Helm chart install failed
 
