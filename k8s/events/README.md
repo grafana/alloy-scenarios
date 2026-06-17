@@ -36,7 +36,7 @@ Ensure you have the following:
 | Alloy deployment                | `k8s-monitoring` Helm chart collector preset | Plain `kubectl apply` of ConfigMap, RBAC, and Deployment                  |
 | `loki.source.kubernetes_events` | Hidden inside the chart                      | Visible directly in `alloy-config.yaml`                                   |
 | Scope                           | Pod logs and cluster events                  | Cluster events only with `type`, `reason`, `namespace`, and `kind` labels |
-| Best for                        | Production Kubernetes monitoring             | Learning or extending the events collector                                |
+| Best for                        | Production Kubernetes monitoring             | Learn or extend the events collector                                        |
 
 ## Understand the architecture
 
@@ -101,7 +101,7 @@ Use a second terminal if you need Grafana and the Alloy UI at the same time.
 - Grafana at http://localhost:3000: `kubectl port-forward -n meta svc/grafana 3000:80`
 - Alloy UI at http://localhost:12345: `kubectl port-forward -n meta svc/alloy 12345:12345`
 
-Run the command again when you start a new session.
+Run the port-forward commands again when you start a new session.
 
 ## Explore the services
 
@@ -127,6 +127,7 @@ The `alloy-config.yaml` ConfigMap defines three components:
 Indexed labels are `job`, `type`, `reason`, `namespace`, and `kind`.
 The `instance` label identifies the Alloy component.
 The involved-object `name` is structured metadata. It has high cardinality but you can search it with `| json`.
+`loki-values.yml` sets `allow_structured_metadata: true` so Loki accepts the metadata from `stage.structured_metadata`.
 
 ## Try it out
 
@@ -160,9 +161,9 @@ The involved-object `name` is structured metadata. It has high cardinality but y
 
 ## Customize the scenario
 
-- **Scope to specific namespaces**: Add `namespaces = ["prod", "default"]` to the `loki.source.kubernetes_events.cluster` block in the `config.alloy` section of `alloy-config.yaml`.
+- **Scope to specific namespaces**: Add `namespaces = ["meta", "default"]` to the `loki.source.kubernetes_events.cluster` block in the `config.alloy` section of `alloy-config.yaml`.
 - **Drop noisy reasons**: Add a `stage.match` block that drops `reason=~"Pulled|Pulling|Created"` in `loki.process.events`.
-- **Add alerting**: Alert on `count_over_time({type="Warning"}[5m])` in Grafana.
+- **Add alerting**: Alert on `count_over_time({job="kubernetes-events", type="Warning"}[5m])` in Grafana.
 
 After you edit `alloy-config.yaml`, reapply it and restart Alloy:
 
