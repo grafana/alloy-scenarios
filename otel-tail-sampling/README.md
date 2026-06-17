@@ -1,235 +1,171 @@
-# OpenTelemetry Tail Sampling with Grafana Alloy
+# OpenTelemetry tail sampling
 
-This example demonstrates how to implement tail sampling for OpenTelemetry traces using Grafana Alloy, allowing you to intelligently filter and sample traces based on various criteria.
+This scenario shows how to filter OpenTelemetry traces with Grafana Alloy's `otelcol.processor.tail_sampling` component.
+A Python Flask demo app generates traces in the background and on demand, Alloy applies tail-sampling policies, and sampled traces are stored in Tempo for exploration in Grafana.
 
-## Overview
+Tail sampling decides whether to keep a trace only after Alloy has seen its spans.
+That lets you keep errors, slow requests, and traces with specific attributes while dropping most routine traffic.
 
-The example includes:
+## Before you begin
 
-- A Python Flask application that automatically generates different types of traces in the background
-- Grafana Alloy configured with tail sampling policies and transform processor
-- Tempo for trace storage and querying
-- Prometheus for metrics collection
-- Grafana for visualization
-- Live debugging for monitoring the sampling process
+Ensure you have the following:
 
-## Running the Demo
+- [Docker][docker] and [Docker Compose][docker-compose].
+- Ports 8080 for the demo app, 3000 for Grafana, 3200 for Tempo, 9090 for Prometheus, 12345 for the Alloy UI, and 4317 and 4318 for OTLP free on the host.
 
-1. Clone the repository:
-   ```
-   git clone https://github.com/grafana/alloy-scenarios.git
-   cd alloy-scenarios
-   ```
+[docker]: https://docs.docker.com/get-docker/
+[docker-compose]: https://docs.docker.com/compose/install/
 
-2. Navigate to this example directory:
-   ```
-   cd otel-tail-sampling
-   ```
+## Understand the architecture
 
-3. Run using Docker Compose:
-   ```
-   docker compose up -d
-   ```
-   
-   Or use the centralized image management:
-   ```
-   cd ..
-   ./run-example.sh otel-tail-sampling
-   ```
-
-4. Access the demo application at http://localhost:8080
-5. Access Grafana at http://localhost:3000
-6. Access Prometheus at http://localhost:9090
-7. Access Alloy's live debugging endpoint at http://localhost:12345/debug/livedebugging
-
-## What to Expect
-
-The demo application automatically generates various types of traces in the background:
-
-- **Simple Traces**: Basic single-span traces
-- **Nested Traces**: Traces with parent-child relationships
-- **Error Traces**: Traces containing errors
-- **High Latency Traces**: Traces with execution times over 5 seconds
-- **Delayed Chain Traces**: Service chains with Service D consistently having high latency (3-4 seconds)
-
-You can also manually trigger trace generation using the web UI. The application will continuously generate a mix of these trace types in the background at random intervals.
-
-## Processing Pipeline
-
-This example demonstrates a more complex trace processing pipeline with the following components:
-
-> Note: In the case of tail sampling, this ensures that trace spans are presented to the tail sampler as early as possible, to ensure that a decision period includes all relevant spans for a trace. Batch processing potentially prevents spans from arriving at the sampler before a sampling decision is made once the first span for a trace has been seen. This can lead to incorrect decisions being made, and starts to rely on a cache being enabled for future sampling decisions.
-
-1. **OTLP Receiver**: Receives traces from the application via gRPC or HTTP
-2. **Tail Sampling Processor**: Applies sampling policies based on trace properties
-3. **Batch Processor**: Groups spans for efficient processing
-4. **OTLP Exporter**: Sends sampled traces to Tempo
-
-## Tail Sampling Configuration
-
-This example uses Alloy's `otelcol.processor.tail_sampling` processor, which makes sampling decisions based on the entire trace, not just individual spans. This allows for more intelligent sampling based on trace-wide properties.
-
-> Note: Tempo indexes upon TraceID's and SpanID's not resource attributes.  Make sure you only send When requesting trace IDs or carrying out TraceQL queries, this will mean that returned traces will in fact consist of whichever duplicate span is encountered first. This will mean that subsequent queries will potentially not yield the same result, and that the service names for spans in the same trace could be comprised of both raw-traces and trace-demo-tail-sampled in the same trace, or appear to be from a sampled trace when it was in fact unsampled, or vice versa. To ensure consistency, only one set of spans with a unique ID and traceID should be emitted to Tempo. 
-
-The tail sampling configuration includes the following policies:
-
-1. **Attribute-Based Sampling**: Samples traces with a specific attribute value
-   ```
-   policy {
-     name = "test-attribute-policy"
-     type = "string_attribute"
-     
-     string_attribute {
-       key    = "test_attr_key_1"
-       values = ["test_attr_val_1"]
-     }
-   }
-   ```
-
-2. **Error Sampling**: Always samples traces with ERROR status
-   ```
-   policy {
-     name = "error-policy"
-     type = "status_code"
-     
-     status_code {
-       status_codes = ["ERROR"]
-     }
-   }
-   ```
-
-3. **Latency-Based Sampling**: Samples traces that exceed a latency threshold
-   ```
-   policy {
-     name = "latency-policy"
-     type = "latency"
-     
-     latency {
-       threshold_ms = 5000  // 5 seconds
-     }
-   }
-   ```
-
-4. **Numerical Range Sampling**: Samples traces with a numeric attribute in a specific range
-   ```
-   policy {
-     name = "numeric-policy"
-     type = "numeric_attribute"
-     
-     numeric_attribute {
-       key       = "key1"
-       min_value = 70
-       max_value = 100
-     }
-   }
-   ```
-
-5. **URL-Based Filtering**: Excludes health check and metrics endpoints
-   ```
-   policy {
-     name = "url-filter-policy"
-     type = "string_attribute"
-     
-     string_attribute {
-       key             = "http.url"
-       values          = ["/health", "/metrics"]
-       invert_match    = true
-     }
-   }
-   ```
-
-6. **Probabilistic Sampling**: Samples a percentage of remaining traces
-   ```
-   policy {
-     name = "probabilistic-policy"
-     type = "probabilistic"
-     
-     probabilistic {
-       sampling_percentage = 10
-     }
-   }
-   ```
-
-## Live Debugging
-
-This example enables Alloy's live debugging feature, which provides real-time insights into the sampling process:
-
-```
-livedebugging {
-  enabled = true
-}
+```text
++------------------+       +-------+       +-------+       +---------+
+| demo-app         | OTLP  | Alloy | OTLP  |       |       |         |
+| Flask + OTel SDK |------>| tail  |------>| Tempo |------>| Grafana |
+|                  |       | sample|       |       |       |         |
++------------------+       +-------+       +---+---+       +---------+
+                                               | service graph
+                                               v and span metrics
+                                          +------------+
+                                          | Prometheus |
+                                          +------------+
 ```
 
-Access the live debugging interface at http://localhost:12345 to see:
+- **demo-app**: Flask app on port 8080 that generates traces in a background thread and through HTTP endpoints.
+- **Alloy**: Receives OTLP traces, applies tail-sampling policies, batches sampled spans, and exports them to Tempo.
+- **Tempo**: Stores sampled traces and generates service-graph and span metrics that it remote-writes to Prometheus.
+- **Prometheus**: Stores metrics from Tempo's metrics generator.
+- **Grafana**: Explores traces through Tempo and service graphs through Prometheus.
 
-- Current processing pipeline state
-- Trace sampling decisions in real-time
-- Policy hit counts and performance metrics
-- Throughput statistics
+## Run the scenario
 
-## Sampling Implications
+1. Clone the repository if you haven't already: `git clone https://github.com/grafana/alloy-scenarios.git`
 
-With tail sampling enabled in this example:
+2. Install the scenario with one of these options:
 
-- All error traces are preserved for troubleshooting
-- High latency traces (>5s) are kept for performance analysis
-- Traces with specific attribute values used for monitoring are retained
-- Health check and metrics endpoints are filtered out to reduce noise
-- A small percentage of other traces are kept for baseline monitoring
-- Traces not matching any criteria are dropped, reducing storage needs
-- Raw traces are stored with a different service name for comparison
+   **Option 1: From the scenario directory**
 
-## Viewing Traces in Grafana
+   Use the default image tags in `docker-compose.yml`.
 
-To view the sampled traces:
+   - Navigate to this scenario: `cd alloy-scenarios/otel-tail-sampling`
+   - Build and deploy the scenario: `docker compose up -d --build`
 
-1. Open Grafana (http://localhost:3000)
-2. Navigate to Explore
-3. Select the Tempo data source
-4. Use the Search tab to find traces based on various criteria
+   **Option 2: From the repository root**
 
-## Sample Queries
+   Use pinned image versions from `image-versions.env` for Grafana, Tempo, Prometheus, and Alloy.
 
-Try these queries in Grafana's Tempo Explorer:
+   - Deploy the scenario: `./run-example.sh otel-tail-sampling`
 
-- Find all traces for the sampled service:
-  ```
-  {resource.service.name="trace-demo-tail-sampled"}
-  ```
+3. From the `otel-tail-sampling` directory, check that all containers are up: `docker compose ps`
 
-- Find error traces:
-  ```
-  {status=error}
-  ```
+   You should see `demo-app`, `alloy`, `tempo`, `prometheus`, and `grafana`.
 
-- Find high latency traces:
-  ```
-  {duration>5s}
-  ```
+## Explore the services
 
-- Find traces with a specific attribute:
-  ```
-  {span.test_attr_key_1="test_attr_val_1"}
-  ```
-  
-- Find traces with Service D bottleneck:
-  ```
-  {span.service.latency="high" && span.latency.category="bottleneck"}
-  ```
+- **Demo app** at http://localhost:8080: Home page with links to trace-generating endpoints. The app also generates traces automatically in the background.
+- **Grafana** at http://localhost:3000: **Explore** and **Traces Drilldown**, with no login required. Open **Traces Drilldown** at http://localhost:3000/a/grafana-exploretraces-app.
+- **Alloy UI** at http://localhost:12345: Pipeline graph, component health, and live debug views.
+- **Tempo** at http://localhost:3200: Trace storage backend.
+- **Prometheus** at http://localhost:9090: Service-graph and span metrics from Tempo.
 
-## Customizing
+## Understand the Alloy pipeline
 
-You can modify the `config.alloy` file to adjust the sampling policies:
+The `config.alloy` pipeline has four components in this order:
 
-- Change the decision wait time to balance memory usage vs. complete trace visibility
-- Adjust the sampling thresholds to capture more or fewer traces
-- Add additional sampling policies based on your specific needs
-- Modify the existing policies to match your application's attributes
-- Update the transform processor to add or modify different attributes
+1. **`otelcol.receiver.otlp.default`**: Receives OTLP traces over gRPC and HTTP.
+2. **`otelcol.processor.tail_sampling.default`**: Buffers spans per trace and applies sampling policies after `decision_wait = "10s"`.
+3. **`otelcol.processor.batch.default`**: Batches sampled spans before export.
+4. **`otelcol.exporter.otlp.tempo`**: Sends kept traces to Tempo at `tempo:4317`.
 
-## Further Resources
+Tail sampling runs before batching so spans reach the sampler as early as possible.
+If batching ran first, spans from the same trace could arrive too late for a correct decision.
 
-- [Grafana Alloy Tail Sampling Documentation](https://grafana.com/docs/alloy/latest/reference/components/otelcol.processor.tail_sampling/)
-- [Grafana Alloy Transform Processor Documentation](https://grafana.com/docs/alloy/latest/reference/components/otelcol.processor.transform/)
-- [OpenTelemetry Tail Sampling Processor](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/tailsamplingprocessor)
-- [Live Debugging in Grafana Alloy](https://grafana.com/docs/alloy/latest/debug-alloy-flow/) 
+`livedebugging` is enabled so you can inspect sampling decisions in the Alloy UI.
+
+### Tail-sampling policies
+
+`otelcol.processor.tail_sampling.default` in `config.alloy` defines six policies:
+
+1. **test-attribute-policy**: Keeps traces with `test_attr_key_1 = test_attr_val_1`.
+2. **error-policy**: Keeps traces that contain a span with `ERROR` status.
+3. **latency-policy**: Keeps traces with end-to-end latency above 5000 ms.
+4. **numeric-policy**: Keeps traces where numeric attribute `key1` is between 70 and 100.
+5. **url-filter-policy**: Drops traces whose `http.url` is `/health` or `/metrics`. All other URLs pass through to later policies.
+6. **probabilistic-policy**: Keeps 10% of remaining traces as a baseline sample.
+
+The processor also sets `num_traces = 100` and `expected_new_traces_per_sec = 10` to size its in-memory trace buffer.
+
+### Trace types the demo app generates
+
+The background generator and HTTP endpoints produce:
+
+- Simple single-span traces
+- Nested parent-child traces
+- Error traces
+- High-latency traces with 3 to 10 second delays
+- Delayed-chain traces where service D adds 3 to 4 seconds of latency
+- Multi-service traces with distinct `service.name` values such as `web-ui` and `api-gateway`
+
+Manual endpoints include `/simple`, `/nested`, `/error`, `/high-latency`, `/chain`, `/delayed-chain`, `/multi-service`, and `/batch`.
+
+## Try it out
+
+1. Open the demo app at http://localhost:8080 and wait for background trace generation to start, or call an endpoint such as `/error` or `/high-latency`.
+
+2. Open Grafana at http://localhost:3000, go to **Explore**, select the **Tempo** data source, and open the **Search** tab.
+   Run these TraceQL queries:
+
+   - `{resource.service.name="trace-demo-tail-sampled"}`: Traces from the demo app
+   - `{status=error}`: Traces that include an error status
+   - `{duration>5s}`: Traces longer than five seconds
+   - `{span.test_attr_key_1="test_attr_val_1"}`: Traces matched by the attribute policy
+   - `{span.service.latency="high" && span.latency.category="bottleneck"}`: Traces with a high-latency service D bottleneck
+
+3. To view the service graph, select the **Tempo** data source in **Explore** and open the **Service Graph** tab after several minutes of background traffic.
+
+4. To inspect sampling in real time, open the Alloy UI at http://localhost:12345 and select `otelcol.processor.tail_sampling.default` to use live debug.
+
+## Customize the scenario
+
+- **Adjust policies**: Edit policy blocks in `otelcol.processor.tail_sampling.default` in `config.alloy`.
+- **Change decision timing**: Edit `decision_wait`, `num_traces`, or `expected_new_traces_per_sec` in `config.alloy` to balance memory use against complete trace visibility.
+- **Use the OTel Engine**: Run `docker compose -f docker-compose.yml -f docker-compose-otel.yml up -d --build` to load the equivalent pipeline from `config-otel.yaml` instead of River syntax.
+
+## Troubleshoot common problems
+
+Diagnose container startup failures, missing traces, and port conflicts.
+
+### Containers didn't start or exited unexpectedly
+
+Run `docker compose ps` to check the status of each container.
+If any container has exited, run `docker compose logs <SERVICE_NAME>` to read the failure reason.
+Replace `<SERVICE_NAME>` with the name of the service that exited, such as `demo-app`, `alloy`, or `tempo`.
+For Alloy specifically, the most common cause is a syntax error in `config.alloy`.
+
+### No traces appear in Grafana after a few minutes
+
+Open the demo app at http://localhost:8080 and call `/error` or `/high-latency` to generate a trace that tail sampling should keep.
+Tail sampling waits up to 10 seconds before deciding, so allow a short delay before searching.
+Open the Alloy UI at http://localhost:12345 and check that `otelcol.processor.tail_sampling.default` shows a healthy status.
+In Grafana, select the **Tempo** data source in **Explore** and search for `{resource.service.name="trace-demo-tail-sampled"}`.
+
+### Most traces seem to be missing
+
+That is expected. Tail sampling drops most routine traffic and keeps errors, slow traces, attribute matches, and about 10% of the remainder.
+Compare kept trace counts with the sampling policies in `config.alloy`.
+
+### Port conflicts with other services
+
+Ports 8080 for the demo app, 3000 for Grafana, 3200 for Tempo, 9090 for Prometheus, 12345 for Alloy, and 4317 and 4318 for OTLP must be free before you start the stack.
+If another service uses one of these ports, edit the port mapping in `docker-compose.yml` for the conflicting service before you run `docker compose up -d --build`.
+
+## Stop the scenario
+
+Run `docker compose down` from the `otel-tail-sampling` directory.
+
+## Next steps
+
+- `otelcol.processor.tail_sampling` reference: https://grafana.com/docs/alloy/latest/reference/components/otelcol/otelcol.processor.tail_sampling/
+- OpenTelemetry load balancing scenario: https://github.com/grafana/alloy-scenarios/tree/main/otel-loadbalancing
+- Live debugging in Alloy: https://grafana.com/docs/alloy/latest/troubleshoot/debug/
+- More examples: https://github.com/grafana/alloy-scenarios
