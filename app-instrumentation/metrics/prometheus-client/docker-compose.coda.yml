@@ -1,0 +1,20 @@
+services:
+  python:
+    build: ./python
+    restart: unless-stopped
+
+  node:
+    build: ./node
+    restart: unless-stopped
+
+  go:
+    build: ./go
+    restart: unless-stopped
+
+  java:
+    build: ./java
+    restart: unless-stopped
+
+  csharp:
+    build: ./csharp
+    restart: unless-stopped

@@ -1,0 +1,42 @@
+// ###################################################
+// #### OpenTelemetry metrics pipeline (push model) ####
+// ###################################################
+//
+// The five online-store services each push metrics to Alloy over OTLP using
+// their language's OpenTelemetry SDK. Alloy receives them, batches them, and
+// forwards them to Prometheus through Prometheus' native OTLP endpoint.
+//
+//   apps ──(OTLP)──▶ Alloy ──(OTLP/HTTP)──▶ Prometheus ──▶ Grafana
+//
+// gRPC is used by Python, Go, Java, and C# (http://alloy:4317).
+// HTTP/protobuf is used by Node.js (http://alloy:4318).
+// Alloy listens on both, so the pipeline is identical regardless of transport.
+
+// Receive OTLP metrics from the demo services on both gRPC and HTTP.
+otelcol.receiver.otlp "default" {
+  grpc { } // 4317 - Python, Go, Java, C#
+  http { } // 4318 - Node.js
+
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+  }
+}
+
+// Batch metrics to reduce the number of export requests.
+otelcol.processor.batch "default" {
+  output {
+    metrics = [otelcol.exporter.otlphttp.prometheus.input]
+  }
+}
+
+// Export metrics to Prometheus' OTLP receiver. Resource attributes such as
+// service.name and language are promoted to labels in prom-config.yaml.
+otelcol.exporter.otlphttp "prometheus" {
+  client {
+    endpoint = "http://prometheus:9090/api/v1/otlp"
+
+    tls {
+      insecure = true
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "catalog-prom-client",
+  "version": "1.0.0",
+  "description": "Catalog service that exposes /metrics via the native Prometheus client for Alloy to scrape",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "prom-client": "15.1.3"
+  }
+}
