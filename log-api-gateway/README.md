@@ -66,7 +66,7 @@ Use `logs-file/` when Alloy should discover and tail files instead.
 
    - Deploy the scenario: `./run-example.sh log-api-gateway`
 
-3. Confirm all containers are up: `cd alloy-scenarios/log-api-gateway && docker compose ps`
+3. From the `log-api-gateway` directory, confirm all containers are up: `docker compose ps`
 
    You should see `log-producer`, `alloy`, `loki`, and `grafana`.
 
@@ -94,6 +94,7 @@ The `config.alloy` pipeline in this scenario has a single logs path with three s
 3. **`loki.write.local`**: Forwards enriched logs to Loki at `http://loki:3100/loki/api/v1/push`.
 
 `livedebugging` is enabled so you can inspect the pipeline in the Alloy UI.
+This scenario runs Alloy with `--stability.level=experimental` because `loki.source.api` requires it.
 
 The demo producer sends logs in Loki push API format.
 Each request includes a `streams` array with label sets and timestamped log lines:
@@ -134,7 +135,7 @@ Each request includes a `streams` array with label sets and timestamped log line
 ## Customize the scenario
 
 - **Add gateway labels**: Edit the `stage.static_labels` block in `loki.process.enrich` in `config.alloy` to add labels such as `region` or `cluster`.
-- **Change the listen port**: Edit `listen_port` in `loki.source.api.default` in `config.alloy` and update the port mapping in `docker-compose.yml` if you expose the API on a different host port.
+- **Change the listen port**: Edit `listen_port` in the `http` block of `loki.source.api.default` in `config.alloy` and update the port mapping in `docker-compose.yml` if you expose the API on a different host port.
 - **Simulate different services**: Edit the `services` list in `app/producer.py` to change service names, log messages, or stream labels that the demo producer sends.
 - **Point producers at a remote gateway**: Update `ALLOY_URL` in `app/producer.py`, or your application config, to send logs to `http://<ALLOY_HOST>:3500/loki/api/v1/push`.
 
