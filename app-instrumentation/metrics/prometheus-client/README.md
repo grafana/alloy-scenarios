@@ -24,10 +24,10 @@ Ensure you have the following:
 
 This scenario and its sibling collect the same store metrics with opposite collection models.
 
-| Scenario | Instrumentation | Collection model |
-| -------- | --------------- | ---------------- |
-| Prometheus client metrics | Native Prometheus client libraries | Services expose `/metrics`; Alloy scrapes |
-| [OpenTelemetry SDK metrics](../opentelemetry-sdk/) | OpenTelemetry metrics SDK | Services push over OTLP; Alloy receives |
+| Scenario                                           | Instrumentation                    | Collection model                          |
+| -------------------------------------------------- | ---------------------------------- | ----------------------------------------- |
+| Prometheus client metrics                          | Native Prometheus client libraries | Services expose `/metrics`; Alloy scrapes |
+| [OpenTelemetry SDK metrics](../opentelemetry-sdk/) | OpenTelemetry metrics SDK          | Services push over OTLP; Alloy receives   |
 
 ## Understand the architecture
 
@@ -46,13 +46,13 @@ This scenario and its sibling collect the same store metrics with opposite colle
 
 Alloy lists the five targets statically and attaches a `service_name` and a `language` label to each one.
 
-| Language | Store role | Service name | Scrape target |
-| -------- | ---------- | ------------ | ------------- |
-| Python | Checkout and payments | `checkout` | `python:9100` |
-| Node.js | Product catalog | `catalog` | `node:9100` |
-| Go | Inventory | `inventory` | `go:9100` |
-| Java | Orders | `orders` | `java:9100` |
-| C# | Shipping | `shipping` | `csharp:9100` |
+| Language | Store role            | Service name | Scrape target |
+| -------- | --------------------- | ------------ | ------------- |
+| Python   | Checkout and payments | `checkout`   | `python:9100` |
+| Node.js  | Product catalog       | `catalog`    | `node:9100`   |
+| Go       | Inventory             | `inventory`  | `go:9100`     |
+| Java     | Orders                | `orders`     | `java:9100`   |
+| C#       | Shipping              | `shipping`   | `csharp:9100` |
 
 Every service exposes a counter, a histogram, and two gauges, named for its domain with idiomatic Prometheus names.
 The checkout service, for example, exposes `checkout_transactions_total`, `checkout_payment_duration_seconds`, `checkout_active_carts`, and `checkout_queue_depth`.
@@ -80,8 +80,8 @@ The checkout service, for example, exposes `checkout_transactions_total`, `check
 
 The `config.alloy` pipeline has two components: `prometheus.scrape` and `prometheus.remote_write`.
 
-1. **`prometheus.scrape`**: Lists the five services as static targets, one per container, and scrapes each `/metrics` endpoint every five seconds. The `service_name` and `language` entries on each target become labels on every scraped series. The component forwards the samples to `prometheus.remote_write`.
-2. **`prometheus.remote_write`**: Pushes the samples to Prometheus at `http://prometheus:9090/api/v1/write`.
+1. **`prometheus.scrape "store_apps"`**: Lists the five services as static targets, one per container, and scrapes each `/metrics` endpoint every five seconds. The `service_name` and `language` entries on each target become labels on every scraped series. The component forwards the samples to `prometheus.remote_write.local`.
+2. **`prometheus.remote_write "local"`**: Pushes the samples to Prometheus at `http://prometheus:9090/api/v1/write`.
 
 Prometheus runs with the `--web.enable-remote-write-receiver` flag so it accepts the write.
 Each service binds `/metrics` to `0.0.0.0:9100`, so Alloy can reach it by the container name on the Compose network.
@@ -112,7 +112,7 @@ Each service binds `/metrics` to `0.0.0.0:9100`, so Alloy can reach it by the co
 
 - **Add a language**: Serve `/metrics` on port 9100, add the service to `docker-compose.yml`, and add one target to the `targets` list in `prometheus.scrape` in `config.alloy`.
 - **Discover targets dynamically**: Replace the static `targets` list with `discovery.docker` and `discovery.relabel` to pick up containers automatically. The [Popular logging frameworks](../../logging/popular-logging-frameworks/) scenario uses that pattern.
-- **Drop or rename series**: Add a `prometheus.relabel` block between `prometheus.scrape` and `prometheus.remote_write` to filter or relabel the scraped samples.
+- **Drop or rename series**: Add a `prometheus.relabel` block between `prometheus.scrape.store_apps` and `prometheus.remote_write.local` to filter or relabel the scraped samples.
 
 ## Troubleshoot common problems
 
