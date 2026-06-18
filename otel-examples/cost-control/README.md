@@ -1,9 +1,8 @@
 # Telemetry cost control
 
-This scenario shows how to reduce observability costs by filtering noisy telemetry and applying probabilistic sampling in the Alloy OTel Engine pipeline before data reaches your backends.
-
-The demo app generates high-volume health checks, DEBUG logs, and occasional business traces.
-The OTel YAML config in `config-otel.yaml` drops probe traffic, filters debug logs, samples traces, and strips high-cardinality attributes.
+This scenario shows how to cut observability costs in the Alloy OTel Engine pipeline.
+The demo app emits noisy health checks and DEBUG logs alongside `/api/order` and `/api/error` traces.
+`config-otel.yaml` filters probe spans and debug logs, samples 25% of remaining traces, and strips high-cardinality span attributes before export.
 
 ## Before you begin
 
@@ -18,15 +17,15 @@ Ensure you have the following:
 ## Understand the architecture
 
 ```text
-+----------+     +-------+     +------+     +---------+
-| demo-app |     |       |---->| Loki |---->|         |
-|          | OTLP| Alloy |     +------+     | Grafana |
-|          |---->| OTel  |---->| Tempo|---->|         |
-+----------+     +-------+     +------+     +---------+
++----------+     +-------------+     +------+     +---------+
+| demo-app |     |             |---->| Loki |---->|         |
+|          | OTLP| Alloy OTel  |     +------+     | Grafana |
+|          |---->| Engine      |---->| Tempo|---->|         |
++----------+     +-------------+     +------+     +---------+
 ```
 
-- **demo-app**: Flask app on port 8080 that emits noisy health checks, DEBUG logs, and business traces to Alloy over OTLP.
-- **Alloy**: Runs the OTel Engine with `config-otel.yaml` and exposes the Alloy UI through the `alloyengine` extension in `config.alloy`.
+- **demo-app**: Flask app on port 8080 that sends health checks, DEBUG logs, and business traces to Alloy over OTLP.
+- **Alloy**: Runs the OTel Engine from `config-otel.yaml`. The `alloyengine` extension loads the stub `config.alloy` and exposes the Alloy UI on port 12345.
 - **Loki**: Stores filtered logs at `http://loki:3100`.
 - **Tempo**: Stores sampled traces at `http://tempo:3200`.
 - **Grafana**: Queries logs and traces through provisioned Loki and Tempo data sources.
@@ -41,8 +40,8 @@ Ensure you have the following:
 
    Use the default image tags in `docker-compose.yml`.
 
-   - Navigate to this scenario: `cd alloy-scenarios/otel-examples/cost-control`
-   - Build and deploy the scenario: `docker compose up -d --build`
+   - Go to the scenario: `cd alloy-scenarios/otel-examples/cost-control`
+   - Deploy the scenario: `docker compose up -d --build`
 
    **Option 2: From the repository root**
 
@@ -58,53 +57,53 @@ Ensure you have the following:
 
 - **Demo app** at http://localhost:8080: Endpoints for health checks, orders, and errors.
 - **Grafana** at http://localhost:3000: **Explore** with Loki and Tempo data sources, with no login required.
-- **Alloy UI** at http://localhost:12345: Pipeline debugging UI enabled by the `alloyengine` extension.
-- **OTel Engine HTTP server** at http://localhost:8888: OTel Engine health and diagnostics endpoint.
+- **Alloy UI** at http://localhost:12345: Started by the `alloyengine` extension in `config-otel.yaml`. Because `config.alloy` is a stub, this UI does not graph the OTel YAML pipeline.
+- **OTel Engine HTTP server** at http://localhost:8888: Collector telemetry and health endpoint.
 - **Loki** at http://localhost:3100: Log backend API.
 - **Tempo** at http://localhost:3200: Trace storage backend.
 
 ## Understand the OTel pipeline
 
-The pipeline is defined in `config-otel.yaml`. The `config.alloy` file is minimal and only enables the Alloy UI alongside the OTel Engine.
+`config-otel.yaml` defines the pipeline. `config.alloy` is a stub that the `alloyengine` extension loads so the Alloy UI can start next to the OTel Engine.
 
-Trace pipeline:
+### Trace pipeline
 
-1. **`filter/traces`**: Drops spans where `http.target` or `http.route` matches `/health`, `/ready`, or `/metrics`.
-2. **`probabilistic_sampler`**: Keeps 25% of remaining traces through head-based sampling.
+1. **`filter/traces`**: Drops spans where `http.target` is `/health`, `/ready`, or `/metrics`, or where `http.route` is `/health` or `/ready`.
+2. **`probabilistic_sampler`**: Keeps 25% of remaining traces. Change `sampling_percentage` to balance cost and visibility.
 3. **`transform/strip`**: Removes `http.user_agent` and `http.request.header.cookie` from spans.
 4. **`batch`**: Batches spans before export to Tempo.
 
-Log pipeline:
+### Log pipeline
 
 1. **`filter/logs`**: Drops log records with `severity_number` below 9, which excludes DEBUG logs.
 2. **`batch`**: Batches log records before export to Loki.
 
-To run without the Alloy UI, remove the `extensions` block and the `extensions: [alloyengine]` line from `config-otel.yaml`.
+To run without the Alloy UI, remove the `extensions` block and the `extensions: [alloyengine]` line from `config-otel.yaml`, and remove the `config.alloy` volume mount from `docker-compose.yml`.
 
 ## Try it out
 
-The demo app's background load generator calls `/health` about 70% of the time, `/ready` about 10%, `/api/order` about 15%, and `/api/error` about 5%.
+The background load generator calls `/health` about 70% of the time, `/ready` about 10%, `/api/order` about 15%, and `/api/error` about 5%.
 
 1. Open Grafana at http://localhost:3000 and go to **Explore**.
 
    Select the **Tempo** data source and run these TraceQL queries:
 
    - `{resource.service.name="cost-control-demo"}`: Traces from the demo app
-   - `{span.http.route="/api/order"}`: Business order traces that pass filtering
+   - `{resource.service.name="cost-control-demo" && name="process-order"}`: Order traces that survive filtering
    - `{status=error}`: Error traces from `/api/error`
 
-   You should see `/api/order` and `/api/error` spans but no `/health` or `/ready` spans. Those probe traces are dropped by `filter/traces`.
+   Expect `/api/order` and `/api/error` spans in Tempo, not `/health` or `/ready`. The demo app has no `/metrics` endpoint, but `filter/traces` drops it when present.
 
 2. Select the **Loki** data source and run these LogQL queries:
 
-   - `{service_name="cost-control-demo"}`: All logs that passed filtering
-   - `{service_name="cost-control-demo"} | json`: Parsed log lines from the demo app
+   - `{service_name="cost-control-demo"}`: Logs from the demo app
+   - `{service_name="cost-control-demo"} | json`: Parsed log lines
 
    You should see INFO and ERROR logs but no DEBUG logs.
 
-3. Compare sampling volume in Tempo with the app's request rate. Only about 25% of non-filtered traces are kept by `probabilistic_sampler`.
+3. Compare trace volume in Tempo with the app request rate. `probabilistic_sampler` keeps about 25% of non-filtered traces.
 
-4. Open the Alloy UI at http://localhost:12345 to inspect the OTel pipeline, or visit http://localhost:8888 for the OTel Engine HTTP server.
+4. Open the Alloy UI at http://localhost:12345, or http://localhost:8888 for OTel Engine telemetry.
 
 ## Customize the scenario
 
@@ -115,7 +114,7 @@ The demo app's background load generator calls `/health` about 70% of the time, 
 
 ## Troubleshoot common problems
 
-Diagnose container startup failures, missing telemetry, and port conflicts.
+Covers startup failures, missing telemetry, and port conflicts.
 
 ### Containers didn't start or exited unexpectedly
 
@@ -126,15 +125,15 @@ Validate the OTel config with `docker compose run --rm alloy otel validate --con
 
 ### No traces appear in Tempo after a few minutes
 
-Wait for the demo app's background load generator to start. It sleeps five seconds after startup.
+Wait for the background load generator to start. It sleeps five seconds after startup.
 Open the Alloy UI at http://localhost:12345 and check that Alloy is running.
 In Grafana, search Tempo for `{resource.service.name="cost-control-demo"}`.
-Remember that probe traces are filtered and only about 25% of remaining traces are sampled.
+Probe traces are filtered out, and only about 25% of remaining traces are sampled.
 
 ### No logs appear in Loki after a few minutes
 
 In Grafana, run `{service_name="cost-control-demo"}` on the **Loki** data source.
-DEBUG logs are filtered out by design. Trigger an order or error request if you need fresh INFO or ERROR lines.
+DEBUG logs are filtered out by design. Call `/api/order` or `/api/error` if you need fresh INFO or ERROR lines.
 
 ### Port conflicts with other services
 
@@ -150,4 +149,3 @@ Run `docker compose down` from the `otel-examples/cost-control` directory.
 - OTel engine examples overview: https://github.com/grafana/alloy-scenarios/tree/main/otel-examples
 - Alloy OTel Engine documentation: https://grafana.com/docs/alloy/latest/set-up/otel_engine/
 - OpenTelemetry filter processor: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/filterprocessor
-- More examples: https://github.com/grafana/alloy-scenarios
