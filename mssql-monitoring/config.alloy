@@ -1,0 +1,44 @@
+// ###############################
+// #### Metrics Configuration ####
+// ###############################
+
+// Enable live debugging for the Alloy UI.
+livedebugging {
+	enabled = true
+}
+
+// Read the collector definition for the exporter. The query_config
+// argument REPLACES the exporter's built-in collector rather than
+// extending it, so mssql-queries.yaml embeds the upstream default
+// collector as its base and appends this scenario's custom metrics
+// (database file sizes and the demo table row count) at the end.
+local.file "queries" {
+	filename = "/etc/alloy/mssql-queries.yaml"
+}
+
+// Expose SQL Server metrics using the bundled sql_exporter integration.
+//
+// The connection string comes from the container environment because it
+// embeds the SA password. sys.env() returns it as a one-way Alloy secret,
+// so the credential never appears in this file or in the Alloy UI.
+// Production setups would source it from a real secret store instead --
+// see the vault-secrets scenario for remote.vault.
+prometheus.exporter.mssql "default" {
+	connection_string = sys.env("MSSQL_CONNECTION_STRING")
+	query_config      = local.file.queries.content
+}
+
+// Scrape the SQL Server exporter every 15 seconds.
+prometheus.scrape "mssql" {
+	targets    = prometheus.exporter.mssql.default.targets
+	forward_to = [prometheus.remote_write.default.receiver]
+
+	scrape_interval = "15s"
+}
+
+// Send the scraped metrics to the local Prometheus instance via remote write.
+prometheus.remote_write "default" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}

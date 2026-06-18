@@ -140,6 +140,7 @@ These scenarios monitor databases and in-memory caches.
 | -------- | ----------- |
 | [Elasticsearch monitoring](elasticsearch-monitoring/) | Monitor Elasticsearch cluster health, node status, and performance metrics. |
 | [Memcached monitoring](memcached-monitoring/) | Monitor Memcached instance metrics, including connections, memory usage, and command performance. |
+| [Microsoft SQL Server monitoring](mssql-monitoring/) | Monitor SQL Server file sizes, batch requests, and connections with `prometheus.exporter.mssql`, plus app-specific metrics from a custom `query_config`. |
 | [MongoDB monitoring](mongodb-monitoring/) | Monitor MongoDB op-counters, connection pool, and replica-set replication metrics with `prometheus.exporter.mongodb`. Runs a single-node replica set with an insert load generator. |
 | [MySQL monitoring](mysql-monitoring/) | Monitor MySQL database server metrics and performance indicators. |
 | [PostgreSQL monitoring](postgres-monitoring/) | Monitor PostgreSQL transaction statistics, connections, and server configuration. |

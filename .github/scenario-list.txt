@@ -16,6 +16,7 @@ logs-tcp
 mail-house
 memcached-monitoring
 mongodb-monitoring
+mssql-monitoring
 mysql-monitoring
 nginx-monitoring
 otel-basic-tracing
