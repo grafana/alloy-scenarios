@@ -1,0 +1,10 @@
+services:
+  # Flask checkout service: every request produces an OTLP trace AND a
+  # histogram observation carrying that trace's ID as an exemplar. A
+  # built-in load thread keeps requests flowing forever.
+  demo-app:
+    build: ./app
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
+    ports:
+      - 8080:8080

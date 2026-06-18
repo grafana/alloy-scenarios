@@ -1,0 +1,6 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Prometheus only receives service-graph and span metrics that Tempo's
+# metrics generator remote-writes; it does not scrape anything itself.

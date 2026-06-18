@@ -14,6 +14,7 @@
 - Proxies trace-replay queries to Tempo and falls back to local SQLite when Tempo is unavailable.
 - Instruments player actions as `SERVER` spans with `trace.Link`s chaining each action to the previous one in the session, with `player.action=true` and W3C Baggage (`game.session.id`, `player.faction`, `game.actor`) attached via the `game_baggage()` context manager (`app.py:45`).
 - Runs the **wall-hold tick thread** (`_wall_tick_thread`, 30 s cadence) that increments `wall_hold` when one faction owns every wall keep, and declares the WWA winner at 5 consecutive ticks (flipping the game-over flags directly, not just on the next poll).
+- **Declares the winner**: `check_game_over()` runs the capital-capture check on *every* map (driven by `CAPITALS_BY_MAP` — a capital held by anyone but its original owner ends the game), plus the wall-hold check on WWA. So on WWA either side can win fast by storming the enemy fortress or slow by holding the Wall.
 - **Enforces game over**: once a winner is declared, the five player-action endpoints return 409 via `_reject_if_game_over()` (`app.py:850`) and the AI is deactivated exactly once via `_deactivate_ai_once()` (`app.py:832`). Location servers stay permissive by design — in-flight movements should still resolve.
 
 ## File map

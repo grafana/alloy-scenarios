@@ -1,0 +1,6 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Alloy scrapes the apps and pushes samples via remote_write, so Prometheus
+# itself does not need any scrape_configs here.

@@ -147,7 +147,8 @@ MAPS = {
         "display_name": "White Walkers Attack",
         "description": (
             "The Long Night has come. As the Night's Watch, hold every Wall "
-            "keep for 5 ticks (150 s) before the White Walkers do. Single-player."
+            "keep for 5 ticks (150 s) before the White Walkers do — or storm "
+            "The Lands of Always Winter. Single-player."
         ),
         "single_player": True,
         "player_faction": "nights_watch",
@@ -273,7 +274,10 @@ MAPS = {
         "rules": {
             # Night's Watch capital collects resources on the classic schedule.
             # White Walker fortress ignores resource_generation (uses corpses).
-            "resource_generation": {"capital": 20, "village": 10},
+            # Wall keeps earn a small passive income for whoever holds them
+            # (and can send it home), so taking the Wall pays — not just
+            # holding it for the tick counter.
+            "resource_generation": {"capital": 20, "village": 10, "wall": 5},
             "army_cost": {
                 "default": 30,
                 "white_walkers": 5,

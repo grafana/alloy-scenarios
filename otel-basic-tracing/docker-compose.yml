@@ -26,7 +26,7 @@ services:
       - prometheus
   
   memcached:
-    image: memcached:1.6.42@sha256:26983a43c9181d37d0f9b0d2cf49c3ccf02e5b816afb1f8ffff7f825e65bcdad
+    image: memcached:1.6.42@sha256:85c0ab87f71b8b3ade708271177a8e5efca5e93c00287b6f25a2d74a27180bfa
     container_name: memcached
     ports:
       - "11211:11211"
@@ -83,7 +83,7 @@ services:
 
   # Alloy for telemetry pipeline
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.16.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.0}
     ports:
       - 12345:12345      # Alloy HTTP server
     volumes:

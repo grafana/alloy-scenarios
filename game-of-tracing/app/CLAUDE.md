@@ -9,8 +9,8 @@ All 8 locations run the same codebase. A container's **slot** (set via `SLOT_ID`
 - Owns a row in the shared `game_state.db` (resources, army, faction).
 - Exposes an HTTP API for collecting resources, creating armies, moving armies, and launching attacks.
 - Instruments every route with OpenTelemetry traces, logs, and five custom game metrics.
-- Runs passive resource generation for villages (every 15 s) and handles cooldowns for capitals.
-- On the White Walkers Attack map, also runs: passive barbarian army growth (every 30 s at barbarian villages), passive corpse generation (every 15 s at the White Walker fortress), passive resource generation at the Night's Watch capital (+5 every 10 s — WWA has no friendly villages, so this replaces the click-only economy), and the wall multiplier (defenders count 2× at `wall`-type locations).
+- Runs passive resource generation for villages — and, on maps that price the type (WWA's wall keeps, +5/15 s), for `wall` locations — and handles cooldowns for capitals.
+- On the White Walkers Attack map, also runs: passive barbarian army growth (every 30 s at barbarian villages), passive corpse generation (every 15 s at the White Walker fortress, gated on the fortress's *live* faction so it stops once stormed), passive resource generation at the Night's Watch capital (+5 every 10 s — WWA has no friendly villages, so this replaces the click-only economy), and the wall multiplier (defenders count 2× at `wall`-type locations).
 
 Ports 5001-5008:
 
@@ -50,7 +50,7 @@ Service names (hyphenated) match the `SERVICE_NAME` resource attribute used in t
 | `POST` | `/receive_army` | `receive_army` | Target of `_continue_army_movement`; validates payload, dedupes by `movement_id`, resolves battle via `_handle_battle` with span events |
 | `POST` | `/receive_resources` | `receive_resources` | Target of `_forward_resources`; validates payload; banks at destination, relays at intermediate hops (no banking), `captured: true` on faction mismatch |
 | `GET` | `/health` | — | Docker health check; returns `{"status": "ok"\|"degraded", "threads": {name: alive}}` with passive-thread liveness |
-| `POST` | `/send_resources_to_capital` | — | Village → friendly capital; guarded debit-at-send, then `_forward_resources` |
+| `POST` | `/send_resources_to_capital` | — | Village or wall keep → friendly capital; guarded debit-at-send, then `_forward_resources` |
 | `POST` | `/reload` | — | Re-read `active_map_id` + rebind slot identity in place (war_map calls this after `/select_map`) |
 | `GET` | `/faction_economy?faction=...` | — | Read a faction's corpse pool (AI uses it) |
 
@@ -157,12 +157,12 @@ All defined in `app/game_config.py`'s `MAPS["white_walkers_attack"]["rules"]`. A
 - **Wall defender multiplier** — `_handle_battle` accepts a `location_type` argument and scales `defending_army` by `rules["wall_multiplier"]` (2.0 on WWA, 1.0 on WoK) when the location type is `wall`. Remaining defender count is converted back to physical units after the fight.
 - **Corpse economy** — when the battle winner is `white_walkers`, the post-battle hook in `receive_army` calls `self._add_corpses(attacking + defending - remaining, "white_walkers")`. `create_army` reads `get_army_currency(map_id, faction)` and, for `currency == "corpses"`, atomically decrements via `_spend_corpses` instead of touching `resources`. The corpse pool lives in `faction_economy` (persistent) so a `/reload` doesn't wipe it.
 - **Barbarian passive growth** — `_start_barbarian_growth(interval_s)` runs when `faction == "barbarian"`; adds +1 army every `rules["barbarian_army_growth_interval_s"]` (30 s). Guards each iteration against identity changes via `/reload`.
-- **Captured-camp resource generation** — `_start_passive_generation()` is launched for *every* `type == "village"` slot at boot (including barbarian Free Folk camps). The per-iteration `faction != "barbarian"` guard keeps it a no-op while the camp is still barbarian, then it starts producing the standard village amount the moment the player captures it. Without this fallthrough, captured camps stayed unproductive because the thread was never started on barbarian slots.
-- **White Walker passive corpses** — `_start_white_walker_corpse_tick(interval_s)` runs at the WW fortress, +1 corpse every `rules["white_walker_passive_corpse_interval_s"]` (15 s).
+- **Captured-camp and wall-keep resource generation** — `_start_passive_generation()` is launched for *every* `village` and `wall` slot at boot (including barbarian Free Folk camps). Each iteration looks up the per-type amount in `rules["resource_generation"]` (village 10, wall 5 on WWA; walls unpriced on WoK → no-op) and skips while the live owner is `barbarian`, so a captured camp or keep starts producing the moment its row flips. Owners can ship the stockpile home via `/send_resources_to_capital`.
+- **White Walker passive corpses** — `_start_white_walker_corpse_tick(interval_s)` runs at the WW fortress, +1 corpse every `rules["white_walker_passive_corpse_interval_s"]` (15 s), gated on the fortress's *live* DB faction so corpses stop rising once the Night's Watch storms it.
 - **Night's Watch passive resources** — `_start_nights_watch_capital_resource_tick(interval_s, amount)` runs at Castle Black on WWA (`faction == "nights_watch"`, `loc_type == "capital"`), adding `rules["nights_watch_capital_passive_amount"]` resources every `rules["nights_watch_capital_passive_interval_s"]` (5 per 10 s). Manual `/collect_resources` (+20, 5 s cooldown) still works alongside.
 - **Economy caps** — `rules["max_resources"]` (1000), `rules["max_army"]` (50), `rules["max_corpses"]` (200) on *both* maps; clamped centrally in `_update_location_state` / `_credit_*` / `_add_corpses` so AFK passive income can't break the late game.
 - **Thread resilience** — every passive loop wraps its iteration in try/except (a transient SQLite busy error must not kill the economy permanently), registers itself in `self._passive_threads`, and is surfaced via `/health`'s `threads` map.
-- **Corpse pool seeding** — `reset_database()` (`location_server.py:1095`) re-reads the active map *before* repopulating (war_map writes the new `active_map_id` first, then calls `/reset`) and seeds a zero-corpse `faction_economy` row for every corpse-currency faction, so the AI's `/faction_economy` reads work from t=0.
+- **Corpse pool seeding** — `reset_database()` (`location_server.py:1105`) re-reads the active map *before* repopulating (war_map writes the new `active_map_id` first, then calls `/reset`) and seeds a zero-corpse `faction_economy` row for every corpse-currency faction, so the AI's `/faction_economy` reads work from t=0.
 
 ## DB additions (live in `game_state.db`)
 

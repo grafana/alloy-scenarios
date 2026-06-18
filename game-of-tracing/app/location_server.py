@@ -174,13 +174,13 @@ class LocationServer:
         faction = self.location_info["faction"]
         rules = self._current_rules()
 
-        # Launch the village resource thread for *every* village, including
-        # barbarian-faction slots (Free Folk camps). The thread guards each
-        # iteration on ``faction != "barbarian"``, so it stays a no-op while
-        # the camp is still barbarian and starts producing for the player
-        # the moment they capture it. Without this fallthrough, captured
-        # camps stay unproductive because the thread was never started.
-        if loc_type == "village" and not self._passive_thread_started:
+        # Launch the resource thread for *every* village and wall keep,
+        # including barbarian-faction slots (Free Folk camps). The thread
+        # guards each iteration on ``faction != "barbarian"`` and on the
+        # map's per-type generation amount, so it stays a no-op while the
+        # camp is still barbarian (or the map gives the type no income) and
+        # starts producing for the player the moment they capture it.
+        if loc_type in ("village", "wall") and not self._passive_thread_started:
             self._start_passive_generation()
             self._passive_thread_started = True
 
@@ -949,9 +949,14 @@ class LocationServer:
             while True:
                 try:
                     time.sleep(15)
-                    # Static identity guards against /reload moving this slot off
-                    # of a village type entirely.
-                    if self.location_info["type"] != "village":
+                    # Static identity guards against /reload moving this slot
+                    # off of a producing type entirely.
+                    if self.location_info["type"] not in ("village", "wall"):
+                        continue
+                    amount = self._current_rules()["resource_generation"].get(
+                        self.location_info["type"], 0
+                    )
+                    if amount <= 0:
                         continue
                     # Live-DB guard: gate on the *current* faction, not the
                     # boot-time identity, so a captured Free Folk camp starts
@@ -963,7 +968,6 @@ class LocationServer:
                         continue
                     if location_state["faction"] == "barbarian":
                         continue
-                    amount = self._current_rules()["resource_generation"]["village"]
                     with self.tracer.start_as_current_span(
                         "passive_resource_generation",
                         attributes={
@@ -1074,6 +1078,12 @@ class LocationServer:
                     time.sleep(interval_s)
                     if self.location_info["faction"] != "white_walkers" or self.location_info["type"] != "capital":
                         continue
+                    # Live-DB guard: the boot-time identity never updates on
+                    # battle, so without this the dead would keep rising at a
+                    # fortress the Night's Watch has already stormed.
+                    live_state = self._get_location_state(self.location_id)
+                    if live_state is None or live_state["faction"] != "white_walkers":
+                        continue
                     with self.tracer.start_as_current_span(
                         "white_walker_corpse_tick",
                         attributes={
@@ -1170,7 +1180,7 @@ class LocationServer:
                 with self.lock:
                     now = datetime.now()
                     last_time = self.last_resource_collection.get(self.location_id, datetime.min)
-                    wait_time = timedelta(seconds=15 if self.location_info["type"] == "village" else 5)
+                    wait_time = timedelta(seconds=15 if self.location_info["type"] in ("village", "wall") else 5)
 
                     if now - last_time < wait_time:
                         remaining = wait_time - (now - last_time)
@@ -1791,12 +1801,12 @@ class LocationServer:
                     span.set_attribute("resources_amount", current_resources)
                     span.set_attribute("faction", faction)
                     
-                    if self.location_info["type"] != "village":
-                        span.set_status(trace.StatusCode.ERROR, "Only villages can send resources")
-                        self.logger.error(f"Only villages can send resources to capital")
+                    if self.location_info["type"] not in ("village", "wall"):
+                        span.set_status(trace.StatusCode.ERROR, "Only villages and wall keeps can send resources")
+                        self.logger.error("Only villages and wall keeps can send resources to capital")
                         return jsonify({
                             "success": False,
-                            "message": "Only villages can send resources to capital"
+                            "message": "Only villages and wall keeps can send resources to capital"
                         }), 403
                     
                     resource_factions = {"southern", "northern", "nights_watch"}
@@ -1845,7 +1855,7 @@ class LocationServer:
                         }), 400
 
                     # Debit-at-send: guarded so a concurrent spend can't send
-                    # resources this village no longer has. If delivery fails,
+                    # resources this location no longer has. If delivery fails,
                     # _forward_resources credits the amount back.
                     if not self._debit_resources(self.location_id, current_resources):
                         span.set_status(trace.StatusCode.ERROR, "Resources changed during request")

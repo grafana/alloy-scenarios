@@ -1,0 +1,39 @@
+// ###############################################
+// #### OpenTelemetry tracing pipeline (push model) ####
+// ###############################################
+//
+// The five online-store services each emit standalone traces using their
+// language's OpenTelemetry SDK. Alloy receives the spans over OTLP, batches
+// them, and forwards them to Tempo.
+//
+//   apps ──(OTLP)──▶ Alloy ──(OTLP)──▶ Tempo ──▶ Grafana
+//                                        │
+//                                        └─(service-graph / span metrics)─▶ Prometheus
+//
+// gRPC is used by Python, Go, Java, and C# (http://alloy:4317).
+// HTTP/protobuf is used by Node.js (http://alloy:4318).
+
+otelcol.receiver.otlp "default" {
+  grpc { } // 4317 - Python, Go, Java, C#
+  http { } // 4318 - Node.js
+
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+
+    tls {
+      insecure = true
+    }
+  }
+}

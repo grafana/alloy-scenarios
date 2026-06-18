@@ -1,0 +1,49 @@
+// ##################################
+// #### Load-Balancer Tier Alloy ####
+// ##################################
+//
+// Receives every span and shards traces across the two downstream Alloy
+// instances by trace ID, so each downstream tail sampler sees WHOLE
+// traces. Scale the sampling tier by adding hostnames to the resolver --
+// no other config changes needed.
+
+// Enable live debugging for the Alloy UI.
+livedebugging {
+	enabled = true
+}
+
+// Receive OpenTelemetry traces from instrumented applications.
+otelcol.receiver.otlp "default" {
+	grpc {}
+	http {}
+
+	output {
+		traces = [otelcol.exporter.loadbalancing.default.input]
+	}
+}
+
+// Trace-aware load balancing: routing_key = "traceID" guarantees that all
+// spans sharing a trace ID -- even when they arrive in separate OTLP
+// requests -- are exported to the SAME downstream instance. That property
+// is what makes tail sampling correct behind a load balancer.
+otelcol.exporter.loadbalancing "default" {
+	routing_key = "traceID"
+
+	resolver {
+		// The static resolver fits Docker Compose. In Kubernetes, use the
+		// dns or k8s resolver to track downstream replicas automatically.
+		static {
+			hostnames = ["alloy-downstream-1:4317", "alloy-downstream-2:4317"]
+		}
+	}
+
+	protocol {
+		otlp {
+			client {
+				tls {
+					insecure = true
+				}
+			}
+		}
+	}
+}
