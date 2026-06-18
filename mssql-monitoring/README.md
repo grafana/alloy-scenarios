@@ -1,4 +1,4 @@
-# Microsoft SQL Server monitoring with Grafana Alloy
+# Microsoft SQL Server monitoring
 
 This scenario shows how to monitor Microsoft SQL Server with the Alloy `prometheus.exporter.mssql` component.
 Alloy runs T-SQL queries through the bundled `sql_exporter` integration, scrapes the resulting metrics every 15 seconds, and remote-writes them to Prometheus for visualization in Grafana.
