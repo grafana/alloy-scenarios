@@ -1,0 +1,116 @@
+---
+persistence:
+  type: pvc
+  enabled: true
+
+adminUser: admin
+adminPassword: adminadminadmin
+
+service:
+  enabled: true
+  type: ClusterIP
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      uid: prometheus
+      type: prometheus
+      access: proxy
+      orgId: 1
+      url: http://prometheus-server.meta.svc.cluster.local:80
+      basicAuth: false
+      isDefault: true
+      version: 1
+      editable: false
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+    - name: default
+      orgId: 1
+      folder: ""
+      type: file
+      disableDeletion: false
+      editable: true
+      options:
+        path: /var/lib/grafana/dashboards/default
+
+dashboards:
+  default:
+    # Standard community overview (dotdc "Kubernetes / Views / Namespaces").
+    # Rev 46 only uses kube-state-metrics v2 and cAdvisor metric names, so
+    # every query in it is answerable from this scenario's pipeline.
+    k8s-views-namespaces:
+      gnetId: 15758
+      revision: 46
+      datasource: Prometheus
+    # Compact cluster overview built only from metrics this scenario
+    # collects. Every panel has data on a freshly created quiet cluster,
+    # which makes "no missing panels" a checkable success criterion.
+    cluster-overview:
+      json: |
+        {
+          "uid": "ksm-cadvisor-overview",
+          "title": "Kubernetes Cluster Overview (KSM + cAdvisor)",
+          "schemaVersion": 39,
+          "refresh": "30s",
+          "time": { "from": "now-30m", "to": "now" },
+          "panels": [
+            {
+              "id": 1, "type": "stat", "title": "Nodes",
+              "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "targets": [ { "refId": "A", "expr": "count(kube_node_info)" } ]
+            },
+            {
+              "id": 2, "type": "stat", "title": "Pods Ready",
+              "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "targets": [ { "refId": "A", "expr": "sum(kube_pod_status_ready{condition=\"true\"})" } ]
+            },
+            {
+              "id": 3, "type": "stat", "title": "Deployments Available",
+              "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "targets": [ { "refId": "A", "expr": "sum(kube_deployment_status_replicas_available)" } ]
+            },
+            {
+              "id": 4, "type": "stat", "title": "Container Restarts (1h)",
+              "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "targets": [ { "refId": "A", "expr": "sum(increase(kube_pod_container_status_restarts_total[1h])) or vector(0)" } ]
+            },
+            {
+              "id": 5, "type": "timeseries", "title": "Cluster CPU Usage (cores)",
+              "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "targets": [ { "refId": "A", "expr": "sum(rate(container_cpu_usage_seconds_total{id=\"/\"}[5m]))", "legendFormat": "cluster" } ]
+            },
+            {
+              "id": 6, "type": "timeseries", "title": "Cluster Memory Working Set",
+              "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+              "targets": [ { "refId": "A", "expr": "sum(container_memory_working_set_bytes{id=\"/\"})", "legendFormat": "cluster" } ]
+            },
+            {
+              "id": 7, "type": "timeseries", "title": "Pods by Phase",
+              "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "targets": [ { "refId": "A", "expr": "sum by (phase) (kube_pod_status_phase)", "legendFormat": "{{phase}}" } ]
+            },
+            {
+              "id": 8, "type": "timeseries", "title": "Cluster Network Throughput",
+              "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
+              "targets": [
+                { "refId": "A", "expr": "sum(rate(container_network_receive_bytes_total[5m]))", "legendFormat": "rx" },
+                { "refId": "B", "expr": "sum(rate(container_network_transmit_bytes_total[5m]))", "legendFormat": "tx" }
+              ]
+            }
+          ]
+        }

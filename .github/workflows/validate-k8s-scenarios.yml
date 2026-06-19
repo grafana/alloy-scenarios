@@ -58,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [metrics, logs, tracing, profiling, events]
+        scenario: [metrics, logs, tracing, profiling, events, kube-state-metrics-cadvisor]
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
@@ -191,7 +191,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [metrics, logs, tracing, profiling, events]
+        scenario: [metrics, logs, tracing, profiling, events, kube-state-metrics-cadvisor]
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4

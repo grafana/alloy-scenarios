@@ -1,0 +1,92 @@
+# Values for the grafana/alloy Helm chart.
+#
+# This is intentionally NOT the k8s-monitoring chart: the scenario shows the
+# raw pipeline (discovery.kubernetes -> prometheus.scrape -> remote_write)
+# that the higher-level chart generates for you.
+controller:
+  # One Alloy pod per node. cAdvisor metrics come from each node's kubelet,
+  # so a DaemonSet is the natural shape; clustering below stops the pods
+  # from scraping every target three times.
+  type: daemonset
+
+alloy:
+  clustering:
+    # Forms an Alloy cluster from the DaemonSet pods. Scrape components with
+    # `clustering { enabled = true }` consistent-hash their targets across
+    # the cluster so each kubelet and each KSM endpoint is scraped exactly
+    # once, no matter how many nodes the cluster has.
+    enabled: true
+
+  configMap:
+    content: |
+      // ###########################################
+      // #### Kubernetes Metrics (KSM + cAdvisor) ##
+      // ###########################################
+
+      // Enable live debugging for the Alloy UI.
+      livedebugging {
+        enabled = true
+      }
+
+      // Discover every node in the cluster. role=node produces one target
+      // per node with __address__ pointing at the kubelet port (10250).
+      discovery.kubernetes "nodes" {
+        role = "node"
+      }
+
+      // Scrape the kubelet's embedded cAdvisor endpoint for container-level
+      // resource metrics (container_cpu_usage_seconds_total,
+      // container_memory_working_set_bytes, ...). The kubelet serves these
+      // over HTTPS with a self-signed certificate, authenticated by the
+      // pod's ServiceAccount bearer token; the chart's default ClusterRole
+      // already grants nodes/metrics access.
+      prometheus.scrape "cadvisor" {
+        targets           = discovery.kubernetes.nodes.targets
+        scheme            = "https"
+        metrics_path      = "/metrics/cadvisor"
+        bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+        tls_config {
+          insecure_skip_verify = true
+        }
+
+        clustering {
+          enabled = true
+        }
+
+        forward_to = [prometheus.remote_write.default.receiver]
+      }
+
+      // Discover all endpoints, then keep only the kube-state-metrics
+      // service. KSM converts Kubernetes object state into metrics
+      // (kube_pod_status_ready, kube_deployment_status_replicas_available, ...).
+      discovery.kubernetes "endpoints" {
+        role = "endpoints"
+      }
+
+      discovery.relabel "kube_state_metrics" {
+        targets = discovery.kubernetes.endpoints.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_service_name"]
+          regex         = "kube-state-metrics"
+          action        = "keep"
+        }
+      }
+
+      prometheus.scrape "kube_state_metrics" {
+        targets = discovery.relabel.kube_state_metrics.output
+
+        clustering {
+          enabled = true
+        }
+
+        forward_to = [prometheus.remote_write.default.receiver]
+      }
+
+      // Send everything to the Prometheus installed by this scenario.
+      prometheus.remote_write "default" {
+        endpoint {
+          url = "http://prometheus-server.meta.svc.cluster.local:80/api/v1/write"
+        }
+      }
