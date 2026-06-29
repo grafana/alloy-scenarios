@@ -1,177 +1,136 @@
-# App Instrumentation - Structured Logging with Alloy Parsing
+# Popular logging frameworks
 
-This directory contains a comprehensive **Alloy tutorial** demonstrating how to parse structured logs from 7 popular programming languages using modern logging frameworks. Each language uses industry-standard structured logging libraries, and all logs are processed through a unified Alloy pipeline for collection, parsing, and storage in Loki.
+This scenario shows how Grafana Alloy parses structured logs from seven programming languages in one pipeline.
+Seven Docker containers each write structured logs to stdout using a different logging framework.
+Alloy discovers the containers, runs a language-specific `loki.process` stage for each stream, and forwards parsed entries to Loki.
+The pipeline uses `alloy/config.alloy` for discovery and collection and `alloy/helper.alloy` for per-language parsers.
 
-## 🎯 Tutorial Objectives
+## Before you begin
 
-- **Learn Alloy log parsing**: Understand how to parse different log formats using `loki.process` stages
-- **Multi-language support**: Handle logs from 7 different programming languages in a single pipeline
-- **Structured logging**: Demonstrate modern logging practices with structured data
-- **Real-world scenarios**: Show practical log parsing for containerized applications
+Ensure you have the following:
 
-## Languages and Modern Logging Frameworks
+- [Docker][docker] and [Docker Compose][docker-compose].
+- Ports 3000 for Grafana, 3100 for Loki, and 12345 for Alloy free on the host.
+- Enough time for the first build.
+  Java and C++ images compile from source.
 
-| Language | Logging Framework | Type | Key Features | Docker Base Image |
-|----------|------------------|------|--------------|-------------------|
-| **JavaScript** | `Pino` | JSON structured | High performance, child loggers, ndjson output | `node:22-alpine` |
-| **Python** | `logging` module | Structured text | Built-in standard library with custom formatting | `python:3.12-slim` |
-| **Java** | `SLF4J + Logback` | Structured text | Parameterized messages, MDC context, thread info | `openjdk:26-slim` |
-| **C#** | `Microsoft.Extensions.Logging` | Structured text | .NET standard framework, event IDs, structured data | `mcr.microsoft.com/dotnet/*:9.0` |
-| **C++** | `spdlog` | Structured text | High performance, source location, thread-safe | `ubuntu:24.04` |
-| **Go** | `Zap` | JSON structured | High performance, named loggers, structured fields | `golang:1.23-alpine` |
-| **PHP** | `Monolog` | Structured text | Context arrays, processors, multiple handlers | `php:8.3-cli-alpine` |
+[docker]: https://docs.docker.com/get-docker/
+[docker-compose]: https://docs.docker.com/compose/install/
 
-## Directory Structure
+## Understand the architecture
 
-```
-app-instrumentation/logging/popular-logging-frameworks/
-├── alloy/
-│   ├── config.alloy          # Main Alloy configuration
-│   └── helper.alloy           # Language-specific log parsers
-├── javascript/
-│   ├── app.js                 # Pino structured logging
-│   └── Dockerfile
-├── python/
-│   ├── app.py                 # Python logging with custom format
-│   └── Dockerfile
-├── java/
-│   ├── App.java               # SLF4J + Logback
-│   ├── logback.xml
-│   └── Dockerfile
-├── csharp/
-│   ├── Program.cs            # Microsoft.Extensions.Logging
-│   ├── LoggingExample.csproj
-│   └── Dockerfile
-├── cpp/
-│   ├── main.cpp              # spdlog structured logging
-│   ├── CMakeLists.txt
-│   └── Dockerfile
-├── go/
-│   ├── main.go               # Zap JSON logging
-│   ├── go.mod
-│   ├── go.sum
-│   └── Dockerfile
-├── php/
-│   ├── app.php               # Monolog with context
-│   └── Dockerfile
-├── docker-compose.yml         # Complete stack with Loki + Grafana
-├── loki-config.yaml
-└── README.md
+Seven language apps write logs to stdout, Alloy parses each stream, and Loki stores the results.
+
+```text
++------------+  +------------+  +------------+     +---------------------------+       +------+       +---------+
+| javascript |  | python     |  | java ...   | ... | Alloy                     | push  |      | query |         |
+| Pino       |  | logging    |  | Logback    |     | docker discovery +        |------>| Loki |<------| Grafana |
++------------+  +------------+  +------------+     | loki.process per lang     |       |      |       |         |
+                                                   +---------------------------+       +------+       +---------+
 ```
 
-## 🔍 Alloy Parsing Features Demonstrated
+- **Language apps**: Seven containers named `javascript`, `python`, `java`, `csharp`, `cpp`, `go`, and `php`.
+- **Alloy**: Discovers containers through the Docker socket, sets `service_name` from the container name, and routes logs through parsing stages in `helper.alloy`.
+- **Loki**: Stores parsed log lines with labels and structured metadata.
+- **Grafana**: Queries logs in **Logs Drilldown** or **Explore**.
 
-### Core Alloy Components Used
-- **`loki.source.docker`**: Automatic Docker container log discovery
-- **`loki.process`**: Multi-stage log parsing pipeline
-- **`discovery.docker`**: Container metadata extraction
-- **`discovery.relabel`**: Label transformation and routing
+| Language   | Framework                    | Container name |
+| ---------- | ---------------------------- | -------------- |
+| JavaScript | Pino                         | `javascript`   |
+| Python     | `logging` module             | `python`       |
+| Java       | SLF4J + Logback              | `java`         |
+| C#         | Microsoft.Extensions.Logging | `csharp`       |
+| C++        | spdlog                       | `cpp`          |
+| Go         | Zap                          | `go`           |
+| PHP        | Monolog                      | `php`          |
 
-### Advanced Parsing Techniques
-Each language parser demonstrates different Alloy parsing capabilities:
+## Run the scenario
 
-- **Regex parsing** (`stage.regex`): Extract structured fields from text logs
-- **JSON parsing** (`stage.json`): Handle native JSON log formats  
-- **Multiline handling** (`stage.multiline`): Process stack traces and exception logs
-- **Label management** (`stage.labels`): Efficient indexing for filtering
-- **Structured metadata** (`stage.structured_metadata`): Searchable non-indexed data
-- **Timestamp parsing** (`stage.timestamp`): Multiple timestamp format support
-- **Template formatting** (`stage.template`): Custom output formatting
-- **Conditional logic**: Level conversion, error prioritization
+1. Clone the repository if you haven't already: `git clone https://github.com/grafana/alloy-scenarios.git`
 
-### Language-Specific Parsing Examples
+2. Install the scenario with one of these options:
 
-| Language | Primary Challenge | Alloy Solution |
-|----------|------------------|----------------|
-| **JavaScript (Pino)** | JSON numeric levels | Template stage for level conversion |
-| **Python** | Custom text format | Regex extraction with line numbers |
-| **Java (Logback)** | Multi-line stack traces | Multiline stage + regex parsing |
-| **C#** | Event IDs and namespaces | Regex parsing with structured metadata |
-| **C++** | Source location details | Complex regex for file:line extraction |
-| **Go (Zap)** | Unix timestamps | Timestamp parsing with fractional seconds |
-| **PHP (Monolog)** | Nested JSON context | Multiple JSON parsing stages |
+   **Option 1: From the scenario directory**
 
-## 🚀 Quick Start Tutorial
+   Use the default image tags in `docker-compose.yml`.
 
-### Step 1: Clone the Repository
+   - Navigate to this scenario: `cd alloy-scenarios/app-instrumentation/logging/popular-logging-frameworks`
+   - Deploy the scenario: `docker compose up --build -d`
 
-```bash
-git clone https://github.com/grafana/alloy-scenarios.git
-cd app-instrumentation/logging/popular-logging-frameworks
-```
+   **Option 2: From the repository root**
 
-### Step 2: Launch the Complete Stack
+   Use pinned image versions from `image-versions.env`.
 
-```bash
-# Build and run all applications with Alloy + Loki + Grafana
-docker compose up --build
+   - Navigate to this scenario: `cd alloy-scenarios/app-instrumentation/logging/popular-logging-frameworks`
+   - Deploy the scenario: `docker compose --env-file ../../../image-versions.env up --build -d`
 
-# Run in detached mode to see clean output
-docker compose up --build -d
-```
+3. Check that all containers are up: `cd alloy-scenarios/app-instrumentation/logging/popular-logging-frameworks && docker compose ps`
 
-This starts:
-- **7 language applications** generating structured logs
-- **Alloy** parsing and forwarding logs to Loki
-- **Loki** storing parsed logs with labels and metadata
-- **Grafana** for log visualization and querying
+   Expect seven language apps plus `alloy`, `loki`, and `grafana`.
 
-### Step 3: Explore the Logs
+## Explore the services
 
-- Head to http://localhost:3000/a/grafana-lokiexplore-app to see the logs in Grafana
-- Each language has its own service name / app so you can identify which languge you would like to see the parsed logs for
+- **Grafana** at http://localhost:3000: Open **Logs Drilldown** at http://localhost:3000/a/grafana-lokiexplore-app, with no login required.
+- **Alloy UI** at http://localhost:12345: Pipeline graph, component health, and live debug views.
+- **Loki** at http://localhost:3100: Log storage backend.
 
-## 📚 Learning Outcomes
+Each language has its own `service_name` label so you can filter logs by container.
 
-After completing this tutorial, you'll understand:
+## Understand the configuration
 
-### Alloy Concepts
-- **Multi-stage processing**: How to chain `loki.process` stages for complex parsing
-- **Component composition**: Using `import.file` to modularize configurations
-- **Discovery patterns**: Automatic service discovery with Docker integration
-- **Label vs. metadata strategy**: When to use indexed labels vs. structured metadata
+The pipeline has five components across `alloy/config.alloy` and `alloy/helper.alloy`:
 
-### Log Parsing Techniques
-- **Regex mastery**: Complex pattern matching for text log formats
-- **JSON handling**: Extracting nested fields from structured logs
-- **Timestamp parsing**: Supporting multiple timestamp formats across languages
-- **Multiline processing**: Handling stack traces and exception logs
-- **Conditional formatting**: Template logic for log transformation
+1. **`import.file "helper"`**: Loads `helper.alloy`, which defines the `app_logs_parser` module with one `loki.process` stage per language.
+2. **`discovery.docker "linux"`**: Watches the Docker socket for running containers.
+3. **`discovery.relabel "logs_integrations_docker"`**: Sets `service_name` from the container name.
+4. **`helper.app_logs_parser "default"`**: Runs the parser module and forwards parsed logs to Loki.
+5. **`loki.source.docker "default"`**: Tails logs from discovered containers and sends them to the parser.
 
-### Real-World Patterns
-- **Language-specific challenges**: Understanding unique parsing requirements per language
-- **Performance considerations**: Efficient labeling and metadata strategies
-- **Observability best practices**: Structured logging principles across tech stacks
-- **Container log collection**: Production-ready log aggregation patterns
+Each language branch in `helper.alloy` matches on `service_name` and uses stages such as `stage.regex`, `stage.json`, `stage.multiline`, `stage.labels`, and `stage.structured_metadata`.
 
-## 🔧 Configuration Details
+## Try it out
 
-### Language-Specific Parsing Challenges
+1. Open **Logs Drilldown** at http://localhost:3000/a/grafana-lokiexplore-app and browse logs from all seven services.
 
-Each language presents unique parsing requirements:
+2. Filter to one language in Grafana **Explore**:
 
-#### JavaScript (Pino)
-```alloy
-// Challenge: Numeric log levels (10, 20, 30, 40, 50, 60)
-stage.template {
-  source = "level"
-  template = "{{- if eq .level_num \"30\" -}}info{{- else if eq .level_num \"50\" -}}error{{- end -}}"
-}
-```
+   ```logql
+   {service_name="python"}
+   ```
 
-#### Java (Logback)  
-```alloy
-// Challenge: Multi-line stack traces
-stage.multiline {
-  firstline = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}"
-}
-```
+   Replace `python` with `javascript`, `java`, `csharp`, `cpp`, `go`, or `php`.
 
-#### Go (Zap)
-```alloy
-// Challenge: Unix timestamp with fractional seconds
-stage.timestamp {
-  source = "ts"
-  format = "1750342991.0445938"
-}
-```
+3. Open the Alloy UI at http://localhost:12345 and use live debug on `helper.app_logs_parser.default` to watch each `stage.match` branch handle incoming lines.
+
+## Customize the scenario
+
+Add an app directory and Dockerfile, add a service to `docker-compose.yml`, and add a matching `stage.match` block in `helper.alloy`.
+
+## Troubleshoot common problems
+
+Use these steps when a build fails, logs don't appear, or ports conflict.
+
+### A language container failed to build or exited
+
+Run `docker compose ps` to find the failing service.
+Read its logs with `docker compose logs <SERVICE_NAME>`.
+Java and C++ images compile from source and need more time on the first build.
+
+### No logs appear in Grafana after a few minutes
+
+Check that all seven language containers are running.
+Open the Alloy UI at http://localhost:12345 and check that `loki.source.docker.default` is healthy.
+
+### Port conflicts with other services
+
+Ports 3000, 3100, and 12345 must be free before you start the stack.
+If another service uses one of these ports, edit the port mapping in `docker-compose.yml` before you run `docker compose up --build -d`.
+
+## Stop the scenario
+
+Run `docker compose down` from the scenario directory.
+
+## Next steps
+
+- `loki.process` reference: https://grafana.com/docs/alloy/latest/reference/components/loki/loki.process/
+- `loki.source.docker` reference: https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.docker/

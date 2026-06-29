@@ -24,10 +24,10 @@ Ensure you have the following:
 
 This scenario and its sibling collect the same store metrics with opposite collection models.
 
-| Scenario | Instrumentation | Collection model |
-| -------- | --------------- | ---------------- |
-| OpenTelemetry SDK metrics | OpenTelemetry metrics SDK | Services push over OTLP; Alloy receives |
-| [Prometheus client metrics](../prometheus-client/) | Native Prometheus client libraries | Services expose `/metrics`; Alloy scrapes |
+| Scenario                                           | Instrumentation                    | Collection model                          |
+| -------------------------------------------------- | ---------------------------------- | ----------------------------------------- |
+| OpenTelemetry SDK metrics                          | OpenTelemetry metrics SDK          | Services push over OTLP, Alloy receives   |
+| [Prometheus client metrics](../prometheus-client/) | Native Prometheus client libraries | Services expose `/metrics`, Alloy scrapes |
 
 ## Understand the architecture
 
@@ -46,13 +46,13 @@ This scenario and its sibling collect the same store metrics with opposite colle
 
 Each service sets its own `service.name` and carries its language as a resource attribute.
 
-| Language | Store role | Service name | OTLP transport |
-| -------- | ---------- | ------------ | -------------- |
-| Python | Checkout and payments | `checkout` | gRPC on port 4317 |
-| Node.js | Product catalog | `catalog` | HTTP on port 4318 |
-| Go | Inventory | `inventory` | gRPC on port 4317 |
-| Java | Orders | `orders` | gRPC on port 4317 |
-| C# | Shipping | `shipping` | gRPC on port 4317 |
+| Language | Store role            | Service name | OTLP transport    |
+| -------- | --------------------- | ------------ | ----------------- |
+| Python   | Checkout and payments | `checkout`   | gRPC on port 4317 |
+| Node.js  | Product catalog       | `catalog`    | HTTP on port 4318 |
+| Go       | Inventory             | `inventory`  | gRPC on port 4317 |
+| Java     | Orders                | `orders`     | gRPC on port 4317 |
+| C#       | Shipping              | `shipping`   | gRPC on port 4317 |
 
 Node.js uses OTLP over HTTP because the experimental gRPC packages for OpenTelemetry JavaScript are harder to install reliably.
 Alloy listens on both ports, so the pipeline handles either transport.
@@ -82,11 +82,11 @@ The checkout service, for example, emits `checkout.transactions.total`, `checkou
 
 ## Understand the configuration
 
-The `config.alloy` pipeline has three components: `otelcol.receiver.otlp`, `otelcol.processor.batch`, and `otelcol.exporter.otlphttp`.
+The `config.alloy` pipeline has three components: `otelcol.receiver.otlp "default"`, `otelcol.processor.batch "default"`, and `otelcol.exporter.otlphttp "prometheus"`.
 
-1. **`otelcol.receiver.otlp`**: Listens for OTLP metrics on port 4317 for gRPC and 4318 for HTTP, then forwards them to the batch processor.
-2. **`otelcol.processor.batch`**: Groups metrics to reduce the number of export requests, then forwards them to the exporter.
-3. **`otelcol.exporter.otlphttp`**: Sends the metrics to the Prometheus OTLP endpoint at `http://prometheus:9090/api/v1/otlp`.
+1. **`otelcol.receiver.otlp "default"`**: Listens for OTLP metrics on port 4317 for gRPC and 4318 for HTTP, then forwards them to the batch processor.
+2. **`otelcol.processor.batch "default"`**: Groups metrics to reduce the number of export requests, then forwards them to the exporter.
+3. **`otelcol.exporter.otlphttp "prometheus"`**: Sends the metrics to the Prometheus OTLP endpoint at `http://prometheus:9090/api/v1/otlp`.
 
 Prometheus runs with the `--web.enable-otlp-receiver` flag so it accepts the OTLP write.
 The `prom-config.yaml` file promotes the `service.name` and `language` resource attributes to labels, so you can group metrics by service and by language.
