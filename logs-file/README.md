@@ -16,12 +16,12 @@ Ensure you have the following:
 
 ## Compare with a related scenario
 
-| Aspect     | `logs-file/`                       | [`logs-tcp/`](../logs-tcp/)                    |
-| ---------- | ---------------------------------- | ---------------------------------------------- |
-| Log source | Files on a shared Docker volume    | TCP connections with JSON payloads             |
-| Discovery  | `local.file_match` glob on `*.log` | `loki.source.tcp` listener                     |
-| Processing | Direct tail and forward            | `loki.process` parses JSON and extracts fields |
-| Demo app   | Python script writes to `app.log`  | TCP client sends structured JSON logs          |
+| Aspect     | `logs-file/`                       | [`logs-tcp/`](../logs-tcp/)                                      |
+| ---------- | ---------------------------------- | ---------------------------------------------------------------- |
+| Log source | Files on a shared Docker volume    | TCP client sends JSON log payloads over HTTP                     |
+| Ingestion  | `local.file_match` glob on `*.log` | `loki.source.api` listener on port 9999                          |
+| Processing | Direct tail and forward            | `loki.process` parses JSON and extracts fields                   |
+| Demo app   | Python script writes to `app.log`  | Simulator sends structured JSON logs over TCP to Alloy port 9999 |
 
 Use this scenario when you need to tail files Alloy can read from disk.
 Use `logs-tcp/` when applications push logs over the network instead.
@@ -29,14 +29,14 @@ Use `logs-tcp/` when applications push logs over the network instead.
 ## Understand the architecture
 
 ```text
-+----------------+     +-------+     +------+     +---------+
-| Python demo    |     | Alloy |     | Loki |     | Grafana |
-| app writes to  |---->| tails |---->|      |---->|         |
-| app.log        |     | files |     |      |     |         |
-+----------------+     +-------+     +------+     +---------+
-        |                    ^
-        |   shared ./logs volume
-        +--------------------+
++----------------+         +-------+     +------+     +---------+
+| Python demo    |         | Alloy |     |      |     |         |
+| app writes to  |-------->| tails |---->| Loki |---->| Grafana |
+| app.log        |         | files |     |      |     |         |
++----------------+         +-------+     +------+     +---------+
+      |                        ^
+      |  shared ./logs volume  |
+      +------------------------+
 ```
 
 - **Python demo app**: The `logs-file` service runs `main.py`, which writes log lines to `/logs/app.log` every five seconds.
@@ -63,7 +63,7 @@ Use `logs-tcp/` when applications push logs over the network instead.
 
    - Deploy the scenario: `./run-example.sh logs-file`
 
-3. Confirm all containers are up: `cd alloy-scenarios/logs-file && docker compose ps`
+3. From the `logs-file` directory, check that all containers are up: `docker compose ps`
 
    You should see `logs-file`, `alloy`, `loki`, and `grafana`.
 
@@ -122,7 +122,7 @@ For Alloy specifically, the most common cause is a syntax error in `config.alloy
 ### No data appears in Grafana after a few minutes
 
 Open the Alloy UI at http://localhost:12345 and check that all components show a healthy status.
-Select `loki.source.file.log_scrape` and use live debug to confirm log lines arrive from `app.log`.
+Select `loki.source.file.log_scrape` and use live debug to check that log lines arrive from `app.log`.
 Check that the demo app is running with `docker compose logs -f logs-file`.
 The app creates `/logs/app.log` on startup, so allow a few seconds for the first entries to appear.
 
