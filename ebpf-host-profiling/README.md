@@ -1,125 +1,169 @@
 # eBPF host profiling
 
-Profile every process on a Linux host with Grafana Alloy's `pyroscope.ebpf` component -- no language agents, no application code changes, no `pprof` endpoints to expose. The kernel does the sampling and Alloy ships CPU stack traces to Grafana Pyroscope.
+This scenario shows how Grafana Alloy profiles every process on a Linux host with `pyroscope.ebpf`.
+The kernel samples CPU stacks through eBPF, so workloads need no language agents, no SDK, and no `pprof` endpoints.
+Alloy discovers Docker containers, maps samples to a `service_name`, and forwards profiles to Grafana Pyroscope.
+The `config.alloy` file defines the pipeline.
 
-## What this scenario demonstrates
+Two bundled Go workloads, `stress-cpu` and `stress-mem`, give the profiler distinct flame graphs to compare.
 
-- **`pyroscope.ebpf`** -- host-wide eBPF CPU sampler that profiles every process the Alloy container can see through the host PID namespace.
-- **Docker container discovery** -- `discovery.docker` enumerates running containers and `discovery.relabel` turns each container name into a `service_name` so the flame graph is grouped per workload.
-- **`pyroscope.write`** -- pushes the collected profiles to a local Pyroscope server.
-- **Two workloads** -- `stress-cpu` and `stress-mem` run a small, dependency-free Go load generator (`app/main.go`) that ships with the scenario, so the demo owns its workload instead of pulling a third-party stress image. They give the profiler something interesting to sample and let you switch the service filter to see how the flame graph changes.
+## Before you begin
 
-This is the "no-instrumentation" alternative to the `continuous-profiling/` scenario. That scenario scrapes a Go application's `/debug/pprof` endpoints; this one needs nothing from the workloads themselves -- the kernel samples them via eBPF with no `pprof` endpoint and no SDK.
+Ensure you have the following:
 
-## Overview
+- [Docker][docker] and [Docker Compose][docker-compose].
+- A Linux host with kernel 5.4 or newer, or Docker Desktop on macOS or Windows.
+  The eBPF loader attaches to the Linux kernel that runs the Docker engine.
+  Nested Docker is not supported because an inner container cannot raise `RLIMIT_MEMLOCK` even with `privileged: true`.
+- Permission to start the `privileged` Alloy container.
+- Ports 3000 for Grafana, 4040 for Pyroscope, and 12345 for Alloy free on the host.
 
-The example includes:
+[docker]: https://docs.docker.com/get-docker/
+[docker-compose]: https://docs.docker.com/compose/install/
 
-- **alloy** -- runs with `privileged: true` and `pid: host` so the eBPF loader can attach perf events in the host kernel and follow PIDs of other containers.
-- **pyroscope** -- profile storage and query backend at port 4040.
-- **grafana** -- pre-configured with the Pyroscope datasource for flame graphs.
-- **stress-cpu** -- the bundled Go app in CPU mode (`go run . cpu`); tight arithmetic loops, so the flame graph is dominated by `main.cpuLoop`.
-- **stress-mem** -- the same app in memory mode (`go run . mem`); a rolling 128 MiB of allocations and writes, so its flame graph splits between `main.memLoop` and the Go runtime's allocation/`memclr` paths and looks visibly different from `stress-cpu`.
+## Compare with a related scenario
 
-Both run on the official, multi-arch `golang` image, so they build and run natively on amd64 and arm64 (Apple Silicon) -- the flame graph shows real Go frames rather than QEMU emulation internals.
+| Aspect            | `ebpf-host-profiling/`             | [`continuous-profiling/`](../continuous-profiling/) |
+| ----------------- | ---------------------------------- | --------------------------------------------------- |
+| Collection        | `pyroscope.ebpf` kernel sampling   | `pyroscope.scrape` of `/debug/pprof`                |
+| Workload setup    | None required                      | App must expose pprof on port 6060                  |
+| Host requirements | `privileged: true` and `pid: host` | Standard container                                  |
 
-## Prerequisites
+Use this scenario when you want host-wide profiling with no application instrumentation.
+Use `continuous-profiling/` when you control the app and can expose pprof.
 
-- A **Linux host** (kernel 5.4+ recommended), or **Docker Desktop** on macOS / Windows -- the eBPF loader attaches perf events on the Linux kernel that Docker Desktop runs the engine in, and this scenario has been verified working on Docker Desktop (Apple Silicon) out of the box. Running it inside another container (nested Docker) is *not* supported -- the inner container cannot raise `RLIMIT_MEMLOCK` even with `privileged: true`.
-- Docker and Docker Compose.
-- Root or `sudo` to start the `privileged` Alloy container.
+## Understand the architecture
 
-## Running the demo
+Alloy attaches eBPF probes in the host kernel, attributes samples to discovered containers, and pushes profiles to Pyroscope.
 
-1. Clone the repository:
-   ```
-   git clone https://github.com/grafana/alloy-scenarios.git
-   cd alloy-scenarios
-   ```
-
-2. Navigate to this example directory:
-   ```
-   cd ebpf-host-profiling
-   ```
-
-3. Start the stack:
-   ```
-   docker compose up -d
-   ```
-
-   Or, from the repository root, with centralized image versions:
-   ```
-   ./run-example.sh ebpf-host-profiling
-   ```
-
-4. Access Grafana at <http://localhost:3000>.
-
-## What to expect
-
-Within ~30 seconds, Alloy starts pushing CPU profiles to Pyroscope. The eBPF profiler samples at 19 Hz by default (`sample_rate = 19`) and Alloy flushes a batch every 15 seconds (`collect_interval = "15s"`).
-
-To view flame graphs:
-
-1. Open Grafana at <http://localhost:3000>.
-2. Go to **Explore** and pick the **Pyroscope** datasource.
-3. Choose the profile type **`process_cpu` / cpu (nanoseconds)**.
-4. In the query, set the service filter to `service_name="stress-cpu"`. You should see a tall, narrow flame graph dominated by `main.cpuLoop` (and the `math/rand` calls it makes) -- because `stress-cpu` does nothing but burn CPU.
-5. Change the filter to `service_name="stress-mem"`. The flame graph now splits between `main.memLoop` and the Go runtime's allocation paths (`runtime.mallocgc`, `runtime.memclrNoHeapPointers`, GC). Switching filters this way is the test for "the eBPF profiler attributes samples to the right container."
-
-You can also open Pyroscope's own UI directly at <http://localhost:4040> and use its service selector for the same comparison.
-
-### Useful endpoints
-
-- Alloy UI: <http://localhost:12345> -- inspect the pipeline. Open `pyroscope.ebpf.default` to see the component status, the discovered targets, and any eBPF loader errors.
-- Pyroscope UI: <http://localhost:4040>.
-- Grafana: <http://localhost:3000>.
-
-## Architecture
-
-```
-                                              host PID namespace (shared)
-                          ┌──────────────────────────────────────────────────────┐
-                          │                                                      │
-   ┌────────────┐         │    perf events / eBPF probes                         │
-   │ stress-cpu │◀────────┤                                                      │
-   └────────────┘         │              ┌───────────┐                           │
-                          │              │   alloy   │   push profiles           │
-   ┌────────────┐         │◀─────────────│ (privileged)─────────────────────────▶┌──────────┐
-   │ stress-mem │◀────────┤              │  pyroscope│                           │Pyroscope │
-   └────────────┘         │              │   .ebpf   │                           │  :4040   │
-                          │              └─────┬─────┘                           └────┬─────┘
-                          └────────────────────│─────────────────────────────────────┼──────┘
-                                          discover via                               ▼
-                                        /var/run/docker.sock                   ┌──────────┐
-                                                                               │ Grafana  │
-                                                                               │  :3000   │
-                                                                               └──────────┘
+```text
+                          host PID namespace (shared)
+                     +---------------------------------------+
+                     |                                       |
+   +------------+    |    perf events / eBPF probes          |
+   | stress-cpu |<---|                                       |
+   +------------+    |    +-----------------+                |
+                     |    |   alloy         |  push profiles |   +-----------+
+   +------------+    |<---| (privileged)    |------------------->| Pyroscope |
+   | stress-mem |<---|    |  pyroscope.ebpf |                |   |  :4040    |
+   +------------+    |    +-----------------+                |   +-----------+
+                     |             ^                         |         |
+                     +-------------|-------------------------+         |
+                                   |                                   v
+                                discover via                      +----------+
+                                /var/run/docker.sock              | Grafana  |
+                                                                  |  :3000   |
+                                                                  +----------+
 ```
 
-`pid: host` lets the Alloy container see other containers' PIDs, and the `__container_id__` label (added automatically by `discovery.docker`) lets `pyroscope.ebpf` map each kernel sample back to the container that produced it.
+- **stress-cpu**: Bundled Go app in CPU mode.
+  The flame graph is dominated by `main.cpuLoop` and `math/rand` calls.
+- **stress-mem**: Same app in memory mode with a rolling 128 MiB working set.
+  Its flame graph splits between `main.memLoop` and Go runtime allocation paths.
+- **Alloy**: Runs with `privileged: true` and `pid: host`, discovers containers through the Docker socket, and profiles with `pyroscope.ebpf`.
+- **Pyroscope**: Stores profiles on port 4040.
+- **Grafana**: Visualizes flame graphs through a provisioned Pyroscope data source.
 
-## Key configuration
+Both workloads use the official multi-arch `golang` image, so they run natively on amd64 and arm64.
 
-Two things in `docker-compose.yml` are non-negotiable for `pyroscope.ebpf` to work:
+## Run the scenario
 
-- **`privileged: true`** -- the eBPF loader needs to raise `RLIMIT_MEMLOCK` and load BPF programs into the kernel. Without `privileged`, you can grant a narrower set of capabilities -- `BPF`, `PERFMON`, `SYS_PTRACE`, `CHECKPOINT_RESTORE`, `SYS_RESOURCE`, `DAC_READ_SEARCH`, `SYSLOG` -- but `privileged` is the simplest setting for a demo.
-- **`pid: host`** -- without this, Alloy only sees its own PID; with it, Alloy sees every process on the host and can map samples to the right container.
+1. Clone the repository if you haven't already: `git clone https://github.com/grafana/alloy-scenarios.git`
 
-In `config.alloy`:
+2. Install the scenario with one of these options:
 
-- `discovery.docker` reads the container list from the Docker socket so the profiler knows which `container_id` belongs to which container name.
-- `discovery.relabel` rewrites `__meta_docker_container_name` (`/stress-cpu`) into a clean `service_name` (`stress-cpu`). `pyroscope.ebpf` requires a `service_name` on every target.
-- `pyroscope.ebpf` uses default settings (`collect_interval = "15s"`, `sample_rate = 19`). For tighter sampling, lower `collect_interval` -- but at the cost of more samples shipped per minute.
+   **Option 1: From the scenario directory**
 
-## Customize
+   Use the default image tags in `docker-compose.yml`.
 
-- **Profile only one container**: filter `discovery.relabel.containers.output` with a regex on `__meta_docker_container_name` (or set `__process_pid__` directly).
-- **Profile bare-metal processes too**: add an extra `targets` entry of the form `{"__process_pid__" = "<pid>", "service_name" = "..."}`. eBPF will sample that PID alongside the container ones.
-- **Capture off-CPU profiles**: set `off_cpu_threshold` in the `pyroscope.ebpf` block (see the [component reference](https://grafana.com/docs/alloy/latest/reference/components/pyroscope/pyroscope.ebpf/)).
-- **Profile interpreted languages**: `pyroscope.ebpf` includes interpreter tracers for Python, Ruby, PHP, Perl, V8 (Node.js), and the JVM by default. Add a workload such as a Python or Node.js script and its frames will show up in the flame graph without any extra setup.
+   - Navigate to this scenario: `cd alloy-scenarios/ebpf-host-profiling`
+   - Deploy the scenario: `docker compose up -d`
 
-## Stop
+   **Option 2: From the repository root**
 
-```
-docker compose down
-```
+   Use pinned image versions from `image-versions.env`.
+
+   - Deploy the scenario: `./run-example.sh ebpf-host-profiling`
+
+3. Check that all containers are up: `cd alloy-scenarios/ebpf-host-profiling && docker compose ps`
+
+   Expect `alloy`, `pyroscope`, `grafana`, `stress-cpu`, and `stress-mem`.
+
+## Explore the services
+
+- **Grafana** at http://localhost:3000: Query profiles in **Explore** with the Pyroscope data source, with no login required.
+- **Alloy UI** at http://localhost:12345: Pipeline graph, component health, and live debug views.
+- **Pyroscope** at http://localhost:4040: Profile storage backend and UI.
+
+## Understand the configuration
+
+The `config.alloy` pipeline has four components:
+
+1. **`discovery.docker "local_containers"`**: Reads the container list from the Docker socket.
+2. **`discovery.relabel "containers"`**: Sets `service_name` from the container name.
+   `pyroscope.ebpf` requires a `service_name` on every target.
+3. **`pyroscope.ebpf "default"`**: Host-wide eBPF CPU profiler that forwards samples to `pyroscope.write.default`.
+   Default settings use `collect_interval = "15s"` and `sample_rate = 19`.
+4. **`pyroscope.write "default"`**: Sends profiles to Pyroscope at `http://pyroscope:4040`.
+
+Two settings in `docker-compose.yml` are required for eBPF profiling:
+
+- **`privileged: true`**: Lets the eBPF loader raise `RLIMIT_MEMLOCK` and load BPF programs into the kernel.
+- **`pid: host`**: Lets Alloy see every process on the host and map samples to the right container.
+
+`pid: host` shares the host PID namespace.
+The `__container_id__` label from `discovery.docker` lets `pyroscope.ebpf` map kernel samples back to a container.
+
+`livedebugging` is enabled.
+
+## Try it out
+
+Allow about 30 seconds after bring-up for Alloy to start pushing CPU profiles to Pyroscope.
+
+1. Open Grafana at http://localhost:3000, open **Explore**, and select the **Pyroscope** data source.
+
+2. Choose the profile type `process_cpu` and set the service filter to `service_name="stress-cpu"`.
+   Expect a tall flame graph dominated by `main.cpuLoop`.
+
+3. Change the filter to `service_name="stress-mem"`.
+   The flame graph splits between `main.memLoop` and Go runtime allocation paths such as `runtime.mallocgc` and `runtime.memclrNoHeapPointers`.
+
+4. Open the Alloy UI at http://localhost:12345 and check `pyroscope.ebpf.default` for component status, discovered targets, and any eBPF loader errors.
+
+5. Open Pyroscope at http://localhost:4040 and use the service selector for the same comparison.
+
+## Customize the scenario
+
+- **Profile one container**: Filter `discovery.relabel.containers.output` with a regex on `__meta_docker_container_name`, or set `__process_pid__` directly.
+- **Profile a host process**: Add a target such as `{"__process_pid__" = "<pid>", "service_name" = "..."}` to `pyroscope.ebpf "default"`.
+- **Capture off-CPU profiles**: Set `off_cpu_threshold` in the `pyroscope.ebpf` block.
+- **Profile interpreted languages**: `pyroscope.ebpf` includes interpreter tracers for Python, Ruby, PHP, Perl, V8, and the JVM by default.
+- **Lower collect interval**: Reduce `collect_interval` on `pyroscope.ebpf "default"` for tighter sampling at the cost of more data shipped per minute.
+
+## Troubleshoot common problems
+
+Use these steps when profiles don't appear, eBPF fails to load, or ports conflict.
+
+### No profiles appear in Grafana
+
+Open the Alloy UI at http://localhost:12345 and check `pyroscope.ebpf.default` for eBPF loader errors.
+Check that `alloy` runs with `privileged: true` and `pid: host` in `docker-compose.yml`.
+Allow about 30 seconds after the stack starts.
+
+### eBPF fails inside nested Docker
+
+Run this scenario on the Docker host or in Docker Desktop, not inside another container.
+
+### Port conflicts with other services
+
+Ports 3000, 4040, and 12345 must be free before you start the stack.
+If another service uses one of these ports, edit the port mapping in `docker-compose.yml` before you run `docker compose up -d`.
+
+## Stop the scenario
+
+Run `docker compose down` from the scenario directory.
+
+## Next steps
+
+- `pyroscope.ebpf` reference: https://grafana.com/docs/alloy/latest/reference/components/pyroscope/pyroscope.ebpf/
+- Continuous profiling scenario: [../continuous-profiling/](../continuous-profiling/)
