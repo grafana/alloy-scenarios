@@ -7,18 +7,20 @@ prometheus.remote_write "remote" {
 
 // --- SNMP Exporter Configuration ---
 prometheus.exporter.snmp "snmp_exporter" {
-    config_file = "/etc/snmp/snmp.yml"
+    // Path must match where docker-compose mounts snmp.yml in the Alloy container.
+    config_file = "/etc/alloy/snmp.yml"
 
-    target "tm" {
-        address     = "snmpd"
-        module      = "CISCO"
-        walk_params = "Cisco"
+    target "snmpd" {
+        address     = "snmpd"        // the snmpd service on the compose network
+        module      = "if_mib"       // module defined in snmp.yml
+        auth        = "public_v2"    // auth profile defined in snmp.yml
+        walk_params = "default"      // walk_param block defined below
         labels = {
-            "ilo_node" = "switch",
+            "device" = "snmpd",
         }
     }
 
-    walk_param "cisco" {
+    walk_param "default" {
         retries = "2"
         timeout = "30s"
     }
@@ -29,7 +31,7 @@ discovery.relabel "snmp_targets" {
   targets = prometheus.exporter.snmp.snmp_exporter.targets
   rule {
     target_label = "job"
-    replacement  = "smpt"
+    replacement  = "snmp"
   }
 }
 
