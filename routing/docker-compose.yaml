@@ -40,7 +40,7 @@ services:
       - "loki"
       
   alloy:
-    image: "grafana/alloy:latest@sha256:84b76d56c5943025515438fd45cbb5995386a0260d072c9b671dfd7f539f9c01"
+    image: "grafana/alloy:latest@sha256:41c41849989b7e054ccbadc17938ee1e5592fe26bfbc56ef3ffc109c0b0b2739"
     restart: "unless-stopped"
     command: "run --server.http.listen-addr=0.0.0.0:3000 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy"
     volumes:
