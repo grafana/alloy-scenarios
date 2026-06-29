@@ -1,15 +1,14 @@
-version: '3.8'
-
 services:
 
-  loki:
-    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.10}
-    ports:
-      - 3100:3100/tcp
-    volumes:
-      - ./loki-config.yaml:/etc/loki/local-config.yaml
-    command: -config.file=/etc/loki/local-config.yaml
-
+  # Local SNMP agent that acts as the device being monitored.
+  snmpd:
+    build:
+      context: ./snmpd
+      dockerfile: Dockerfile
+      args:
+        - DEBIAN_VERSION=${DEBIAN_VERSION:-bookworm-slim}
+    # SNMP/UDP 161 is only reachable from other services on the compose
+    # network (Alloy), so no host port is published.
 
   prometheus:
      image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.3}
@@ -38,15 +37,6 @@ services:
          cat <<EOF > /etc/grafana/provisioning/datasources/ds.yaml
          apiVersion: 1
          datasources:
-         - name: Loki
-           type: loki
-           access: proxy
-           orgId: 1
-           url: http://loki:3100
-           basicAuth: false
-           isDefault: false
-           version: 1
-           editable: false
          - name: Prometheus
            type: prometheus
            orgId: 1
@@ -60,10 +50,12 @@ services:
 
   alloy:
     image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.0}
+    depends_on:
+      - snmpd
     ports:
       - 12345:12345
     volumes:
       - ./config.alloy:/etc/alloy/config.alloy
       - ./snmp.yml:/etc/alloy/snmp.yml
-      
+
     command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
