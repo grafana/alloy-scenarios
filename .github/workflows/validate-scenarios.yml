@@ -22,6 +22,14 @@ on:
       - '*/docker-compose.coda.yml'
       - '*/Dockerfile'
       - '*/config.alloy'
+      - '*/config-otel.yaml'
+      # Backend/pipeline configs: a broken tempo/loki/prometheus config
+      # crashes its container at boot and trips the smoke test, so a
+      # change to one must re-validate the scenario (see the opencensus
+      # receiver removal that this guard would have caught pre-merge).
+      - '*/tempo-config.yaml'
+      - '*/loki-config.yaml'
+      - '*/prom-config.yaml'
       - '*/app/**'
       - '*/*/Dockerfile'
       - '*/*/requirements.txt'
