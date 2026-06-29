@@ -1,90 +1,158 @@
-# Count Connector (Derive Metrics from Signals)
+# Count connector
 
-Use the OTel count connector to automatically derive count metrics from traces and logs -- the "metrics from signals" pattern -- without additional instrumentation.
+This scenario shows how to derive count metrics from traces and logs with the OTel count connector, without extra application instrumentation.
+The demo app sends spans and log records to Alloy over OTLP.
+The count connector emits `span.count`, `span.error.count`, `log.count`, and `log.error.count` to Prometheus while the original traces and logs go to Tempo and Loki.
 
-## What This Demonstrates
+## Before you begin
 
-- **Count connector** deriving metrics from trace spans and log records
-- Generating error rate metrics (`span.error.count`, `log.error.count`) from signal status codes
-- Generating volume metrics (`span.count`, `log.count`) for throughput monitoring
-- Routing derived metrics to Prometheus while original signals go to Tempo and Loki
+Ensure you have the following:
 
-## Prerequisites
+- [Docker][docker] and [Docker Compose][docker-compose].
+- Ports 8080 for the demo app, 3000 for Grafana, 3100 for Loki, 3200 for Tempo, 9090 for Prometheus, 8888 for the OTel Engine HTTP server, 12345 for the Alloy UI, and 4317 and 4318 for OTLP free on the host.
 
-- Docker and Docker Compose
+[docker]: https://docs.docker.com/get-docker/
+[docker-compose]: https://docs.docker.com/compose/install/
 
-## Run
+## Understand the architecture
 
-```bash
-docker compose up -d
+```text
++----------+     +-------------+     +-------------+     +---------+
+| demo-app |     |             |---->| Prometheus  |---->|         |
+|          | OTLP| Alloy OTel  |     +-------------+     | Grafana |
+|          |---->| Engine      |---->| Tempo       |---->|         |
++----------+     |             |     +-------------+     |         |
+                 |             |---->| Loki        |---->|         |
+                 +-------------+     +-------------+     +---------+
 ```
 
-## Alloy UI
+- **demo-app**: Flask app on port 8080 that emits OK and error traces plus INFO, WARN, and ERROR logs.
+- **Alloy**: Runs the OTel Engine from `config-otel.yaml`. The count connector derives metrics from incoming traces and logs and sends them to Prometheus. The `alloyengine` extension loads the stub `config.alloy` and exposes the Alloy UI on port 12345.
+- **Prometheus**: Stores derived count metrics through its OTLP receiver.
+- **Tempo**: Stores original traces.
+- **Loki**: Stores original logs.
+- **Grafana**: Queries Prometheus, Tempo, and Loki through provisioned data sources.
 
-The Alloy pipeline debugging UI is available at [http://localhost:12345](http://localhost:12345). This is enabled by the `alloyengine` extension in `config-otel.yaml`, which runs the River UI alongside the OTel pipeline.
+## Run the scenario
 
-If you prefer a pure OTel config without the Alloy UI, remove the `extensions` block and the `extensions: [alloyengine]` line from `config-otel.yaml`.
+1. Clone the repository: `git clone https://github.com/grafana/alloy-scenarios.git`
 
-## Explore
+2. Install the scenario with one of these options:
 
-Open Grafana at [http://localhost:3000](http://localhost:3000).
+   **Option 1: From the scenario directory**
 
-### View derived metrics in Prometheus
+   Use the default image tags in `docker-compose.yml`.
 
-Go to Explore > Prometheus and query the following metrics:
+   - Go to the scenario: `cd alloy-scenarios/otel-examples/count-connector`
+   - Deploy the scenario: `docker compose up -d --build`
 
-```promql
-# Total span count (rate per second)
-rate(span_count_total[5m])
+   **Option 2: From the repository root**
 
-# Error span count (rate per second)
-rate(span_error_count_total[5m])
+   Use pinned image versions from `image-versions.env`.
 
-# Error rate as a percentage
-rate(span_error_count_total[5m]) / rate(span_count_total[5m]) * 100
+   - Deploy the scenario: `cd otel-examples/count-connector && docker compose --env-file ../../image-versions.env up -d --build`
 
-# Total log record count
-rate(log_count_total[5m])
+3. From the `count-connector` directory, check that all containers are up: `docker compose ps`
 
-# Error log count
-rate(log_error_count_total[5m])
-```
+   Expect `demo-app`, `alloy`, `loki`, `prometheus`, `tempo`, and `grafana`.
 
-### View original traces in Tempo
+## Explore the services
 
-Go to Explore > Tempo and search for `count-connector-demo` traces. You will see both successful (OK) and error traces.
+- **Demo app** at http://localhost:8080: `/api/process`, `/api/notify`, and `/health`.
+- **Grafana** at http://localhost:3000: **Explore** with Prometheus, Tempo, and Loki data sources, with no login required.
+- **Alloy UI** at http://localhost:12345: Started by the `alloyengine` extension in `config-otel.yaml`. Because `config.alloy` is a stub, this UI does not graph the OTel YAML pipeline.
+- **OTel Engine HTTP server** at http://localhost:8888: Collector telemetry and health endpoint.
+- **Prometheus** at http://localhost:9090: Derived count metrics.
+- **Loki** at http://localhost:3100: Log backend API.
+- **Tempo** at http://localhost:3200: Trace storage backend.
 
-### View original logs in Loki
+## Understand the OTel pipeline
 
-Go to Explore > Loki and query:
+`config-otel.yaml` defines the pipeline. `config.alloy` is a stub that the `alloyengine` extension loads so the Alloy UI can start next to the OTel Engine.
 
-```logql
-{service_name="count-connector-demo"} | json
-```
+### Count connector metrics
 
-### Check the Alloy OTel pipeline
+`connectors/count` defines four derived metrics:
 
-Visit the Alloy OTel HTTP server at [http://localhost:8888](http://localhost:8888).
+- `span.count`: Total spans received
+- `span.error.count`: Spans where `status.code == 2`
+- `log.count`: Total log records received
+- `log.error.count`: Log records where `severity_number >= 17`
 
-## Key Configuration
+The count connector acts as an exporter in the trace and log pipelines and as a receiver in the metrics pipeline.
 
-The `config-otel.yaml` pipeline uses the **count connector** to bridge signals:
+### Pipeline wiring
 
-1. **`connectors/count`** -- Defines four derived metrics:
-   - `span.count` -- Total number of spans received
-   - `span.error.count` -- Spans where `status.code == 2` (ERROR)
-   - `log.count` -- Total number of log records received
-   - `log.error.count` -- Logs where `severity_number >= 17` (ERROR and above)
+1. **Traces**: `otlp` → `batch` → `count` and `otlp/tempo`
+2. **Logs**: `otlp` → `batch` → `count` and `otlphttp/loki`
+3. **Metrics**: `count` → `deltatocumulative` → `batch` → `otlphttp/prometheus`
 
-2. **Pipeline wiring:**
-   - `traces` pipeline: receives OTLP, exports to both `count` connector and `otlp/tempo`
-   - `logs` pipeline: receives OTLP, exports to both `count` connector and `otlphttp/loki`
-   - `metrics` pipeline: receives from `count` connector, exports to `otlphttp/prometheus`
+`deltatocumulative` converts delta temporality from the count connector into cumulative metrics for Prometheus.
 
-The count connector acts as both an exporter (in the traces/logs pipelines) and a receiver (in the metrics pipeline), bridging signals without any application changes.
+To run without the Alloy UI, remove the `extensions` block and the `extensions: [alloyengine]` line from `config-otel.yaml`, and remove the `config.alloy` volume mount from `docker-compose.yml`.
 
-## Stop
+## Try it out
 
-```bash
-docker compose down
-```
+The background load generator calls `/api/process` or `/api/notify` every two seconds and emits standalone INFO, WARN, and ERROR log lines.
+
+1. Open Grafana at http://localhost:3000 and go to **Explore**.
+
+   Select the **Prometheus** data source and run these PromQL queries:
+
+   - `rate(span_count_total[5m])`: Span throughput
+   - `rate(span_error_count_total[5m])`: Error span throughput
+   - `rate(span_error_count_total[5m]) / rate(span_count_total[5m]) * 100`: Error span rate as a percentage
+   - `rate(log_count_total[5m])`: Log record throughput
+   - `rate(log_error_count_total[5m])`: Error log throughput
+
+2. Select the **Tempo** data source and run `{resource.service.name="count-connector-demo"}` in **Search**.
+   Expect both OK and error traces from `/api/process` and `/api/notify`.
+
+3. Select the **Loki** data source and run `{service_name="count-connector-demo"} | json`.
+   Expect INFO, WARN, and ERROR log lines.
+
+4. Open the Alloy UI at http://localhost:12345, or http://localhost:8888 for OTel Engine telemetry.
+
+## Customize the scenario
+
+- **Add count metrics**: Edit `connectors/count` in `config-otel.yaml`.
+- **Change error conditions**: Edit the `conditions` blocks for `span.error.count` or `log.error.count` in `config-otel.yaml`.
+- **Point at another Prometheus**: Update `otlphttp/prometheus` in `config-otel.yaml`.
+
+## Troubleshoot common problems
+
+Covers startup failures, missing metrics, and port conflicts.
+
+### Containers didn't start or exited unexpectedly
+
+Run `docker compose ps` to check the status of each container.
+If any container has exited, run `docker compose logs <SERVICE_NAME>` to read the failure reason.
+Replace `<SERVICE_NAME>` with the name of the service that exited, such as `demo-app`, `alloy`, or `prometheus`.
+Validate the OTel config with `docker compose run --rm alloy otel validate --config=/etc/alloy/config-otel.yaml`.
+
+### Derived metrics are missing in Prometheus
+
+Wait for the background load generator to start. It sleeps five seconds after startup.
+In Grafana, select the **Prometheus** data source in **Explore** and run `rate(span_count_total[5m])`.
+Open http://localhost:8888 to check OTel Engine telemetry.
+
+### No traces or logs in Tempo or Loki
+
+In Grafana, search Tempo for `{resource.service.name="count-connector-demo"}` and Loki for `{service_name="count-connector-demo"}`.
+Call http://localhost:8080/api/process if you need fresh data.
+
+### Port conflicts with other services
+
+Ports 8080, 3000, 3100, 3200, 9090, 8888, 12345, 4317, and 4318 must be free before you start the stack.
+If another service uses one of these ports, edit the port mapping in `docker-compose.yml` for the conflicting service before you run `docker compose up -d --build`.
+
+## Stop the scenario
+
+Run `docker compose down` from the `otel-examples/count-connector` directory.
+
+## Next steps
+
+- OTel engine examples overview: https://github.com/grafana/alloy-scenarios/tree/main/otel-examples
+- Alloy OTel Engine documentation: https://grafana.com/docs/alloy/latest/set-up/otel_engine/
+- OpenTelemetry count connector: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/connector/countconnector
+- More examples: https://github.com/grafana/alloy-scenarios
