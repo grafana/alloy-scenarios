@@ -1,6 +1,7 @@
 # Skills library
 
-AI skills for creating and reviewing scenario README files in **alloy-scenarios**.
+AI skills for creating and reviewing scenario README files, and for repo
+maintenance tasks, in **alloy-scenarios**.
 
 For technical writers, engineers, and contributors who use Cursor, VS Code, or Claude Code.
 
@@ -9,6 +10,7 @@ For technical writers, engineers, and contributors who use Cursor, VS Code, or C
 | Skill | Purpose |
 | ----- | ------- |
 | [`docs-review/SKILL.md`](docs-review/SKILL.md) | Create or review scenario README files for style and technical accuracy |
+| [`merge-chore-prs/SKILL.md`](merge-chore-prs/SKILL.md) | Approve and merge open Renovate `chore(deps)` pull requests via the GitHub CLI |
 
 ### What you control
 
