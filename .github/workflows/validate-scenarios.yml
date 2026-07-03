@@ -215,7 +215,7 @@ jobs:
         # first one of the day. Key rotates daily so the DB stays
         # fresh; the restore-keys fallback is intentional — even a
         # stale-by-hours DB is far better than a cold fetch.
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: /tmp/trivy-cache
           key: trivy-db-${{ steps.date.outputs.today }}
