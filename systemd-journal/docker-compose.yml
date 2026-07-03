@@ -37,7 +37,7 @@ services:
         /run.sh
 
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.0}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
     # Run as root so Alloy can read /var/log/journal — the journal files
     # are owned by root:systemd-journal with mode 0640 on most distros.
     user: "0:0"
