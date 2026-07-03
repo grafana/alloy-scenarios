@@ -48,7 +48,7 @@ services:
 
   # Grafana for visualization
   grafana:
-    image: grafana/grafana:${GRAFANA_VERSION:-13.0.2}
+    image: grafana/grafana:${GRAFANA_VERSION:-13.1.0}
     environment:
       - GF_SECURITY_ALLOW_EMBEDDING=true
       - GF_SECURITY_DISABLE_SANITIZE_HTML=true
