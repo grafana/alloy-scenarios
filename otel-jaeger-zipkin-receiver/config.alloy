@@ -1,0 +1,39 @@
+/*
+ * Alloy Configuration for Jaeger and Zipkin Trace Ingestion
+ */
+
+// Receive Jaeger spans over Thrift HTTP and gRPC
+otelcol.receiver.jaeger "default" {
+  protocols {
+    thrift_http {}
+    grpc {}
+  }
+
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+// Receive Zipkin v2 JSON spans
+otelcol.receiver.zipkin "default" {
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+// Batch processor to improve performance
+otelcol.processor.batch "default" {
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+// Send traces to Tempo for storage and visualization
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
+    }
+  }
+}

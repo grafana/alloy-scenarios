@@ -1,0 +1,3 @@
+opentelemetry-api==1.43.0
+opentelemetry-sdk==1.43.0
+opentelemetry-exporter-zipkin-json==1.43.0

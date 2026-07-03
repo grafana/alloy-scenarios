@@ -1,0 +1,22 @@
+services:
+  jaeger-client:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    volumes:
+      - ./app/jaeger-client:/app
+    working_dir: /app
+    command: sh -c "pip install -r requirements.txt && python client.py"
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - JAEGER_COLLECTOR_ENDPOINT=http://alloy:14268/api/traces
+
+  zipkin-client:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    volumes:
+      - ./app/zipkin-client:/app
+    working_dir: /app
+    command: sh -c "pip install -r requirements.txt && python client.py"
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - ZIPKIN_ENDPOINT=http://alloy:9411/api/v2/spans
