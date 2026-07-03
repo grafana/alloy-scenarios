@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Scrape Alloy's own metrics for troubleshooting the beyla.ebpf pipeline.
+scrape_configs:
+  - job_name: 'alloy'
+    static_configs:
+      - targets: ['alloy:12345']
