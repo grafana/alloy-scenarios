@@ -49,7 +49,7 @@ services:
          /run.sh
 
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.0}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
     depends_on:
       - snmpd
     ports:

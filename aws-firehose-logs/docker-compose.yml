@@ -37,7 +37,7 @@ services:
         /run.sh
 
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.0}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
     ports:
       - "12345:12345"
       - "9999:9999"
