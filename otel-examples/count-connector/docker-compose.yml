@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # Loki for log storage
   loki:
-    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.6.10}
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.7.3}
     command: -config.file=/etc/loki/local-config.yaml
     ports:
       - 3100:3100/tcp
