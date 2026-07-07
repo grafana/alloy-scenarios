@@ -2,7 +2,7 @@ services:
   # Prometheus with exemplar storage enabled -- without this flag the
   # exemplars Alloy sends with remote write are silently dropped.
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.3}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.0}
     command:
       - --web.enable-remote-write-receiver
       - --enable-feature=exemplar-storage

@@ -82,7 +82,7 @@ services:
 
   # ── Service-graph / span metrics storage ──
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.3}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.0}
     command:
       - --web.enable-remote-write-receiver  # Tempo's metrics generator writes here
       - --enable-feature=native-histograms

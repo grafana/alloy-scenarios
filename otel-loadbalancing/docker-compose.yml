@@ -11,7 +11,7 @@ services:
   # Prometheus scrapes all three Alloy instances; the per-instance
   # otelcol_receiver metrics are how you SEE the load balancer's split.
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.3}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.0}
     command:
       - --web.enable-remote-write-receiver
       - --config.file=/etc/prometheus/prometheus.yml
