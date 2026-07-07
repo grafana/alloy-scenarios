@@ -13,7 +13,7 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- Prometheus Java client 1.x BOM. 1.3.6 is a recent stable release. -->
-        <prometheus.version>1.3.6</prometheus.version>
+        <prometheus.version>1.8.0</prometheus.version>
     </properties>
 
     <dependencyManagement>
