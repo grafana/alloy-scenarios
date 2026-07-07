@@ -20,7 +20,7 @@ services:
       retries: 12
 
   loadgen:
-    image: pivotalrabbitmq/perf-test:${RABBITMQ_PERF_TEST_VERSION:-2.24.0}
+    image: pivotalrabbitmq/perf-test:${RABBITMQ_PERF_TEST_VERSION:-2.25.0}
     container_name: rabbitmq-monitoring-loadgen
     command:
       - --uri
