@@ -9,7 +9,7 @@ services:
     restart: unless-stopped
 
   loadgen:
-    image: curlimages/curl:${CURL_VERSION:-8.20.0}
+    image: curlimages/curl:${CURL_VERSION:-8.21.0}
     entrypoint:
       - sh
       - -c
