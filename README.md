@@ -68,6 +68,7 @@ These scenarios show distributed tracing with OpenTelemetry and Tempo.
 | [OpenTelemetry basic tracing](otel-basic-tracing/) | Collect and visualize OpenTelemetry traces with Alloy and Tempo. |
 | [OpenTelemetry SDK traces across languages](app-instrumentation/traces/opentelemetry-sdk/) | Instrument five languages with the OpenTelemetry tracing SDK and collect standalone traces through Alloy into Tempo. |
 | [OpenTelemetry Jaeger and Zipkin receivers](otel-jaeger-zipkin-receiver/) | Ingest Jaeger and Zipkin trace formats with Alloy and forward them to Tempo over OTLP. |
+| [Zero-code eBPF instrumentation](beyla-zero-code-instrumentation/) | Auto-instrument an unmodified Go HTTP service with `beyla.ebpf` -- no OpenTelemetry SDK, no agent, no code changes. Produces RED metrics and traces from eBPF probes alone. |
 | [OpenTelemetry load balancing](otel-loadbalancing/) | Shard traces across two tail-sampling Alloy instances with `otelcol.exporter.loadbalancing` -- same trace ID, same backend. |
 | [OpenTelemetry service graphs](otel-tracing-service-graphs/) | Generate service graphs with the Alloy `servicegraph` connector. |
 | [OpenTelemetry span metrics](otel-span-metrics/) | Generate RED metrics from OpenTelemetry traces with the span metrics connector. Request rate, error rate, and duration. |
