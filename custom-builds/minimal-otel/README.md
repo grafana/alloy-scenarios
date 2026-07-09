@@ -1,30 +1,22 @@
-# Build only what you need (minimal OTel Collector)
+# Build only what you need with a minimal OpenTelemetry Collector
 
-Grafana Alloy is a distribution of the OpenTelemetry Collector. The full `grafana/alloy` image bundles every component Alloy ships — Prometheus pipelines, Loki pipelines, dozens of OTel components, the Alloy UI, and more. That's convenient, but if all you need is "receive OTLP, batch it, forward OTLP," you're shipping a lot of code you'll never run.
-
-This scenario shows how to build a collector that contains **only the parts you need**, using the [OpenTelemetry Collector Builder (OCB)](https://github.com/open-telemetry/opentelemetry-collector/tree/main/cmd/builder) — the same tool Alloy uses internally to generate its OTel engine.
-
-The payoff: the image in this scenario is about **41 MB**, versus **~670 MB** for full `grafana/alloy:v1.17.0`.
+This scenario shows how to build a minimal OpenTelemetry Collector image and run a traces pipeline end to end.
+You generate traces, process traces with memory and batch processors, and export traces to Tempo for exploration in Grafana.
+This scenario uses OpenTelemetry YAML in `config.yaml` and not [Alloy syntax](https://grafana.com/docs/alloy/latest/get-started/syntax/).
 
 ## Before you begin
 
 Ensure you have the following:
 
 - [Docker][docker] and [Docker Compose][docker-compose].
-- Ports 3000 for Grafana, 3200 for Tempo, and 4317/4318 for the minimal collector's OTLP receiver free on the host.
+- Ports `3000`, `3200`, `4317`, and `4318` free on your host.
 
 [docker]: https://docs.docker.com/get-docker/
 [docker-compose]: https://docs.docker.com/compose/install/
 
-## Why OCB and not "trim Alloy"
-
-There is no build flag that slims the full Alloy (River) binary down to "just the OTel parts" — Alloy's `GO_TAGS` only toggle a few platform features. The OTel-native way to get a minimal collector is OCB: you declare the components you want in a manifest, and OCB generates and compiles a collector with exactly those.
-
-Alloy does have an in-process, OCB-generated OTel engine you can run with `alloy otel`, but it is currently **experimental**, so this scenario uses standalone OCB. The result is a pure OpenTelemetry Collector — configured with an OTel **YAML** file, not Alloy River syntax.
-
 ## Understand the architecture
 
-telemetrygen emits OTLP traces to the minimal collector, which batches them and forwards them to Tempo. Grafana reads Tempo through its auto-provisioned datasource.
+Telemetry flows from the load generator to the custom collector and then to Tempo.
 
 ```text
 +--------------+   OTLP   +---------------+   OTLP   +-------+     +---------+
@@ -32,73 +24,155 @@ telemetrygen emits OTLP traces to the minimal collector, which batches them and 
 +--------------+          +---------------+          +-------+     +---------+
 ```
 
-- **minimal-otel** — the collector built from [`builder-config.yaml`](builder-config.yaml). Pipeline: OTLP receiver → `memory_limiter` → `batch` → OTLP exporter (to Tempo) + `debug`.
-- **Tempo** — stores the traces.
-- **Grafana** — views the traces. The Tempo datasource is auto-provisioned.
-- **telemetrygen** — the OpenTelemetry load generator, emits sample traces.
+- **minimal-otel:** Builds from `builder-config.yaml` and runs the pipeline in `config.yaml`.
+- **Tempo:** Stores traces and exposes search APIs.
+- **Grafana:** Auto provisions a Tempo data source and provides trace exploration.
+- **telemetrygen:** Sends sample traces with service name `minimal-demo`.
 
 ## Run the scenario
 
-From this directory:
+1. Clone the repository if you have not cloned it yet: `git clone https://github.com/grafana/alloy-scenarios.git`
 
-```sh
-docker compose up -d
-```
+2. Install the scenario with one of these options:
 
-The image versions in `docker-compose.yml` are pinned to the values in the repo-root `image-versions.env`. The first build runs OCB and compiles the collector, typically under a minute.
+   **Option 1: From the scenario directory**
+
+   Use default image tags in `docker-compose.yml`.
+
+   - Navigate to this scenario: `cd alloy-scenarios/custom-builds/minimal-otel`
+   - Deploy the scenario: `docker compose up -d`
+
+   **Option 2: From the repository root**
+
+   Use pinned image versions from `image-versions.env`.
+
+   - Deploy the scenario: `./run-example.sh custom-builds/minimal-otel`
+
+3. Confirm all containers are up: `cd alloy-scenarios/custom-builds/minimal-otel && docker compose ps`
+
+4. Check collector logs for active trace flow: `cd alloy-scenarios/custom-builds/minimal-otel && docker compose logs minimal-otel --tail=50`
 
 ## Explore the services
 
-- **Grafana** at [http://localhost:3000](http://localhost:3000). Anonymous access is enabled with the admin role, so you don't need to log in. Go to **Explore → Tempo** and run a **Search** for service name `minimal-demo`.
+Open Grafana at [http://localhost:3000](http://localhost:3000). Anonymous admin access is enabled, so you do not need to sign in.
 
-## Try it out
-
-- The collector logs each batch via the `debug` exporter:
-
-  ```text
-  info  Traces  {"otelcol.component.id": "debug", "otelcol.signal": "traces", "resource spans": 1, "spans": 2}
-  ```
-
-- Traces from service `minimal-demo` appear in Tempo. You can check from the CLI:
-
-  ```sh
-  curl -s "http://localhost:3200/api/search?tags=service.name%3Dminimal-demo&limit=3"
-  ```
-
-- See the size difference for yourself:
-
-  ```sh
-  docker images | grep -E "minimal-otel|grafana/alloy"
-  ```
-
-- Inspect exactly which components were compiled in:
-
-  ```sh
-  docker run --rm $(docker compose images -q minimal-otel) components
-  ```
+In Grafana, open **Explore**, choose **Tempo**, and search for service name `minimal-demo`.
 
 ## Understand the configuration
 
-[`Dockerfile`](Dockerfile) is a two-stage build:
+The scenario uses four configuration files in pipeline order.
 
-1. **build stage** (`golang:1.25` — OCB v0.147.0 requires Go ≥ 1.25): runs
-   `go run go.opentelemetry.io/collector/cmd/builder@<OCB_VERSION> --config builder-config.yaml`,
-   which generates the collector's `main` package and compiles a static binary.
-2. **runtime stage** (`distroless/static`): copies just the binary in.
+`config.yaml` defines an OpenTelemetry pipeline with:
 
-[`builder-config.yaml`](builder-config.yaml) is the manifest. To add a capability, add a `gomod` line under the right section and rebuild — for example, to also write metrics to Prometheus you'd add `go.opentelemetry.io/collector/exporter/otlphttpexporter` or a contrib exporter. Versions are pinned to the OpenTelemetry release that Alloy v1.17.0 ships (unstable `v0.147.0`, stable `v1.53.0`).
+- `otlp` receiver on `0.0.0.0:4317` and `0.0.0.0:4318`
+- `memory_limiter` and `batch` processors
+- `otlp` exporter to `tempo:4317`
+- `debug` exporter for local visibility
+
+`builder-config.yaml` is the OpenTelemetry Collector Builder manifest. It defines the distribution name, output path, and OpenTelemetry Collector version for the generated binary.
+
+This scenario manifest includes:
+
+- `receivers`: `otlpreceiver`
+- `processors`: `batchprocessor` and `memorylimiterprocessor`
+- `exporters`: `otlpexporter` and `debugexporter`
+- `providers`: `fileprovider` and `envprovider`
+
+It pins unstable modules to `v0.147.0` and stable config providers to `v1.53.0`.
+
+`Dockerfile` uses two stages:
+
+1. `build` stage: runs `go run go.opentelemetry.io/collector/cmd/builder@<OCB_VERSION> --config builder-config.yaml` in a Go image and produces the `minimal-otelcol` binary.
+2. `runtime` stage: copies only that binary into a distroless image and starts it with `--config=/etc/otelcol/config.yaml`.
+
+`tempo-config.yaml` configures a local Tempo instance with OTLP receivers and local block storage.
+
+## Try it out
+
+Use these checks to confirm data flow and inspect the custom build result.
+
+1. Query Tempo for traces from `minimal-demo`:
+
+   ```sh
+   curl -s "http://localhost:3200/api/search?tags=service.name%3Dminimal-demo&limit=3"
+   ```
+
+2. View debug exporter output in collector logs:
+
+	```sh
+	docker compose logs minimal-otel --tail=100
+	```
+
+	Example output:
+
+	```text
+	info  Traces  {"otelcol.component.id": "debug", "otelcol.signal": "traces", "resource spans": 1, "spans": 2}
+	```
+
+3. Compare image sizes:
+
+   Image size depends on version, platform, and base image.
+
+   ```sh
+   docker images | grep -E "minimal-otel|grafana/alloy"
+   ```
+
+4. List compiled components in the custom binary:
+
+   ```sh
+   docker run --rm $(docker compose images -q minimal-otel) components
+   ```
 
 ## Customize the scenario
 
-- **Different signals**: this manifest builds a traces pipeline, but the OTLP receiver and exporter handle metrics and logs too — add `metrics:` / `logs:` pipelines in [`config.yaml`](config.yaml).
-- **More components**: browse the [OpenTelemetry Collector](https://github.com/open-telemetry/opentelemetry-collector) and [collector-contrib](https://github.com/open-telemetry/opentelemetry-collector-contrib) repos, add the `gomod` to `builder-config.yaml`, and rebuild.
+Use these options to extend the scenario.
+
+- **Different signals:** Add `metrics` or `logs` pipelines to `config.yaml` when you need more than traces.
+- **More components:** Add a new `gomod` entry under the correct section in `builder-config.yaml`. For example, add `go.opentelemetry.io/collector/exporter/otlphttpexporter` when you need OTLP over HTTP export, or add a contrib exporter module when you need a non core backend.
+
+After changes, rebuild the image:
+
+```sh
+docker compose up -d --build
+```
+
+## Troubleshoot common problems
+
+Use these checks when startup or trace flow fails.
+
+### Resolve port conflicts
+
+Check whether another process uses required ports:
+
+```sh
+ss -ltnp | grep -E ":3000|:3200|:4317|:4318"
+```
+
+### Resolve missing traces in Grafana
+
+Check telemetrygen and collector logs:
+
+```sh
+docker compose ps telemetrygen minimal-otel tempo
+docker compose logs telemetrygen minimal-otel --tail=100
+```
+
+### Resolve build failures
+
+Rebuild without cache to inspect full builder output:
+
+```sh
+docker compose build --no-cache minimal-otel
+```
 
 ## Stop the scenario
 
-Run `docker compose down` from this directory.
+Run `docker compose down` from the `minimal-otel` directory.
 
 ## Next steps
 
-- [OpenTelemetry Collector Builder](https://github.com/open-telemetry/opentelemetry-collector/tree/main/cmd/builder): the tool this scenario uses to compile a minimal collector.
-- [Custom Alloy builds](../): the other build method, forking Alloy to add a Go component.
-- Grafana Alloy [custom components](https://grafana.com/docs/alloy/latest/get-started/components/custom-components/): the config-level `declare`/`import` feature, a different concept from the custom image this scenario builds.
+- [Custom Alloy builds](../)
+- [OpenTelemetry Collector Builder](https://github.com/open-telemetry/opentelemetry-collector/tree/main/cmd/builder)
+- [OpenTelemetry in Alloy](https://grafana.com/docs/alloy/latest/introduction/otel_alloy/)
+- [OpenTelemetry engine command reference](https://grafana.com/docs/alloy/latest/reference/cli/otel/)
+- [Custom components in Alloy](https://grafana.com/docs/alloy/latest/get-started/components/custom-components/)

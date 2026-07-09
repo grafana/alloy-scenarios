@@ -1,26 +1,40 @@
 # Custom Alloy builds
 
-These scenarios show how to **build a tailored Grafana Alloy / OpenTelemetry Collector image** instead of using the stock `grafana/alloy` distribution — for example when you want a slim collector that contains only the parts you use, or (later) when you need a component that doesn't ship by default.
+These scenarios show how to build a tailored image based on Grafana Alloy or OpenTelemetry Collector instead of the default `grafana/alloy` image.
+You'll use this approach when you want a smaller OpenTelemetry Collector image for a focused pipeline, or when you need custom build behavior.
 
-## How building a custom Alloy works
+## How custom Alloy builds work
 
-Alloy is a single compiled Go binary. It has **no dynamic plugin system** — you can't drop a `.so` file next to it and have it loaded at runtime. Anything custom must be **compiled in**. There are two supported, documented ways to produce a tailored build:
+Grafana Alloy includes an OpenTelemetry engine.
+It uses the OpenTelemetry Collector runtime and OpenTelemetry YAML configuration for that engine.
+Refer to the published documentation for [OpenTelemetry in Alloy](https://grafana.com/docs/alloy/latest/introduction/otel_alloy/).
 
-1. **Build a custom OpenTelemetry Collector distribution with OCB.** The [OpenTelemetry Collector Builder (OCB)](https://github.com/open-telemetry/opentelemetry-collector/tree/main/cmd/builder) assembles a collector from only the modules you list in a manifest. Alloy itself uses OCB internally to generate its OpenTelemetry engine (see `collector/builder-config.yaml` in the Alloy repo). This is the right tool when your goal is "only what I need." It's what the scenario below demonstrates.
+You can build custom images with two common paths:
 
-2. **Fork Alloy and add a Go component.** You add a package under `internal/component/...`, register it in `internal/component/all`, and rebuild with `make alloy`. The new component then works in normal Alloy (River) configuration, exactly like the built-in components. This is documented in Alloy's [developer guide for adding components](https://github.com/grafana/alloy/blob/main/docs/developer/add-otel-component.md). (Worked examples of this path may be added here later.)
+1. **Build a custom OpenTelemetry Collector distribution with OCB.**
+   The [OpenTelemetry Collector Builder](https://opentelemetry.io/docs/collector/custom-collector/) builds a Collector distribution from modules you list in a manifest.
+   Alloy documentation describes OCB custom builds in [Grafana Alloy maintenance scope](https://grafana.com/docs/alloy/latest/reference/release-information/alloy-maintenance/).
 
-> **Note:** Alloy also has a config-language feature called [**custom components**](https://grafana.com/docs/alloy/latest/get-started/components/custom-components/) — the `declare` and `import` blocks. That feature bundles *existing built-in* components into reusable units; it involves no Go and no rebuild. It is a different thing from what these scenarios teach (producing a custom image), which is why this directory is named `custom-builds` rather than `custom-components`.
+2. **Fork Alloy and add a Go component.**
+   You add a component in source code and rebuild Alloy.
+   This path targets advanced customizations in Alloy syntax pipelines.
+   Grafana Alloy public docs focus on OCB custom builds.
+   For this workflow, refer to the developer guide in the Alloy repository: [Add OpenTelemetry components](https://github.com/grafana/alloy/blob/main/docs/developer/add-otel-component.md).
 
-## The scenarios
+> **Note:** Alloy also includes [custom components](https://grafana.com/docs/alloy/latest/get-started/components/custom-components/) through `declare` and `import` blocks.
+> That feature composes existing components in Alloy syntax.
+> It doesn't build a custom binary.
 
-| Scenario | What it teaches | Build method |
-| -------- | --------------- | ------------ |
-| [minimal-otel](minimal-otel/) | Build a collector with **only the OTel parts you need** (OTLP in, batch/memory_limiter, OTLP out) and compare its image size to full Alloy. | OCB |
+## Scenarios
 
-`minimal-otel` produces a **pure OpenTelemetry Collector** (Alloy's lineage), so it is configured with an OTel **YAML** file (`config.yaml`), not Alloy River syntax. The image versions in its `docker-compose.yml` are pinned to the values in the repo-root `image-versions.env`.
+| Scenario                      | Description                                                                                                                             | Build method |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| [minimal-otel](minimal-otel/) | Build a collector with only the OpenTelemetry components you need for OTLP receive, batch and memory limit processing, and OTLP export. | OCB          |
 
-## Honest limitations (no hand-waving)
+## Known limits
 
-- There is **no build flag that slims the full Alloy (River) binary** to "only OTel." Alloy's `GO_TAGS` only toggle a few platform features (for example `netgo`, `embedalloyui`, `promtail_journal_enabled`). That is why `minimal-otel` uses OCB to produce a separate, minimal OTel Collector instead of a trimmed Alloy.
-- Alloy ships an in-process, OCB-generated OTel engine you can run with `alloy otel`, but it is currently **experimental**, so `minimal-otel` anchors on standalone OCB and only mentions the engine as the Alloy-native equivalent.
+- The `alloy otel` command is experimental.
+  Refer to the published [otel command reference](https://grafana.com/docs/alloy/latest/reference/cli/otel/).
+- Custom builds can include behavior outside standard maintenance scope.
+  Refer to [Grafana Alloy maintenance scope](https://grafana.com/docs/alloy/latest/reference/release-information/alloy-maintenance/).
+- `minimal-otel` uses standalone OpenTelemetry Collector build output and OpenTelemetry YAML configuration.
