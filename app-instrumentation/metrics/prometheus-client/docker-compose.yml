@@ -34,7 +34,7 @@ services:
 
   # ── Storage ──
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.11.3}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.0}
     command:
       - --web.enable-remote-write-receiver  # required: Alloy remote-writes here
       - --enable-feature=native-histograms
