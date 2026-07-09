@@ -13,7 +13,7 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- OpenTelemetry Java BOM. 1.43.0 is a recent stable release. -->
-        <otel.version>1.43.0</otel.version>
+        <otel.version>1.63.0</otel.version>
     </properties>
 
     <dependencyManagement>
