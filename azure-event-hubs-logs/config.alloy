@@ -1,0 +1,28 @@
+// Azure Event Hubs -> Loki, no Azure subscription required.
+//
+// loki.source.azure_event_hubs is a Kafka consumer pointed at Event Hubs'
+// Kafka-compatible endpoint. The "eventhub" service in this scenario is a
+// self-hosted broker speaking that same wire protocol (TLS + SASL PLAIN,
+// username "$ConnectionString") -- see the README for why the official
+// Microsoft emulator can't be used here. A small producer container fakes
+// Azure Activity Log records flowing in from Diagnostic Settings.
+
+livedebugging { enabled = true }
+
+loki.source.azure_event_hubs "activity_logs" {
+	fully_qualified_namespace = "eventhub:9093"
+	event_hubs                = ["insights-activity-logs"]
+	group_id                  = "$Default"
+	forward_to                = [loki.write.local.receiver]
+
+	authentication {
+		mechanism         = "connection_string"
+		connection_string = "SAS_KEY_VALUE"
+	}
+}
+
+loki.write "local" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}

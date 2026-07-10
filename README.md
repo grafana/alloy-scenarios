@@ -43,6 +43,7 @@ These scenarios focus on log collection, log parsing, log routing, and log redac
 | Scenario | Description |
 | -------- | ----------- |
 | [Amazon Data Firehose logs](aws-firehose-logs/) | Ingest Amazon Data Firehose deliveries with `loki.source.awsfirehose`. Uses a local sender. No AWS account required. |
+| [Azure Event Hubs logs](azure-event-hubs-logs/) | Ingest Azure Event Hubs messages with `loki.source.azure_event_hubs`. Uses a self-hosted broker speaking the same wire protocol. No Azure subscription required. |
 | [GELF log ingestion](gelf-log-ingestion/) | Ingest Graylog Extended Log Format logs over `UDP`. |
 | [Kafka logs](kafka/) | Consume and process logs from Apache Kafka topics. |
 | [Log API gateway](log-api-gateway/) | Use Alloy as a centralized log gateway that accepts logs via a Loki-compatible push API endpoint. |
