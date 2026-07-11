@@ -15,6 +15,7 @@ logs-file
 logs-tcp
 mail-house
 memcached-monitoring
+metric-cardinality-control
 mongodb-monitoring
 mssql-monitoring
 mysql-monitoring
