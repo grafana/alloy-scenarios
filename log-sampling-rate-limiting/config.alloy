@@ -1,0 +1,63 @@
+// Scenario: log-sampling-rate-limiting
+// Demonstrates loki.process stage.sampling + stage.limit to cut log volume:
+// keep all WARN/ERROR lines, sample DEBUG/INFO down to a fraction, and cap
+// throughput per stream before loki.write.
+// See: https://github.com/grafana/alloy-scenarios/issues/268
+
+// --- Receiver: read log lines from the demo app's log file ---
+// TODO: point path to wherever the demo log generator writes its log file
+local.file_match "logs" {
+  path_targets = [{"__path__" = "/var/log/app/*.log"}]
+}
+
+loki.source.file "logs" {
+  targets    = local.file_match.logs.targets
+  forward_to = [loki.process.filtered.receiver]
+}
+
+// --- Processor: parse level, keep ERROR/WARN as-is, sample + rate-limit DEBUG/INFO ---
+loki.process "filtered" {
+  forward_to = [loki.write.default.receiver]
+
+  // Parse JSON log lines and promote "level" to a real Loki label so the
+  // match selector below can filter on it.
+  stage.json {
+    expressions = {level = "level"}
+  }
+
+  stage.labels {
+    values = {level = ""}
+  }
+
+  // Only DEBUG/INFO lines flow into this nested pipeline.
+  // ERROR/WARN lines fall through untouched (stage.match with action="keep"
+  // just skips non-matching lines past this stage, it doesn't drop them).
+  stage.match {
+    selector = "{level=~\"DEBUG|INFO\"}"
+
+    stage.sampling {
+      rate                = 0.10 // keep ~10% of DEBUG/INFO lines
+      drop_counter_reason = "logs_sampling"
+    }
+
+    stage.limit {
+      rate  = 50  // TODO: tune once the demo log generator is wired up
+      burst = 100
+      drop  = true
+    }
+  }
+}
+
+// --- Writer: ship the filtered stream to Loki ---
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+// TODO next session:
+// - docker-compose.yml (LGMT stack, from .cursor/docker-example.mdc template)
+// - loki-config.yaml / prom-config.yaml
+// - demo log generator (app/) emitting mixed-severity JSON logs
+// - Grafana panel showing ingest rate: DEBUG/INFO sampled ~10%, ERROR/WARN 100%
+// - README.md
