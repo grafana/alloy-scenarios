@@ -11,6 +11,7 @@ kafka
 linux
 log-api-gateway
 log-secret-filtering
+log-to-metrics
 logs-file
 logs-tcp
 mail-house

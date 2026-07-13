@@ -48,6 +48,7 @@ These scenarios focus on log collection, log parsing, log routing, and log redac
 | [Log API gateway](log-api-gateway/) | Use Alloy as a centralized log gateway that accepts logs via a Loki-compatible push API endpoint. |
 | [Log routing](routing/) | Route logs from multiple sources to different Loki tenants based on log content and origin. |
 | [Log secret filtering](log-secret-filtering/) | Redact sensitive credentials and secrets from logs with pattern rules before storage. |
+| [Log-to-metrics](log-to-metrics/) | Extract a request counter and latency histogram from application logs while forwarding the raw logs to Loki. |
 | [Logs from file](logs-file/) | Tail log files with Alloy. |
 | [Logs over TCP](logs-tcp/) | Receive and process TCP logs in JSON format. |
 | [Popular logging frameworks](app-instrumentation/logging/popular-logging-frameworks/) | Parse logs from popular logging frameworks across 7 programming languages. |

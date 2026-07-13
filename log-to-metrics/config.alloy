@@ -1,0 +1,77 @@
+livedebugging {
+	enabled = true
+}
+
+local.file_match "request_logs" {
+	path_targets = [{"__path__" = "/var/log/demo/requests.log", "job" = "log-to-metrics"}]
+	sync_period  = "2s"
+}
+
+loki.source.file "requests" {
+	targets       = local.file_match.request_logs.targets
+	forward_to    = [loki.process.requests.receiver]
+	tail_from_end = true
+}
+
+loki.process "requests" {
+	forward_to = [loki.write.local.receiver]
+
+	stage.regex {
+		expression = "method=(?P<method>\\S+) path=(?P<path>\\S+) status=(?P<status>\\d{3}) duration=(?P<duration>[0-9.]+)s"
+	}
+
+	stage.labels {
+		values = {
+			method = "",
+			status = "",
+		}
+	}
+
+	stage.metrics {
+		metric.counter {
+			name              = "requests_total"
+			description       = "Requests observed in application logs"
+			prefix            = "log_derived_"
+			source            = "status"
+			action            = "inc"
+			max_idle_duration = "5m"
+		}
+
+		metric.histogram {
+			name              = "request_duration_seconds"
+			description       = "Request duration extracted from application logs"
+			prefix            = "log_derived_"
+			source            = "duration"
+			buckets           = [0.05, 0.1, 0.25, 0.5, 1.0, 2.0]
+			max_idle_duration = "5m"
+		}
+	}
+}
+
+loki.write "local" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}
+
+prometheus.scrape "derived_metrics" {
+	targets         = [{"__address__" = "127.0.0.1:12345"}]
+	forward_to      = [prometheus.relabel.derived_metrics.receiver]
+	scrape_interval = "5s"
+}
+
+prometheus.relabel "derived_metrics" {
+	forward_to = [prometheus.remote_write.local.receiver]
+
+	rule {
+		source_labels = ["__name__"]
+		regex         = "log_derived_.*"
+		action        = "keep"
+	}
+}
+
+prometheus.remote_write "local" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}

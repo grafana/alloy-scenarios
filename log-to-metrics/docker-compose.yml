@@ -1,0 +1,55 @@
+services:
+  # Continuously writes synthetic HTTP request logs to a shared file.
+  log-generator:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    volumes:
+      - ./app/generate_logs.py:/app/generate_logs.py
+      - ./logs:/logs
+    command: python3 /app/generate_logs.py
+    depends_on:
+      - alloy
+
+  # Tails the log file, derives metrics, and ships both signals.
+  alloy:
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    ports:
+      - 12345:12345/tcp
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy
+      - ./logs:/var/log/demo
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    depends_on:
+      - loki
+      - prometheus
+
+  loki:
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.7.3}
+    ports:
+      - 3100:3100/tcp
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml
+
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.0}
+    command:
+      - --web.enable-remote-write-receiver
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - 9090:9090/tcp
+    volumes:
+      - ./prom-config.yaml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-13.1.0}
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+    volumes:
+      - ./grafana:/etc/grafana/provisioning
+    ports:
+      - 3000:3000/tcp
+    depends_on:
+      - loki
+      - prometheus
