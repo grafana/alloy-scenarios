@@ -36,7 +36,7 @@ services:
 
   # Pyroscope v2 for continuous profiling
   pyroscope:
-    image: grafana/pyroscope:${GRAFANA_PYROSCOPE_VERSION:-2.1.0}
+    image: grafana/pyroscope:${GRAFANA_PYROSCOPE_VERSION:-2.1.1}
     ports:
       - "4040:4040"
     command:
