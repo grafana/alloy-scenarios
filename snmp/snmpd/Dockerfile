@@ -1,6 +1,6 @@
 # Minimal SNMP agent used as a local demo target for Alloy's SNMP exporter.
 # Built from the official Debian image with net-snmp installed.
-ARG DEBIAN_VERSION=bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df
+ARG DEBIAN_VERSION=bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818
 FROM debian:${DEBIAN_VERSION}
 
 RUN apt-get update \
