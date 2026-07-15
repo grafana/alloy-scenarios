@@ -1,0 +1,9 @@
+services:
+  exporter:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    ports:
+      - 8000:8000/tcp
+    volumes:
+      - ./app/exporter.py:/app/exporter.py:ro
+    command: python3 /app/exporter.py
+    restart: unless-stopped

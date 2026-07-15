@@ -1,0 +1,65 @@
+livedebugging {
+	enabled = true
+}
+
+// Scrape the demo exporter once, then fan each sample into an unchanged
+// comparison branch and a cardinality-controlled branch.
+prometheus.scrape "cardinality_demo" {
+	targets = [
+		{"__address__" = "exporter:8000"},
+	]
+
+	forward_to = [
+		prometheus.relabel.before.receiver,
+		prometheus.relabel.after.receiver,
+	]
+
+	job_name        = "metric-cardinality-control"
+	scrape_interval = "5s"
+	scrape_timeout  = "4s"
+}
+
+// Keep the original demo series, adding only the comparison label.
+prometheus.relabel "before" {
+	forward_to = [prometheus.remote_write.local.receiver]
+
+	rule {
+		target_label = "pipeline"
+		replacement  = "before"
+	}
+}
+
+// Apply representative cardinality controls before remote writing the samples.
+prometheus.relabel "after" {
+	forward_to = [prometheus.remote_write.local.receiver]
+
+	rule {
+		source_labels = ["__name__"]
+		regex         = "cardinality_demo_noisy_series"
+		action        = "drop"
+	}
+
+	rule {
+		regex  = "request_id|query"
+		action = "labeldrop"
+	}
+
+	rule {
+		source_labels = ["route"]
+		regex         = "(/(orders|users))/[0-9]+"
+		target_label  = "route"
+		replacement   = "$1/:id"
+		action        = "replace"
+	}
+
+	rule {
+		target_label = "pipeline"
+		replacement  = "after"
+	}
+}
+
+prometheus.remote_write "local" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}
