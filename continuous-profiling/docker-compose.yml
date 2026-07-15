@@ -12,7 +12,7 @@ services:
 
   # Pyroscope for continuous profiling storage and visualization
   pyroscope:
-    image: grafana/pyroscope:2.1.0@sha256:73b23dbb99f154a0803c136abafdff825475f415dd4d4587538d014c672b5a55
+    image: grafana/pyroscope:2.1.1@sha256:c8ad9891fc8562c794c946883c8324b7e48f4eda58d243387c7b6254f9f061fb
     ports:
       - 4040:4040
 
