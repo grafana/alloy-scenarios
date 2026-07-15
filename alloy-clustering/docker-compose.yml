@@ -3,7 +3,7 @@ services:
   # --query.lookback-delta=1m makes a stopped node's stale series disappear
   # quickly, so the rebalance is easy to see in the dashboard.
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.1}
     command:
       - --web.enable-remote-write-receiver
       - --enable-feature=native-histograms

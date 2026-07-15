@@ -71,7 +71,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
 
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.1}
     container_name: rabbitmq-monitoring-prometheus
     command:
       - --web.enable-remote-write-receiver
