@@ -13,13 +13,13 @@
 const { metrics } = require('@opentelemetry/api');
 const { MeterProvider, PeriodicExportingMetricReader } = require('@opentelemetry/sdk-metrics');
 const { OTLPMetricExporter } = require('@opentelemetry/exporter-metrics-otlp-http');
-const { Resource } = require('@opentelemetry/resources');
+const { resourceFromAttributes, defaultResource } = require('@opentelemetry/resources');
 
 // Export every ~5s. docker-compose sets OTEL_METRIC_EXPORT_INTERVAL=5000 so the
 // data shows up quickly instead of waiting for the 60s SDK default.
 const exportIntervalMillis = parseInt(process.env.OTEL_METRIC_EXPORT_INTERVAL || '5000', 10);
 
-// Build the Resource from the OTEL_* environment variables. Resource.default()
+// Build the Resource from the OTEL_* environment variables. defaultResource()
 // on its own reports service.name=unknown_service, so we merge in the
 // service.name (OTEL_SERVICE_NAME) and attributes (OTEL_RESOURCE_ATTRIBUTES,
 // e.g. language=javascript) that docker-compose provides. Nothing is hardcoded.
@@ -30,7 +30,7 @@ function resourceFromEnv() {
     const idx = pair.indexOf('=');
     if (idx > 0) attrs[pair.slice(0, idx).trim()] = pair.slice(idx + 1).trim();
   }
-  return Resource.default().merge(new Resource(attrs));
+  return defaultResource().merge(resourceFromAttributes(attrs));
 }
 
 // The OTLP/HTTP exporter reads OTEL_EXPORTER_OTLP_ENDPOINT itself (e.g.
