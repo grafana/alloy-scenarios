@@ -63,10 +63,10 @@ Create and review use the same style, structure, and verification rules.
 
 3. Classify the change:
 
-   - **Style/editorial** — wording and structure only, no new technical claims
-   - **Technical** — commands, ports, component names, queries, credentials, or pipeline behavior
+   - **Style/editorial** — the edit touches only wording, grammar, heading text, or paragraph structure, and every command, port, component name, query, credential, and URL in the README is byte-for-byte unchanged from the current file
+   - **Technical** — anything else, including edits that touch a heading immediately above a code block, reorder steps, or change which sections exist
 
-   When in doubt, treat it as **technical**.
+   Default to **technical**. Only classify as style/editorial if you can point to the specific lines changed and confirm none of them fall in the technical list above.
 
 4. Follow [`../shared/technical-verification.md`](../shared/technical-verification.md).
 5. Verify Alloy component claims with [`../shared/alloy-verification.md`](../shared/alloy-verification.md).
