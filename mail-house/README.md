@@ -44,7 +44,6 @@ Use `logs-tcp/` for a simpler JSON-over-TCP pipeline with fewer processing stage
 - **mail-house simulators**: Python apps in `main.py` that POST JSON delivery events to `alloy:9999/loki/api/v1/raw` over TCP.
   Each container sets `MAIL_HOUSE_ID` to `DEPOT-01`, `DEPOT-02`, or `DEPOT-03`.
 - **Alloy**: Receives raw JSON through `loki.source.api`, parses timestamps and fields with `loki.process.labels`, and forwards entries to Loki.
-  Runs with `--stability.level=experimental` because `loki.source.api` requires it.
 - **Loki**: Stores entries with indexed labels and structured metadata.
   `loki-config.yaml` sets `allow_structured_metadata: true` so Loki accepts metadata from the pipeline.
 - **Grafana**: Visualizes logs from the provisioned Loki data source.
@@ -91,15 +90,13 @@ The `config.alloy` pipeline shows how to separate indexed labels from structured
    - `stage.labels` promotes `state`, `package_size`, and `mail_house_id` to indexed Loki labels for fast filtering.
    - `stage.structured_metadata` stores `package_status` and `package_id` as structured metadata to limit label cardinality.
    - `stage.static_labels` adds `service_name="Delivery World"` to every entry.
-   - `stage.output` sets the final log line from the `message` field.
 3. **`loki.write.local`**: Forwards processed logs to Loki at `http://loki:3100/loki/api/v1/push`.
 
 `livedebugging` is enabled so you can inspect the pipeline in the Alloy UI.
-This scenario runs Alloy with `--stability.level=experimental` because `loki.source.api` requires it.
 
 Indexed labels are `service_name`, `state`, `package_size`, and `mail_house_id`.
 Structured metadata includes `package_status` and `package_id`.
-Other JSON fields such as `city`, `note`, and nested `sender` or `receiver` objects remain in the raw payload before `stage.output` runs.
+Other JSON fields such as `city`, `note`, and nested `sender` or `receiver` objects remain in the raw payload and are not promoted to labels or structured metadata.
 
 The simulators send JSON like this:
 
@@ -150,7 +147,6 @@ Run `docker compose ps` to check the status of each container.
 If any container has exited, run `docker compose logs <SERVICE_NAME>` to read the failure reason.
 Replace `<SERVICE_NAME>` with the name of the service that exited, such as `mail-house-01`, `alloy`, or `loki`.
 For Alloy specifically, the most common cause is a syntax error in `config.alloy`.
-This scenario runs Alloy with `--stability.level=experimental` because `loki.source.api` requires it.
 
 ### No data appears in Grafana after a few minutes
 

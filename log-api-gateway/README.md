@@ -94,7 +94,6 @@ The `config.alloy` pipeline in this scenario has a single logs path with three s
 3. **`loki.write.local`**: Forwards enriched logs to Loki at `http://loki:3100/loki/api/v1/push`.
 
 `livedebugging` is enabled so you can inspect the pipeline in the Alloy UI.
-This scenario runs Alloy with `--stability.level=experimental` because `loki.source.api` requires it.
 
 The demo producer sends logs in Loki push API format.
 Each request includes a `streams` array with label sets and timestamped log lines:
@@ -149,7 +148,6 @@ Run `docker compose ps` to check the status of each container.
 If any container has exited, run `docker compose logs <SERVICE_NAME>` to read the failure reason.
 Replace `<SERVICE_NAME>` with the name of the service that exited.
 For Alloy specifically, the most common cause is a syntax error in `config.alloy`.
-This scenario runs Alloy with `--stability.level=experimental` because `loki.source.api` requires it.
 
 ### No data appears in Grafana after a few minutes
 

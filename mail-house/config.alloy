@@ -52,12 +52,6 @@ loki.process "labels" {
     }
   }
 
-  stage.output {
-    source = "message"
-}
-  
-
-
 forward_to = [loki.write.local.receiver]
 
 }

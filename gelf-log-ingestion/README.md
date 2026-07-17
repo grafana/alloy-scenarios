@@ -71,7 +71,6 @@ The `config.alloy` pipeline has three components:
 3. **`loki.write "local"`**: Pushes log lines to Loki at `http://loki:3100/loki/api/v1/push`.
 
 The demo app in `app/main.py` sends logs to `alloy:12201` with structured fields such as `user_id`, `order_id`, and `gateway`.
-The Alloy container runs with `--stability.level=experimental` because `loki.source.gelf` requires experimental stability.
 `livedebugging` is enabled.
 
 ## GELF level mapping

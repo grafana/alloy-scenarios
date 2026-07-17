@@ -44,7 +44,6 @@ For Loki push API JSON with stream labels, see [`log-api-gateway/`](../log-api-g
 - **simulator**: A Python script in `simulator.py` that opens a TCP socket to `alloy:9999` and sends HTTP POST requests with JSON bodies to `/loki/api/v1/raw`.
   Each payload includes `service_name`, `severity`, `body`, `code_line`, `server_id`, and `region`.
 - **Alloy**: Receives raw JSON log lines through `loki.source.api`, parses them with `loki.process.labels`, and forwards entries to Loki.
-  Runs with `--stability.level=experimental` because `loki.source.api` requires it.
 - **Loki**: Stores the processed log entries.
 - **Grafana**: Visualizes logs from the provisioned Loki data source.
 
@@ -93,7 +92,6 @@ The `config.alloy` pipeline has four components:
 3. **`loki.write.local`**: Forwards processed logs to Loki at `http://loki:3100/loki/api/v1/push`.
 
 `livedebugging` is enabled so you can inspect the pipeline in the Alloy UI.
-This scenario runs Alloy with `--stability.level=experimental` because `loki.source.api` requires it.
 
 The simulator sends JSON log lines like this:
 
@@ -147,7 +145,6 @@ Run `docker compose ps` to check the status of each container.
 If any container has exited, run `docker compose logs <SERVICE_NAME>` to read the failure reason.
 Replace `<SERVICE_NAME>` with the name of the service that exited, such as `simulator`, `alloy`, or `loki`.
 For Alloy specifically, the most common cause is a syntax error in `config.alloy`.
-This scenario runs Alloy with `--stability.level=experimental` because `loki.source.api` requires it.
 
 ### No data appears in Grafana after a few minutes
 
