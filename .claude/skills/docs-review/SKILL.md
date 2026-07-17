@@ -34,8 +34,12 @@ Ask the user for the scenario directory path if it is not clear from context.
 
 | Condition                                        | Path       |
 | ------------------------------------------------ | ---------- |
-| `README.md` is missing, empty, or a stub         | **Create** |
+| `README.md` is missing, or is 0 bytes            | **Create** |
+| `README.md` exists but every `## `heading is either absent or contains only placeholder text (for example a bracketed note, a single TODO line, or no body text) | **Create** |
 | `README.md` already exists with scenario content | **Review** |
+
+If you're unsure which row applies, treat it as **Review**.
+The preservation rules in review mode won't damage a file that turns out to be thin, but the Create path skips preservation checks entirely and can destroy real content if misapplied.
 
 Create and review use the same style, structure, and verification rules.
 
