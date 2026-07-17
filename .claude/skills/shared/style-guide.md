@@ -71,7 +71,10 @@ List prerequisites, tools, and ports that must be free.
 
 ## Compare with a related scenario
 
-Optional. Include a comparison table when a closely related scenario exists in the repository.
+Optional. Include this section only when repo-context.md's baseline README table lists another scenario with the same deployment pattern (Docker vs. Kubernetes) and overlapping telemetry type (logs, metrics, traces).
+Name that scenario directly.
+If no such scenario is listed there, omit this section.
+Don't search for or invent a comparison.
 
 ## Understand the architecture
 
@@ -99,7 +102,9 @@ Steps to generate telemetry, run queries or open dashboards, and inspect the pip
 
 ## Customize the scenario
 
-Common configuration changes and the command to apply them.
+Include this section if any of the following appear in the scenario's configs: an environment variable, a `.env` setting, a commented out configuration line, a port mapping, a file path, a scrape or scrape_interval value, a retention setting, a backend endpoint URL, or a label or job name used for filtering.
+For each one, name the setting and explain what changing it does, matching the style of existing scenario READMEs rather than citing file names or line numbers.
+Omit this section only if none of the items above appear anywhere in `config.alloy`, the compose file, backend configs, or Helm values.
 
 ## Troubleshoot common problems
 

@@ -35,7 +35,7 @@ Ask the user for the scenario directory path if it is not clear from context.
 | Condition                                        | Path       |
 | ------------------------------------------------ | ---------- |
 | `README.md` is missing, or is 0 bytes            | **Create** |
-| `README.md` exists but every `## `heading is either absent or contains only placeholder text (for example a bracketed note, a single TODO line, or no body text) | **Create** |
+| `README.md` exists but every `##` heading is either absent or contains only placeholder text (for example a bracketed note, a single TODO line, or no body text) | **Create** |
 | `README.md` already exists with scenario content | **Review** |
 
 If you're unsure which row applies, treat it as **Review**.
