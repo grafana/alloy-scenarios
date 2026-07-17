@@ -1,6 +1,6 @@
 services:
   stress-cpu:
-    image: golang:1.26@sha256:079e59808d2d252516e27e3f3a9c003740dee7f75e55aa71528766d52bcfc16a
+    image: golang:1.26@sha256:ae5a2316d12f3e78fd99177dad452e6ad4f240af2d71d57b480c3477f250fec6
     container_name: stress-cpu
     volumes:
       - ./app:/app
@@ -9,7 +9,7 @@ services:
     restart: unless-stopped
 
   stress-mem:
-    image: golang:1.26@sha256:079e59808d2d252516e27e3f3a9c003740dee7f75e55aa71528766d52bcfc16a
+    image: golang:1.26@sha256:ae5a2316d12f3e78fd99177dad452e6ad4f240af2d71d57b480c3477f250fec6
     container_name: stress-mem
     volumes:
       - ./app:/app

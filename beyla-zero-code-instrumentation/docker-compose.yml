@@ -7,7 +7,7 @@ services:
   # runtime's internal goroutine offsets for 1.26, which silently drops
   # every trace and RED metric with no attach errors surfaced.
   demo-app:
-    image: golang:1.26@sha256:0f70d7d828acd8456022127f31975364e58d792999a7e92af6fc972e124bb6b0
+    image: golang:1.26@sha256:ae5a2316d12f3e78fd99177dad452e6ad4f240af2d71d57b480c3477f250fec6
     volumes:
       - ./app:/app
     working_dir: /app
