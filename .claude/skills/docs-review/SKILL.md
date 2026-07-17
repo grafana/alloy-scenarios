@@ -122,11 +122,12 @@ Present a summary that includes:
 
 ## Reference
 
-| File | Purpose |
-| ---- | ------- |
-| [`../shared/repo-context.md`](../shared/repo-context.md) | Repository layout and baseline READMEs |
-| [`../shared/style-guide.md`](../shared/style-guide.md) | Style rules and README template |
-| [`../shared/best-practices.md`](../shared/best-practices.md) | Config-first workflow and pitfalls |
-| [`../shared/technical-verification.md`](../shared/technical-verification.md) | Technical review steps |
-| [`../shared/alloy-verification.md`](../shared/alloy-verification.md) | Alloy docs cross-check |
-| [`../shared/verification-checklist.md`](../shared/verification-checklist.md) | Pre-submit checklist |
+| File                                                                             | Purpose                                                                                    |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [`../shared/repo-context.md`](../shared/repo-context.md)                         | Repository layout and baseline READMEs                                                     |
+| [`../shared/style-guide.md`](../shared/style-guide.md)                           | Style rules and README template                                                            |
+| [`../shared/best-practices.md`](../shared/best-practices.md)                     | Config-first workflow and pitfalls                                                         |
+| [`../shared/generated-content-review.md`](../shared/generated-content-review.md) | Detailed AI-tell patterns and reporting categories, beyond the basics in best-practices.md |
+| [`../shared/technical-verification.md`](../shared/technical-verification.md)     | Technical review steps                                                                     |
+| [`../shared/alloy-verification.md`](../shared/alloy-verification.md)             | Alloy docs cross-check                                                                     |
+| [`../shared/verification-checklist.md`](../shared/verification-checklist.md)     | Pre-submit checklist                                                                       |
