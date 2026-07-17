@@ -1,4 +1,4 @@
-"""Standalone checkout/payments simulator that emits traces via the
+DECLINE_PROBABILITY = 0.15MAX_EXPORT_BATCH_SIZE = 16SCHEDULE_DELAY_MILLIS = 1000"""Standalone checkout/payments simulator that emits traces via the
 OpenTelemetry SDK over OTLP.
 
 This app never calls another service. Every ~1s it simulates one checkout and
@@ -41,8 +41,8 @@ provider = TracerProvider()
 provider.add_span_processor(
     BatchSpanProcessor(
         OTLPSpanExporter(),
-        schedule_delay_millis=1000,
-        max_export_batch_size=16,
+        schedule_delay_millis=SCHEDULE_DELAY_MILLIS,
+        max_export_batch_size=MAX_EXPORT_BATCH_SIZE,
     )
 )
 trace.set_tracer_provider(provider)
@@ -75,7 +75,7 @@ def process_checkout():
                 charge.set_attribute("amount.usd", amount_usd)
 
                 # ~15% of ticks: the card is declined.
-                if random.random() < 0.15:
+                if random.random() < DECLINE_PROBABILITY:
                     time.sleep(random.uniform(0.2, 0.6))
                     try:
                         raise DeclinedCardError(
