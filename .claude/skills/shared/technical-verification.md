@@ -16,7 +16,7 @@ Flag statements about:
 
 Read the scenario directory configs listed in [`repo-context.md`](repo-context.md).
 
-Use the **Scenario config verification** and **Preservation check** sections of [`verification-checklist.md`](verification-checklist.md).
+Use the **Scenario config verification** and **Preservation check (rewrite only)** sections of [`verification-checklist.md`](verification-checklist.md).
 
 ## 3. Verify Alloy claims against external docs
 

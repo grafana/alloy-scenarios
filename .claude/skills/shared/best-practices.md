@@ -20,7 +20,7 @@ Read the scenario configuration before writing or editing prose.
 
 Don't invent components, ports, commands, or URLs that aren't supported by these files.
 Don't edit these files.
-If there is a potential problem in the scenarion configurations, flag it for the contributor to investigate.
+Flag a config for the contributor instead of documenting it as-is if any of the following are true: two config files disagree with each other (for example a port in `docker-compose.yml` that doesn't match what `config.alloy` forwards to), a referenced file or service doesn't exist in the scenario directory, or a value contradicts the Alloy component reference per [`alloy-verification.md`](alloy-verification.md).
 
 ## Create or review with the same rules
 
@@ -68,14 +68,7 @@ Style, structure, and verification rules are identical for both tasks.
 
 ### AI-tell phrasing
 
-Replace patterns such as:
-
-- "This scenario demonstrates" → "This scenario shows"
-- "will install" / "will be used to" → active present tense
-- "pre-configured" → "configured"
-- "See" → "Refer to"
-- "Confirm" in troubleshoot steps → "Check"
-- Blockquote notes about abstracting configuration
+Refer to [`generated-content-review.md`](generated-content-review.md) for AI-tell patterns and how to report them.
 
 ### Weak examples
 

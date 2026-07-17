@@ -26,17 +26,17 @@ Read these shared files in order:
 3. [`../shared/best-practices.md`](../shared/best-practices.md)
 
 Then read every configuration file in the target scenario directory.
-See **Config files to read** in [`../shared/best-practices.md`](../shared/best-practices.md).
+See **Config-first workflow** in [`../shared/best-practices.md`](../shared/best-practices.md) for the file list by deployment type.
 
 Ask the user for the scenario directory path if it is not clear from context.
 
 ## Step 1: Choose create or review
 
-| Condition                                        | Path       |
-| ------------------------------------------------ | ---------- |
-| `README.md` is missing, or is 0 bytes            | **Create** |
+| Condition                                                                                                                                                        | Path       |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `README.md` is missing, or is 0 bytes                                                                                                                            | **Create** |
 | `README.md` exists but every `##` heading is either absent or contains only placeholder text (for example a bracketed note, a single TODO line, or no body text) | **Create** |
-| `README.md` already exists with scenario content | **Review** |
+| `README.md` already exists with scenario content                                                                                                                 | **Review** |
 
 If you're unsure which row applies, treat it as **Review**.
 The preservation rules in review mode won't damage a file that turns out to be thin, but the Create path skips preservation checks entirely and can destroy real content if misapplied.
@@ -99,7 +99,7 @@ Remove AI-tell phrasing listed in [`../shared/generated-content-review.md`](../s
 
 Scenario config files outrank the README when they disagree.
 Fix the README to match the configs.
-If a config looks wrong, flag it for the contributor instead of changing it.
+Flag a config for the contributor instead of changing it if configs disagree with each other, reference something missing from the scenario directory, or contradict the Alloy component reference.
 
 For Alloy component names, arguments, and behavior, verify against the latest reference:
 
@@ -114,11 +114,12 @@ Present a summary that includes:
 1. **Task** — create or review
 2. **Scenario directory**
 3. **Changes made** — or the full draft for create
-4. **Style issues** found and fixed
-5. **Technical verification** — claims checked against configs and Alloy docs, with any divergences
-6. **Preservation** — on review, any content from the original README that was kept, restored, or intentionally dropped
-7. **Open questions** — config problems or claims you could not verify
-8. **Checklist** — note any items from [`../shared/verification-checklist.md`](../shared/verification-checklist.md) the user should confirm before submitting
+4. **Style-guide violations** found and fixed
+5. **Likely AI-origin content issues** found, using the categories in [`../shared/generated-content-review.md`](../shared/generated-content-review.md)
+6. **Technical verification** — claims checked against configs and Alloy docs, with any divergences
+7. **Preservation** — on review, any content from the original README that was kept, restored, or intentionally dropped
+8. **Open questions** — config problems or claims you could not verify
+9. **Checklist** — note any items from [`../shared/verification-checklist.md`](../shared/verification-checklist.md) the user should confirm before submitting
 
 ## Reference
 
