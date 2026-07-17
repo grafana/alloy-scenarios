@@ -51,8 +51,9 @@ Create and review use the same style, structure, and verification rules.
 4. Omit optional template sections that do not apply.
 5. Follow [`../shared/technical-verification.md`](../shared/technical-verification.md).
 6. Verify Alloy component claims with [`../shared/alloy-verification.md`](../shared/alloy-verification.md).
-7. Run through [`../shared/verification-checklist.md`](../shared/verification-checklist.md).
-8. Present the draft README to the user. Do not commit.
+7. Check the draft against [`../shared/generated-content-review.md`](../shared/generated-content-review.md).
+8. Run through [`../shared/verification-checklist.md`](../shared/verification-checklist.md).
+9. Present the draft README to the user. Do not commit.
 
 ## Step 3: Review an existing README
 
@@ -76,8 +77,9 @@ Create and review use the same style, structure, and verification rules.
 5. Verify Alloy component claims with [`../shared/alloy-verification.md`](../shared/alloy-verification.md).
 6. Apply [`../shared/style-guide.md`](../shared/style-guide.md) and [`../shared/best-practices.md`](../shared/best-practices.md).
 7. Confirm every command, query, credential, env var, and demo manifest from the original README is still present unless the configs changed.
-8. Run through [`../shared/verification-checklist.md`](../shared/verification-checklist.md).
-9. Apply fixes to `README.md` only. Present results to the user. Do not commit.
+8. Check the draft against [`../shared/generated-content-review.md`](../shared/generated-content-review.md).
+9. Run through [`../shared/verification-checklist.md`](../shared/verification-checklist.md).
+10. Apply fixes to `README.md` only. Present results to the user. Do not commit.
 
 ## Style and format requirements
 
@@ -91,7 +93,7 @@ Apply every rule in [`../shared/style-guide.md`](../shared/style-guide.md). In p
 - "Check" not "confirm" in troubleshoot steps
 - Every fenced code block must have a language tag
 
-Remove AI-tell phrasing listed in [`../shared/best-practices.md`](../shared/best-practices.md).
+Remove AI-tell phrasing listed in [`../shared/generated-content-review.md`](../shared/generated-content-review.md).
 
 ## Technical verification
 
