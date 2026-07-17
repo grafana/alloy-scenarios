@@ -6,14 +6,15 @@ This repository documents scenarios through one README per directory. These file
 
 ## Files
 
-| File                                                     | Purpose                                                           |
-| -------------------------------------------------------- | ----------------------------------------------------------------- |
-| [`repo-context.md`](repo-context.md)                     | Repository layout, contributor workflow, baseline README examples |
-| [`style-guide.md`](style-guide.md)                       | Writers Toolkit rules and README template                         |
-| [`best-practices.md`](best-practices.md)                 | Config-first workflow, pitfalls, and good patterns                |
-| [`alloy-verification.md`](alloy-verification.md)         | How to verify Alloy claims against external docs                  |
-| [`technical-verification.md`](technical-verification.md) | End-to-end technical review workflow for README claims            |
-| [`verification-checklist.md`](verification-checklist.md) | Handoff checklist before submitting README changes                |
+| File                                                         | Purpose                                                                                    |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| [`repo-context.md`](repo-context.md)                         | Repository layout, contributor workflow, baseline README examples                          |
+| [`style-guide.md`](style-guide.md)                           | Writers Toolkit rules and README template                                                  |
+| [`best-practices.md`](best-practices.md)                     | Config-first workflow, pitfalls, and good patterns                                         |
+| [`generated-content-review.md`](generated-content-review.md) | Detailed AI-tell patterns and reporting categories, beyond the basics in best-practices.md |
+| [`alloy-verification.md`](alloy-verification.md)             | How to verify Alloy claims against external docs                                           |
+| [`technical-verification.md`](technical-verification.md)     | End-to-end technical review workflow for README claims                                     |
+| [`verification-checklist.md`](verification-checklist.md)     | Handoff checklist before submitting README changes                                         |
 
 ## Workflow
 
