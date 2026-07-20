@@ -1,0 +1,34 @@
+# OpenTelemetry Collector Builder (OCB) manifest.
+#
+# This is the same kind of manifest Alloy uses internally to generate its OTel
+# engine (see collector/builder-config.yaml in the grafana/alloy repo). Here we
+# list ONLY the components a basic OTLP relay needs, so the resulting binary is
+# tiny compared to a full Alloy or a full collector-contrib distribution.
+#
+# Versions are pinned to the OpenTelemetry release that Grafana Alloy v1.17.0
+# ships (unstable modules v0.147.0, stable modules v1.53.0), so this minimal
+# build stays in lock-step with the rest of the repository.
+
+dist:
+  name: minimal-otelcol
+  description: Minimal OpenTelemetry Collector - OTLP in, batch + memory_limiter, OTLP/debug out
+  output_path: ./_build
+  version: 0.1.0
+  otelcol_version: 0.147.0
+
+receivers:
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.147.0
+
+processors:
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.147.0
+  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.147.0
+
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.147.0
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.147.0
+
+# Config providers. Even a minimal collector needs at least the file provider to
+# read its config; env lets you template values from environment variables.
+providers:
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.53.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.53.0

@@ -1,0 +1,38 @@
+# Standard OpenTelemetry Collector configuration (YAML, not Alloy River) - this
+# is a pure collector built with OCB, so it is configured the OTel-native way.
+#
+# Pipeline: receive OTLP -> protect memory -> batch -> forward OTLP to Tempo
+# (and log a sample to stdout via the debug exporter).
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  batch: {}
+
+exporters:
+  otlp:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp, debug]
+  telemetry:
+    logs:
+      level: info
