@@ -1,0 +1,157 @@
+services:
+  # One-shot: generates a throwaway CA + TLS cert for the eventhub broker.
+  # loki.source.azure_event_hubs hardcodes TLS, so the broker needs a real
+  # TLS listener even though this is a fully offline demo.
+  cert-init:
+    image: apache/kafka:${APACHE_KAFKA_VERSION:-4.3.1}
+    entrypoint: ["bash", "/certgen/generate.sh"]
+    volumes:
+      - ./certgen/generate.sh:/certgen/generate.sh:ro
+      - eh-certs:/certs
+
+  # A self-hosted Kafka broker configured to speak Azure Event Hubs' exact
+  # Kafka-endpoint wire protocol (TLS + SASL PLAIN, username
+  # "$ConnectionString"). See the README for why the official Microsoft
+  # emulator doesn't work with loki.source.azure_event_hubs.
+  eventhub:
+    image: apache/kafka:${APACHE_KAFKA_VERSION:-4.3.1}
+    volumes:
+      - eh-certs:/etc/kafka/secrets:ro
+    environment:
+      KAFKA_NODE_ID: "0"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "0@eventhub:9094"
+      KAFKA_LISTENERS: SASL_SSL://:9093,CONTROLLER://:9094
+      KAFKA_ADVERTISED_LISTENERS: SASL_SSL://eventhub:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,SASL_SSL:SASL_SSL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: SASL_SSL
+      KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
+      KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
+      # "SASL_SSL" is a listener *name* here, not the security protocol map
+      # key -- the doubled underscore keeps it from being read as a
+      # property-name separator when Kafka's docker image translates
+      # KAFKA_* env vars into server.properties.
+      KAFKA_LISTENER_NAME_SASL__SSL_SASL_ENABLED_MECHANISMS: PLAIN
+      KAFKA_LISTENER_NAME_SASL__SSL_PLAIN_SASL_JAAS_CONFIG: >-
+        org.apache.kafka.common.security.plain.PlainLoginModule required
+        username="admin"
+        password="admin-secret"
+        user_$$ConnectionString="SAS_KEY_VALUE";
+      KAFKA_SSL_KEYSTORE_FILENAME: broker.p12
+      KAFKA_SSL_KEYSTORE_CREDENTIALS: keystore_creds
+      KAFKA_SSL_KEY_CREDENTIALS: key_creds
+      KAFKA_SSL_KEYSTORE_TYPE: PKCS12
+      KAFKA_SSL_CLIENT_AUTH: none
+      KAFKA_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/truststore.p12
+      KAFKA_SSL_TRUSTSTORE_PASSWORD: trustpass
+      KAFKA_SSL_TRUSTSTORE_TYPE: PKCS12
+      KAFKA_OPTS: "-Dkafka.docker.demo=true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      CLUSTER_ID: alloy-eventhub-logs-cluster-001
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9093", "--command-config", "/etc/kafka/secrets/client.properties"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+    # Kafka's SASL_SSL self-check occasionally races with KRaft's combined
+    # broker+controller bootstrap on first start; it always succeeds on retry.
+    restart: on-failure
+    depends_on:
+      cert-init:
+        condition: service_completed_successfully
+
+  # One-shot: pre-creates the "event hub" (Kafka topic) so Alloy's consumer
+  # group and the producer both have something to attach to immediately.
+  topic-init:
+    image: apache/kafka:${APACHE_KAFKA_VERSION:-4.3.1}
+    volumes:
+      - eh-certs:/etc/kafka/secrets:ro
+    entrypoint:
+      - bash
+      - -c
+      - |
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server eventhub:9093 \
+          --command-config /etc/kafka/secrets/client.properties \
+          --create --if-not-exists --topic insights-activity-logs --partitions 2 --replication-factor 1
+    depends_on:
+      eventhub:
+        condition: service_healthy
+
+  # Fakes Azure Diagnostic Settings streaming Activity Log records into the
+  # event hub.
+  log-producer:
+    image: apache/kafka:${APACHE_KAFKA_VERSION:-4.3.1}
+    volumes:
+      - eh-certs:/etc/kafka/secrets:ro
+      - ./gen_log.sh:/gen_log.sh:ro
+    entrypoint: ["bash", "/gen_log.sh"]
+    depends_on:
+      topic-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.7.3}
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-13.1.0}
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+    ports:
+      - "3000:3000/tcp"
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /etc/grafana/provisioning/datasources
+        cat <<EOF > /etc/grafana/provisioning/datasources/ds.yaml
+        apiVersion: 1
+        datasources:
+        - name: Loki
+          type: loki
+          access: proxy
+          orgId: 1
+          url: http://loki:3100
+          basicAuth: false
+          isDefault: true
+          version: 1
+          editable: false
+        EOF
+        /run.sh
+    depends_on:
+      - loki
+
+  alloy:
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    # loki.source.azure_event_hubs hardcodes TLS with no way to supply a
+    # custom CA, so the eventhub broker's self-signed CA has to be trusted
+    # at the OS level before Alloy starts.
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        cp /etc/kafka/secrets/ca.crt /usr/local/share/ca-certificates/eventhub-ca.crt
+        update-ca-certificates
+        exec alloy run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    ports:
+      - "12345:12345"
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy
+      - eh-certs:/etc/kafka/secrets:ro
+    depends_on:
+      topic-init:
+        condition: service_completed_successfully
+      loki:
+        condition: service_started
+
+volumes:
+  eh-certs:
