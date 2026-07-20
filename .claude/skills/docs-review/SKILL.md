@@ -26,16 +26,20 @@ Read these shared files in order:
 3. [`../shared/best-practices.md`](../shared/best-practices.md)
 
 Then read every configuration file in the target scenario directory.
-See **Config files to read** in [`../shared/best-practices.md`](../shared/best-practices.md).
+See **Config-first workflow** in [`../shared/best-practices.md`](../shared/best-practices.md) for the file list by deployment type.
 
 Ask the user for the scenario directory path if it is not clear from context.
 
 ## Step 1: Choose create or review
 
-| Condition                                        | Path       |
-| ------------------------------------------------ | ---------- |
-| `README.md` is missing, empty, or a stub         | **Create** |
-| `README.md` already exists with scenario content | **Review** |
+| Condition                                                                                                                                                        | Path       |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `README.md` is missing, or is 0 bytes                                                                                                                            | **Create** |
+| `README.md` exists but every `##` heading is either absent or contains only placeholder text (for example a bracketed note, a single TODO line, or no body text) | **Create** |
+| `README.md` already exists with scenario content                                                                                                                 | **Review** |
+
+If you're unsure which row applies, treat it as **Review**.
+The preservation rules in review mode won't damage a file that turns out to be thin, but the Create path skips preservation checks entirely and can destroy real content if misapplied.
 
 Create and review use the same style, structure, and verification rules.
 
@@ -47,8 +51,9 @@ Create and review use the same style, structure, and verification rules.
 4. Omit optional template sections that do not apply.
 5. Follow [`../shared/technical-verification.md`](../shared/technical-verification.md).
 6. Verify Alloy component claims with [`../shared/alloy-verification.md`](../shared/alloy-verification.md).
-7. Run through [`../shared/verification-checklist.md`](../shared/verification-checklist.md).
-8. Present the draft README to the user. Do not commit.
+7. Check the draft against [`../shared/generated-content-review.md`](../shared/generated-content-review.md).
+8. Run through [`../shared/verification-checklist.md`](../shared/verification-checklist.md).
+9. Present the draft README to the user. Do not commit.
 
 ## Step 3: Review an existing README
 
@@ -63,17 +68,18 @@ Create and review use the same style, structure, and verification rules.
 
 3. Classify the change:
 
-   - **Style/editorial** — wording and structure only, no new technical claims
-   - **Technical** — commands, ports, component names, queries, credentials, or pipeline behavior
+   - **Style/editorial** — the edit touches only wording, grammar, heading text, or paragraph structure, and every command, port, component name, query, credential, and URL in the README is byte-for-byte unchanged from the current file
+   - **Technical** — anything else, including edits that touch a heading immediately above a code block, reorder steps, or change which sections exist
 
-   When in doubt, treat it as **technical**.
+   Default to **technical**. Only classify as style/editorial if you can point to the specific lines changed and confirm none of them fall in the technical list above.
 
 4. Follow [`../shared/technical-verification.md`](../shared/technical-verification.md).
 5. Verify Alloy component claims with [`../shared/alloy-verification.md`](../shared/alloy-verification.md).
 6. Apply [`../shared/style-guide.md`](../shared/style-guide.md) and [`../shared/best-practices.md`](../shared/best-practices.md).
 7. Confirm every command, query, credential, env var, and demo manifest from the original README is still present unless the configs changed.
-8. Run through [`../shared/verification-checklist.md`](../shared/verification-checklist.md).
-9. Apply fixes to `README.md` only. Present results to the user. Do not commit.
+8. Check the draft against [`../shared/generated-content-review.md`](../shared/generated-content-review.md).
+9. Run through [`../shared/verification-checklist.md`](../shared/verification-checklist.md).
+10. Apply fixes to `README.md` only. Present results to the user. Do not commit.
 
 ## Style and format requirements
 
@@ -87,13 +93,13 @@ Apply every rule in [`../shared/style-guide.md`](../shared/style-guide.md). In p
 - "Check" not "confirm" in troubleshoot steps
 - Every fenced code block must have a language tag
 
-Remove AI-tell phrasing listed in [`../shared/best-practices.md`](../shared/best-practices.md).
+Remove AI-tell phrasing listed in [`../shared/generated-content-review.md`](../shared/generated-content-review.md).
 
 ## Technical verification
 
 Scenario config files outrank the README when they disagree.
 Fix the README to match the configs.
-If a config looks wrong, flag it for the contributor instead of changing it.
+Flag a config for the contributor instead of changing it if configs disagree with each other, reference something missing from the scenario directory, or contradict the Alloy component reference.
 
 For Alloy component names, arguments, and behavior, verify against the latest reference:
 
@@ -108,19 +114,21 @@ Present a summary that includes:
 1. **Task** — create or review
 2. **Scenario directory**
 3. **Changes made** — or the full draft for create
-4. **Style issues** found and fixed
-5. **Technical verification** — claims checked against configs and Alloy docs, with any divergences
-6. **Preservation** — on review, any content from the original README that was kept, restored, or intentionally dropped
-7. **Open questions** — config problems or claims you could not verify
-8. **Checklist** — note any items from [`../shared/verification-checklist.md`](../shared/verification-checklist.md) the user should confirm before submitting
+4. **Style-guide violations** found and fixed
+5. **Likely AI-origin content issues** found, using the categories in [`../shared/generated-content-review.md`](../shared/generated-content-review.md)
+6. **Technical verification** — claims checked against configs and Alloy docs, with any divergences
+7. **Preservation** — on review, any content from the original README that was kept, restored, or intentionally dropped
+8. **Open questions** — config problems or claims you could not verify
+9. **Checklist** — note any items from [`../shared/verification-checklist.md`](../shared/verification-checklist.md) the user should confirm before submitting
 
 ## Reference
 
-| File | Purpose |
-| ---- | ------- |
-| [`../shared/repo-context.md`](../shared/repo-context.md) | Repository layout and baseline READMEs |
-| [`../shared/style-guide.md`](../shared/style-guide.md) | Style rules and README template |
-| [`../shared/best-practices.md`](../shared/best-practices.md) | Config-first workflow and pitfalls |
-| [`../shared/technical-verification.md`](../shared/technical-verification.md) | Technical review steps |
-| [`../shared/alloy-verification.md`](../shared/alloy-verification.md) | Alloy docs cross-check |
-| [`../shared/verification-checklist.md`](../shared/verification-checklist.md) | Pre-submit checklist |
+| File                                                                             | Purpose                                                                                    |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [`../shared/repo-context.md`](../shared/repo-context.md)                         | Repository layout and baseline READMEs                                                     |
+| [`../shared/style-guide.md`](../shared/style-guide.md)                           | Style rules and README template                                                            |
+| [`../shared/best-practices.md`](../shared/best-practices.md)                     | Config-first workflow and pitfalls                                                         |
+| [`../shared/generated-content-review.md`](../shared/generated-content-review.md) | Detailed AI-tell patterns and reporting categories, beyond the basics in best-practices.md |
+| [`../shared/technical-verification.md`](../shared/technical-verification.md)     | Technical review steps                                                                     |
+| [`../shared/alloy-verification.md`](../shared/alloy-verification.md)             | Alloy docs cross-check                                                                     |
+| [`../shared/verification-checklist.md`](../shared/verification-checklist.md)     | Pre-submit checklist                                                                       |

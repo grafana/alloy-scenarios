@@ -43,6 +43,7 @@ Write for someone who wants to run the scenario end to end with minimal prior Al
 - Use ", for example," for examples
 - Use relative links for other scenarios in this repository
 - Use "refer to" instead of "see."
+- Use "check" instead of "confirm" in troubleshoot fix steps
 - Separate code and output blocks
 - Use `<VARIABLE>` in commands and _VARIABLE_ in prose for placeholders
 
@@ -71,7 +72,12 @@ List prerequisites, tools, and ports that must be free.
 
 ## Compare with a related scenario
 
-Optional. Include a comparison table when a closely related scenario exists in the repository.
+Optional. Include this section only if you can name a specific sibling scenario directory in the repository that shares this scenario's deployment pattern (Docker vs. Kubernetes) and its primary telemetry type (logs, metrics, traces, profiles).
+List the repository's top-level scenario directories, not just the baseline examples in repo-context.md, since real comparisons in this repo aren't limited to that table.
+Confirm the overlap by reading the candidate sibling's `README.md` or config files.
+Don't infer a match from the directory name alone.
+If no such scenario exists, omit this section.
+Don't invent a comparison.
 
 ## Understand the architecture
 
@@ -83,7 +89,9 @@ Numbered setup steps. Include clone, deploy or install commands, and a step to c
 
 ## Access the services
 
-Optional. Explain how to reach services that are not available on localhost.
+Optional. Docker Compose scenarios publish ports directly to localhost, so this section is normally not needed. Skip it.
+Include this section only for Kubernetes scenarios, or any scenario where a service isn't exposed on localhost and needs an extra step such as `kubectl port-forward` before its URL in **Explore the services** works.
+State the specific reason, for example "Grafana and the Alloy UI don't listen on localhost," and give the exact command for each service.
 
 ## Explore the services
 
@@ -99,7 +107,9 @@ Steps to generate telemetry, run queries or open dashboards, and inspect the pip
 
 ## Customize the scenario
 
-Common configuration changes and the command to apply them.
+Optional. Include this section if any of the following appear in the scenario's configs: an environment variable, a `.env` setting, a commented out configuration line, a port mapping, a file path, a scrape or scrape_interval value, a retention setting, a backend endpoint URL, or a label or job name used for filtering.
+For each one, name the setting and explain what changing it does, matching the style of existing scenario READMEs rather than citing file names or line numbers.
+Omit this section only if none of the items above appear anywhere in `config.alloy`, the compose file, backend configs, or Helm values.
 
 ## Troubleshoot common problems
 
@@ -115,4 +125,3 @@ Links to related Alloy documentation, sibling scenarios, and other examples in t
 ```
 
 Omit optional sections that do not apply to the scenario.
-Skip **Access the services** when all services are already reachable on localhost.

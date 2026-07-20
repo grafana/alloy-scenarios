@@ -39,6 +39,7 @@ Follow [`alloy-verification.md`](alloy-verification.md).
 - [ ] Sentence case for headings and emphasis used as subheadings
 - [ ] Contractions used naturally
 - [ ] "Refer to" used instead of "see"
+- [ ] "Check" used instead of "confirm" in troubleshoot steps
 - [ ] No gerunds in headings
 - [ ] No parentheses or brackets in prose
 - [ ] Brief overview after major headings where helpful
@@ -57,6 +58,14 @@ Follow [`alloy-verification.md`](alloy-verification.md).
 - [ ] Credentials and default URLs preserved
 - [ ] Query examples preserved or intentionally replaced with equivalent coverage
 - [ ] Install order and Helm release names unchanged unless configs changed
+
+## Generated-content review
+
+Follow [`generated-content-review.md`](generated-content-review.md).
+
+- [ ] Checked for structural padding, sentence-level tics, formatting tics, and content-level tells
+- [ ] Leftover chat artifacts and invented or stale cross-references specifically checked
+- [ ] Findings split into style-guide violations and likely AI-origin content issues, not lumped together
 
 ## Final review
 
