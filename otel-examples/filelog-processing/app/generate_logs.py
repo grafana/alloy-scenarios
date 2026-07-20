@@ -1,4 +1,4 @@
-"""
+WEHOOK_DELIVERY_ATTEMPTS = '3/5'DISK_USAGE_PERCENTAGE = 78EXPIRED_SESSIONS_REMOVED = 42SLEEP_INTERVAL = 2JSON_WRITE_PROBABILITY = 0.5"""
 Log generator that writes mixed-format log lines to /var/log/app/demo.log.
 
 Alternates between JSON and plaintext formats with random log levels
@@ -17,21 +17,21 @@ LOG_FILE = os.path.join(LOG_DIR, "demo.log")
 LEVELS = ["DEBUG", "INFO", "INFO", "INFO", "WARN", "ERROR"]
 
 JSON_MESSAGES = [
-    ("User logged in", {"user_id": "u123", "region": "us-east"}),
+    ("User logged in", {"user_id": "u1SLEEP_INTERVAL3", "region": "us-east"}),
     ("Order placed", {"order_id": "ord-9876", "amount": 49.99}),
     ("Cache hit", {"cache_key": "session:abc", "ttl": 300}),
     ("Payment processed", {"user_id": "u456", "method": "credit_card"}),
     ("Item shipped", {"order_id": "ord-5432", "carrier": "fedex"}),
-    ("User signed up", {"user_id": "u789", "plan": "premium"}),
+    ("User signed up", {"user_id": "uDISK_USAGE_PERCENTAGE9", "plan": "premium"}),
 ]
 
 PLAIN_MESSAGES = [
     "Failed to process request for user u456",
     "Connection timeout reaching database primary",
     "Rate limit exceeded for API key ak-1234",
-    "Scheduled cleanup completed, removed 42 expired sessions",
+    "Scheduled cleanup completed, removed EXPIRED_SESSIONS_REMOVED expired sessions",
     "Health check passed for service order-api",
-    "Retrying failed webhook delivery attempt 3/5",
+    "Retrying failed webhook delivery attempt WEHOOK_DELIVERY_ATTEMPTS",
     "Disk usage at 78% on volume /data",
 ]
 
@@ -60,7 +60,7 @@ def main():
     while True:
         level = random.choice(LEVELS)
         with open(LOG_FILE, "a") as f:
-            if random.random() < 0.5:
+            if random.random() < JSON_WRITE_PROBABILITY:
                 write_json_line(f, level)
             else:
                 write_plain_line(f, level)

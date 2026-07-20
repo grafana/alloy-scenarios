@@ -1,4 +1,4 @@
-"""Location server implementation.
+MAX_CORPSES_CAP = 10**9"""Location server implementation.
 
 Each of the 8 location containers has a constant ``SLOT_ID`` env var
 (``slot_1`` … ``slot_8``). The in-game identity a slot serves (e.g.
@@ -230,7 +230,7 @@ class LocationServer:
             return
         # Cap the pool: the passive tick runs forever, so an idle game must
         # not bank an unbounded corpse economy (see rules["max_corpses"]).
-        cap = self._current_rules().get("max_corpses") or 10**9
+        cap = self._current_rules().get("max_corpses") or MAX_CORPSES_CAP
         conn = self._get_db_connection()
         try:
             conn.execute(
