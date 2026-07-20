@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
-	_ "net/http/pprof"
+	"net/http/pprof"
 	"time"
 )
 
@@ -37,6 +37,15 @@ func main() {
 	go cpuIntensive()
 	go memoryIntensive()
 
-	fmt.Println("Demo app running on :6060 with pprof endpoints")
-	http.ListenAndServe(":6060", nil)
+	go func() {
+		fmt.Println("pprof endpoints on 127.0.0.1:6060")
+		http.ListenAndServe("127.0.0.1:6060", nil)
+	}()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Demo app running\n"))
+	})
+	fmt.Println("Demo app running on :8080")
+	http.ListenAndServe(":8080", mux)
 }
