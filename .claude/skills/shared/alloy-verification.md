@@ -10,6 +10,10 @@ https://grafana.com/docs/alloy/latest/reference/components/
 
 Search for the exact block type named in `config.alloy`, for example `loki.source.file`, `prometheus.scrape`, or `otelcol.receiver.otlp`.
 
+If the fetch to this URL fails, times out, or returns content that doesn't look like the component reference, do not fall back to memory for component names, arguments, or behavior.
+Treat every Alloy claim in scope as unverified and flag it in the handoff instead.
+Retry the fetch once before flagging.
+
 ## Secondary source
 
 Verify deployment commands, ports, service names, and URLs against files in the scenario directory:

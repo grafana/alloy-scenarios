@@ -7,9 +7,9 @@ For technical writers, engineers, and contributors who use Cursor, VS Code, or C
 
 ## Skills
 
-| Skill | Purpose |
-| ----- | ------- |
-| [`docs-review/SKILL.md`](docs-review/SKILL.md) | Create or review scenario README files for style and technical accuracy |
+| Skill                                                  | Purpose                                                                        |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| [`docs-review/SKILL.md`](docs-review/SKILL.md)         | Create or review scenario README files for style and technical accuracy        |
 | [`merge-chore-prs/SKILL.md`](merge-chore-prs/SKILL.md) | Approve and merge open Renovate `chore(deps)` pull requests via the GitHub CLI |
 
 ### What you control
@@ -20,12 +20,13 @@ Skills draft and review content but never commit, push, or publish on their own.
 
 The `shared/` directory is the single source of truth for cross-cutting references. Skills load these by relative path.
 
-| File | Purpose |
-| ---- | ------- |
-| [`shared/repo-context.md`](shared/repo-context.md) | Repository layout, workflow, and baseline README examples |
-| [`shared/style-guide.md`](shared/style-guide.md) | Writers Toolkit rules and README template |
-| [`shared/best-practices.md`](shared/best-practices.md) | Config-first workflow and common pitfalls |
-| [`shared/alloy-verification.md`](shared/alloy-verification.md) | Verify Alloy claims against external docs |
-| [`shared/technical-verification.md`](shared/technical-verification.md) | Technical review workflow for README claims |
-| [`shared/verification-checklist.md`](shared/verification-checklist.md) | Handoff checklist |
-| [`shared/README.md`](shared/README.md) | Overview of the shared directory |
+| File                                                                   | Purpose                                                                                    |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [`shared/repo-context.md`](shared/repo-context.md)                     | Repository layout, workflow, and baseline README examples                                  |
+| [`shared/style-guide.md`](shared/style-guide.md)                       | Writers Toolkit rules and README template                                                  |
+| [`shared/best-practices.md`](shared/best-practices.md)                 | Config-first workflow and common pitfalls                                                  |
+| [`generated-content-review.md`](generated-content-review.md)           | Detailed AI-tell patterns and reporting categories, beyond the basics in best-practices.md |
+| [`shared/alloy-verification.md`](shared/alloy-verification.md)         | Verify Alloy claims against external docs                                                  |
+| [`shared/technical-verification.md`](shared/technical-verification.md) | Technical review workflow for README claims                                                |
+| [`shared/verification-checklist.md`](shared/verification-checklist.md) | Handoff checklist                                                                          |
+| [`shared/README.md`](shared/README.md)                                 | Overview of the shared directory                                                           |
