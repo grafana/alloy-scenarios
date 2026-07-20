@@ -5,18 +5,6 @@ Azure Diagnostic Settings stream Activity Log records to an event hub in product
 You don't need an Azure subscription.
 Alloy consumes the event hub's Kafka-compatible endpoint and forwards each record to Loki as a log line.
 The `config.alloy` file defines the pipeline.
-Complexity: medium.
-
-## Why this scenario doesn't use the official emulator
-
-Microsoft ships an official Event Hubs emulator (`mcr.microsoft.com/azure-messaging/eventhubs-emulator`) for offline development, and this scenario originally tried it.
-`loki.source.azure_event_hubs` connects to Event Hubs over its Kafka-compatible endpoint, and both of the component's authentication mechanisms hardcode TLS on that Kafka connection.
-The official emulator's Kafka port only speaks plaintext `SASL_PLAINTEXT` — it doesn't terminate TLS at all.
-Pointing Alloy at the emulator fails immediately: Alloy's TLS handshake bytes reach a plaintext listener, and the emulator resets the connection.
-
-Since there's no way to disable TLS on `loki.source.azure_event_hubs`, this scenario runs a self-hosted single-node Kafka broker (the `eventhub` service) configured to speak the exact wire protocol Azure Event Hubs uses on its real Kafka endpoint: TLS with SASL PLAIN authentication, using the literal username `$ConnectionString` that real Event Hubs also expects.
-A `cert-init` step generates a throwaway CA and certificate so the broker has something to terminate TLS with, and Alloy trusts that CA before it starts.
-The result behaves identically to a real Event Hubs namespace's Kafka endpoint from Alloy's point of view, without needing an Azure subscription or the official emulator.
 
 ## Before you begin
 
@@ -33,18 +21,18 @@ Ensure you have the following:
 A generator script produces fake Azure Activity Log records and publishes them to a self-hosted broker that speaks the same protocol as Azure Event Hubs' Kafka endpoint. Alloy consumes them and forwards parsed log lines to Loki.
 
 ```text
-+--------------+  produce   +-----------+  consume   +----------------------------+  push  +------+  query  +---------+
-| log-producer |----------->| eventhub  |<-----------| loki.source.azure_event_hubs |------>| Loki |<--------| Grafana |
-+--------------+            +-----------+            +----------------------------+        +------+         +---------+
++--------------+  produce   +-----------+  consume   +------------------------------+  push  +------+  query  +---------+
+| log-producer |----------->| eventhub  |<-----------| loki.source.azure_event_hubs |------->| Loki |<--------| Grafana |
++--------------+            +-----------+            +------------------------------+        +------+         +---------+
 ```
 
-- **cert-init** generates a throwaway CA, a TLS certificate for the `eventhub` broker, and a truststore, then writes them to a shared volume. It runs once and exits.
-- **eventhub** is a single-node Kafka broker (KRaft mode) with a `SASL_SSL` listener. It requires SASL PLAIN authentication with username `$ConnectionString`, matching real Azure Event Hubs' Kafka endpoint.
-- **topic-init** pre-creates the `insights-activity-logs` topic with two partitions, then exits.
-- **log-producer** generates a fake Activity Log JSON record every three seconds and publishes it to `insights-activity-logs`.
-- **Alloy** trusts the `cert-init` CA, then runs `loki.source.azure_event_hubs` to consume `insights-activity-logs` and forward records to `loki.write.local`.
-- **Loki** stores the log lines.
-- **Grafana** queries logs with a provisioned Loki data source.
+- **cert-init**: Generates a throwaway CA, a TLS certificate for the `eventhub` broker, and a truststore, then writes them to a shared volume. It runs once and exits.
+- **eventhub**: A single-node Kafka broker (KRaft mode) with a `SASL_SSL` listener. It requires SASL PLAIN authentication with username `$ConnectionString`, matching real Azure Event Hubs' Kafka endpoint.
+- **topic-init**: Creates the `insights-activity-logs` topic with two partitions, then exits.
+- **log-producer**: Generates a fake Activity Log JSON record every three seconds and publishes it to `insights-activity-logs`.
+- **Alloy**: Trusts the `cert-init` CA, then runs `loki.source.azure_event_hubs` to consume `insights-activity-logs` and forward records to `loki.write.local`.
+- **Loki**: Stores the log lines.
+- **Grafana**: Queries logs with a provisioned Loki data source.
 
 Each Activity Log record carries `resourceId`, `operationName`, `category`, `resultType`, `level`, and `correlationId` fields, matching the shape of a real Azure Activity Log entry.
 
@@ -81,7 +69,7 @@ Each Activity Log record carries `resourceId`, `operationName`, `category`, `res
 
 The `eventhub` broker doesn't expose a host port. Only containers on the compose network talk to it.
 
-## Understand the configuration
+## Understand the Alloy pipeline
 
 The `config.alloy` pipeline has two components:
 
@@ -131,7 +119,7 @@ The `loki.write` block stays the same for the self-hosted broker and real Event 
 
 ## Troubleshoot common problems
 
-Use these steps when logs don't appear or ports conflict.
+Diagnose missing logs, container restarts, and port conflicts.
 
 ### No logs appear in Grafana after 30 seconds
 
@@ -161,7 +149,8 @@ A few things work differently from production:
 ## Stop the scenario
 
 Run `docker compose down` from the scenario directory.
-Run `docker compose down -v` to also remove the generated certificates, so the next `docker compose up` regenerates them.
+Run `docker compose down -v` to remove the generated certificates
+The next `docker compose up` regenerates the certificates.
 
 ## Next steps
 
