@@ -68,6 +68,7 @@ These scenarios show distributed tracing with OpenTelemetry and Tempo.
 | [OpenTelemetry basic tracing](otel-basic-tracing/) | Collect and visualize OpenTelemetry traces with Alloy and Tempo. |
 | [OpenTelemetry SDK traces across languages](app-instrumentation/traces/opentelemetry-sdk/) | Instrument five languages with the OpenTelemetry tracing SDK and collect standalone traces through Alloy into Tempo. |
 | [OpenTelemetry Jaeger and Zipkin receivers](otel-jaeger-zipkin-receiver/) | Ingest Jaeger and Zipkin trace formats with Alloy and forward them to Tempo over OTLP. |
+| [Zero-code eBPF instrumentation](beyla-zero-code-instrumentation/) | Auto-instrument an unmodified Go HTTP service with `beyla.ebpf` -- no OpenTelemetry SDK, no agent, no code changes. Produces RED metrics and traces from eBPF probes alone. |
 | [OpenTelemetry load balancing](otel-loadbalancing/) | Shard traces across two tail-sampling Alloy instances with `otelcol.exporter.loadbalancing` -- same trace ID, same backend. |
 | [OpenTelemetry service graphs](otel-tracing-service-graphs/) | Generate service graphs with the Alloy `servicegraph` connector. |
 | [OpenTelemetry span metrics](otel-span-metrics/) | Generate RED metrics from OpenTelemetry traces with the span metrics connector. Request rate, error rate, and duration. |
@@ -82,6 +83,7 @@ These scenarios collect and forward metrics with Alloy.
 | -------- | ----------- |
 | [Alloy clustering](alloy-clustering/) | Run a three-node Alloy cluster that consistent-hashes `prometheus.scrape` targets across nodes. Stop a node and its targets redistribute to the survivors within seconds. |
 | [Blackbox probing](blackbox-probing/) | Monitor endpoint availability and response times with synthetic HTTP probes. |
+| [Metric cardinality control](metric-cardinality-control/) | Compare original Prometheus metrics with a cardinality-controlled `prometheus.relabel` path that drops noisy series and volatile labels and normalizes dynamic routes. |
 | [OpenTelemetry SDK metrics across languages](app-instrumentation/metrics/opentelemetry-sdk/) | Instrument five languages with the OpenTelemetry metrics SDK and push them through Alloy to Prometheus. |
 | [Prometheus client metrics across languages](app-instrumentation/metrics/prometheus-client/) | Expose `/metrics` with native Prometheus client libraries in five languages and scrape them with Alloy. The pull-model counterpart to the OpenTelemetry SDK scenario. |
 | [OTel metrics pipeline](otel-metrics-pipeline/) | Forward OpenTelemetry metrics from applications through Alloy. Alloy batches and transforms samples before it sends them to Prometheus. |

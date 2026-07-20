@@ -1,6 +1,6 @@
 services:
   mysql:
-    image: mysql:9.7@sha256:ad88e1c86cbf12ef52d0a0360cd4b774d22956c5ee9c565645fb019d7aacb6c3
+    image: mysql:9.7@sha256:8fdf311514c91fa5014e93e98e19d7f5d9eb162a462c13100c956dacc278ee21
     environment:
       - MYSQL_ROOT_PASSWORD=alloy
       - MYSQL_DATABASE=alloy
@@ -13,7 +13,7 @@ services:
       retries: 5
 
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.1}
     command:
       - --web.enable-remote-write-receiver
       - --config.file=/etc/prometheus/prometheus.yml

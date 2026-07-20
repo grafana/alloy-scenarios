@@ -40,7 +40,7 @@ services:
 
   # Prometheus for metrics collection
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.1}
     command:
       - --web.enable-remote-write-receiver
       - --web.enable-otlp-receiver
@@ -64,7 +64,7 @@ services:
       - memcached
 
   memcached:
-    image: memcached:1.6@sha256:deae07c1fce831887ffb24f5cc68cde691916c31782746bd994635b0ec3b90bb
+    image: memcached:1.6@sha256:dc561d52bb8ad3c038867123ed2dc8357c4c128f047cdbd526cd65cf39408cbd
     container_name: memcached
     ports:
       - "11211:11211"

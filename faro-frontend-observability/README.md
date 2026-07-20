@@ -74,7 +74,6 @@ The `config.alloy` pipeline has two components:
 2. **`loki.write "local"`**: Pushes log lines to Loki at `http://loki:3100/loki/api/v1/push`.
 
 The demo page in `app/index.html` initializes the SDK with `url: 'http://localhost:12347/collect'` and `app.name: 'faro-demo'`.
-The Alloy container runs with `--stability.level=experimental` because `faro.receiver` requires experimental stability.
 `livedebugging` is enabled.
 
 ## Try it out

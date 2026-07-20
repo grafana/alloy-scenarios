@@ -1,11 +1,11 @@
 services:
   redis:
-    image: redis:8@sha256:2838d5524559494f6f1cd66e97e76b200d64a633a8614200620755ed395daf32
+    image: redis:8@sha256:234c902a2db49461a129e2d4aeff85b28cf20187ed274a67f6e50995fa713c7b
     ports:
       - "6379:6379"
 
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.1}
     command:
       - --web.enable-remote-write-receiver
       - --config.file=/etc/prometheus/prometheus.yml

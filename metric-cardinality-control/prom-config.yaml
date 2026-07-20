@@ -1,0 +1,4 @@
+# Alloy owns scraping and sends both comparison branches to this receiver.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s

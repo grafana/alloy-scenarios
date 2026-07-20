@@ -1,7 +1,7 @@
 services:
   # Prometheus scrapes Alloy's own metrics
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.1}
     command:
       - --config.file=/etc/prometheus/prometheus.yml
     ports:

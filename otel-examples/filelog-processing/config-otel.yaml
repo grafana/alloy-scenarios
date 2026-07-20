@@ -8,7 +8,7 @@
 extensions:
   alloyengine:
     config:
-      file: /etc/alloy/config.alloy
+      path: /etc/alloy/config.alloy
     flags:
       server.http.listen-addr: 0.0.0.0:12345
 

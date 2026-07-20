@@ -1,0 +1,50 @@
+livedebugging {
+	enabled = true
+}
+
+// Zero-code eBPF auto-instrumentation of the demo-app container. Alloy
+// shares demo-app's PID namespace (see `pid: "service:demo-app"` in
+// docker-compose.yml), so beyla.ebpf can attach eBPF probes to the Go
+// binary listening on port 8080 without any SDK, agent, or code change
+// in demo-app itself.
+beyla.ebpf "default" {
+	discovery {
+		instrument {
+			open_ports = "8080"
+			name       = "demo-app"
+		}
+	}
+
+	metrics {
+		features = ["application"]
+	}
+
+	output {
+		traces = [otelcol.exporter.otlp.tempo.input]
+	}
+}
+
+// beyla.ebpf exposes its RED metrics as a Prometheus scrape target rather
+// than pushing them directly. Pull them into the pipeline here.
+prometheus.scrape "beyla" {
+	targets      = beyla.ebpf.default.targets
+	honor_labels = true
+	forward_to   = [prometheus.remote_write.default.receiver]
+}
+
+// Send the scraped RED metrics to Prometheus.
+prometheus.remote_write "default" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}
+
+// Send the auto-generated traces to Tempo for storage and visualization.
+otelcol.exporter.otlp "tempo" {
+	client {
+		endpoint = "tempo:4317"
+		tls {
+			insecure = true
+		}
+	}
+}
