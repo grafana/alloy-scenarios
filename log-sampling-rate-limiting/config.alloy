@@ -4,18 +4,15 @@
 // throughput per stream before loki.write.
 // See: https://github.com/grafana/alloy-scenarios/issues/268
 
-// --- Receiver: read log lines from the demo app's log file ---
-// TODO: point path to wherever the demo log generator writes its log file
+// 1. read log file written by generator
 local.file_match "logs" {
-  path_targets = [{"__path__" = "/var/log/app/*.log"}]
+  path_targets = [{"__path__" = "/tmp/logs/app/*.log"}]
 }
-
 loki.source.file "logs" {
   targets    = local.file_match.logs.targets
   forward_to = [loki.process.filtered.receiver]
 }
-
-// --- Processor: parse level, keep ERROR/WARN as-is, sample + rate-limit DEBUG/INFO ---
+// 2. extract "level" field from JSON into extracted map
 loki.process "filtered" {
   forward_to = [loki.write.default.receiver]
 
@@ -24,36 +21,46 @@ loki.process "filtered" {
   stage.json {
     expressions = {level = "level"}
   }
-
+  // 3. promote level to a label so we can match on it
   stage.labels {
     values = {level = ""}
   }
-
-  // Only DEBUG/INFO lines flow into this nested pipeline.
-  // ERROR/WARN lines fall through untouched (stage.match with action="keep"
-  // just skips non-matching lines past this stage, it doesn't drop them).
+  // 4. IF level is DEBUG or INFO:
+  //          sample down to 10%
+  //         ELSE (WARN/ERROR):
+  //          pass through untouched
   stage.match {
     selector = "{level=~\"DEBUG|INFO\"}"
 
     stage.sampling {
-      rate                = 0.10 // keep ~10% of DEBUG/INFO lines
+      rate                = 0.10 // keep 10% of DEBUG/INFO lines
       drop_counter_reason = "logs_sampling"
     }
-
-    stage.limit {
-      rate  = 50  // TODO: tune once the demo log generator is wired up
-      burst = 100
-      drop  = true
-    }
+  }
+  // 5. rate-limit whatever survives, globally
+  stage.limit {
+     rate  = 50
+     burst = 100
+     drop  = true
   }
 }
-
-// --- Writer: ship the filtered stream to Loki ---
+// 6. write to loki
 loki.write "default" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"
   }
 }
+
+
+
+// --- Processor: parse level, keep ERROR/WARN as-is, sample + rate-limit DEBUG/INFO ---
+
+  // Only DEBUG/INFO lines flow into this nested pipeline.
+  // ERROR/WARN lines fall through untouched (stage.match with action="keep"
+  // just skips non-matching lines past this stage, it doesn't drop them).
+
+// --- Writer: ship the filtered stream to Loki ---
+
 
 // TODO next session:
 // - docker-compose.yml (LGMT stack, from .cursor/docker-example.mdc template)
