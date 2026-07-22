@@ -51,9 +51,4 @@ loki.write "default" {
   }
 }
 
-// TODO next session:
-// - docker-compose.yml (LGMT stack, from .cursor/docker-example.mdc template)
-// - loki-config.yaml / prom-config.yaml
-// - demo log generator (app/) emitting mixed-severity JSON logs
-// - Grafana panel showing ingest rate: DEBUG/INFO sampled ~10%, ERROR/WARN 100%
 // - README.md
