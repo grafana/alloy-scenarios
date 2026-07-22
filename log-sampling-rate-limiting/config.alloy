@@ -51,17 +51,6 @@ loki.write "default" {
   }
 }
 
-
-
-// --- Processor: parse level, keep ERROR/WARN as-is, sample + rate-limit DEBUG/INFO ---
-
-  // Only DEBUG/INFO lines flow into this nested pipeline.
-  // ERROR/WARN lines fall through untouched (stage.match with action="keep"
-  // just skips non-matching lines past this stage, it doesn't drop them).
-
-// --- Writer: ship the filtered stream to Loki ---
-
-
 // TODO next session:
 // - docker-compose.yml (LGMT stack, from .cursor/docker-example.mdc template)
 // - loki-config.yaml / prom-config.yaml
