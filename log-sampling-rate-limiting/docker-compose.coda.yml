@@ -1,0 +1,8 @@
+services:
+  # Python app that logs fake DEBUG,INFO,WARN and ERROR messages
+  message-logger:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    volumes:
+      - ./app/main.py:/app/main.py
+      - ./logs:/logs
+    command: python3 /app/main.py
