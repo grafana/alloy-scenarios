@@ -1,0 +1,54 @@
+// Scenario: log-sampling-rate-limiting
+// Demonstrates loki.process stage.sampling + stage.limit to cut log volume:
+// keep all WARN/ERROR lines, sample DEBUG/INFO down to a fraction, and cap
+// throughput per stream before loki.write.
+// See: https://github.com/grafana/alloy-scenarios/issues/268
+
+// 1. read log file written by generator
+local.file_match "logs" {
+  path_targets = [{"__path__" = "/tmp/logs/app/*.log"}]
+}
+loki.source.file "logs" {
+  targets    = local.file_match.logs.targets
+  forward_to = [loki.process.filtered.receiver]
+}
+// 2. extract "level" field from JSON into extracted map
+loki.process "filtered" {
+  forward_to = [loki.write.default.receiver]
+
+  // Parse JSON log lines and promote "level" to a real Loki label so the
+  // match selector below can filter on it.
+  stage.json {
+    expressions = {level = "level"}
+  }
+  // 3. promote level to a label so we can match on it
+  stage.labels {
+    values = {level = ""}
+  }
+  // 4. IF level is DEBUG or INFO:
+  //          sample down to 10%
+  //         ELSE (WARN/ERROR):
+  //          pass through untouched
+  stage.match {
+    selector = "{level=~\"DEBUG|INFO\"}"
+
+    stage.sampling {
+      rate                = 0.10 // keep 10% of DEBUG/INFO lines
+      drop_counter_reason = "logs_sampling"
+    }
+  }
+  // 5. rate-limit whatever survives, globally
+  stage.limit {
+     rate  = 50
+     burst = 100
+     drop  = true
+  }
+}
+// 6. write to loki
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+// - README.md
