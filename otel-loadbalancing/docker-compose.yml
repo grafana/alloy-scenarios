@@ -63,7 +63,7 @@ services:
   # Downstream tier: two identical Alloy instances running tail sampling.
   # They share one config file; only the published UI port differs.
   alloy-downstream-1:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.18.0}
     ports:
       - 12346:12345
     volumes:
@@ -73,7 +73,7 @@ services:
       - tempo
 
   alloy-downstream-2:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.18.0}
     ports:
       - 12347:12345
     volumes:
@@ -85,7 +85,7 @@ services:
   # Load-balancer tier: receives all OTLP traffic and shards it across the
   # two downstream instances by trace ID.
   alloy-lb:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.18.0}
     ports:
       - 12345:12345
       - 4317:4317

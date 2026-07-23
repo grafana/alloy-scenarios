@@ -131,7 +131,7 @@ services:
       - loki
 
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.18.0}
     # loki.source.azure_event_hubs hardcodes TLS with no way to supply a
     # custom CA, so the eventhub broker's self-signed CA has to be trusted
     # at the OS level before Alloy starts.

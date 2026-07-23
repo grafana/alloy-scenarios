@@ -25,7 +25,7 @@ services:
   # The "after": the equivalent Alloy pipeline, derived with
   # `alloy convert --source-format=promtail`.
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.18.0}
     ports:
       - 12345:12345
     volumes:

@@ -39,7 +39,7 @@ services:
   # Alloy with beyla.ebpf. Needs privileged mode to load eBPF programs and
   # demo-app's PID namespace to see its process and attach probes to it.
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.18.0}
     privileged: true
     pid: "service:demo-app"
     ports:
