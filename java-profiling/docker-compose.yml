@@ -55,7 +55,7 @@ services:
   # pid: "container:java-app" -- (b) ptrace it -- hence SYS_PTRACE -- and
   # (c) share /tmp with it for the attach socket and the profiler library.
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.18.0}
     pid: "container:java-app"
     cap_add:
       - SYS_PTRACE

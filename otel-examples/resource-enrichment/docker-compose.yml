@@ -70,7 +70,7 @@ services:
 
   # Alloy in OTel engine mode (with Docker socket for container detection)
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.18.0}
     command: otel --config=/etc/alloy/config-otel.yaml
     ports:
       - 8888:8888       # OTel engine HTTP server

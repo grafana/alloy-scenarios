@@ -46,7 +46,7 @@ services:
   # different host port (12345/12346/12347) so you can open the Clustering page
   # of each one.
   alloy-1:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.18.0}
     hostname: alloy-1
     ports:
       - 12345:12345
@@ -64,7 +64,7 @@ services:
       - prometheus
 
   alloy-2:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.18.0}
     hostname: alloy-2
     ports:
       - 12346:12345
@@ -82,7 +82,7 @@ services:
       - prometheus
 
   alloy-3:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.18.0}
     hostname: alloy-3
     ports:
       - 12347:12345
