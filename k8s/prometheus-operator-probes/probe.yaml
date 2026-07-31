@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: http-grafana
+  namespace: testns
+spec:
+  jobName: blackbox
+  interval: 30s
+  module: http_2xx
+  prober:
+    # Alloy Service in the meta namespace (HTTP listen port 12345).
+    url: alloy.meta.svc.cluster.local:12345
+    # Component HTTP API path for prometheus.exporter.blackbox.blackbox_exporter.
+    path: /api/v0/component/prometheus.exporter.blackbox.blackbox_exporter/probe
+  targets:
+    staticConfig:
+      static:
+        - https://grafana.com
