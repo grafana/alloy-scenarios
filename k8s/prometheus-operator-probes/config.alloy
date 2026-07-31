@@ -1,0 +1,21 @@
+// Alloy as blackbox prober + Probe CR scraper for the Prometheus Operator.
+// Deploy with the steps in README.md.
+
+livedebugging {
+  enabled = true
+}
+
+prometheus.exporter.blackbox "blackbox_exporter" {
+  config = "{ modules: { http_2xx: { prober: http, timeout: 5s } } }"
+}
+
+prometheus.operator.probes "blackbox" {
+  namespaces = ["testns"]
+  forward_to = [prometheus.remote_write.local.receiver]
+}
+
+prometheus.remote_write "local" {
+  endpoint {
+    url = "http://prometheus-server.meta.svc.cluster.local/api/v1/write"
+  }
+}

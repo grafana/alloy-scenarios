@@ -1,0 +1,13 @@
+alloy:
+  configMap:
+    content: |
+      // placeholder — use config.alloy from this directory
+  extraPorts:
+    - name: http-metrics
+      port: 12345
+      targetPort: 12345
+      protocol: TCP
+controller:
+  type: deployment
+service:
+  enabled: true
