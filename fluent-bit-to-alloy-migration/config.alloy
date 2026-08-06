@@ -1,0 +1,115 @@
+// ##################################################
+// #### Fluent Bit -> Alloy: hand-written result ####
+// ##################################################
+//
+// `alloy convert` has no fluent-bit source format, so unlike the
+// promtail-to-alloy-migration scenario every component below was written
+// by hand from fluent-bit.yaml. Comments name the Fluent Bit section each
+// one replaces. README.md carries the full mapping table.
+
+// Enable live debugging for the Alloy UI.
+livedebugging {
+	enabled = true
+}
+
+// [INPUT] tail -> path. Fluent Bit routes with tags and `match`. Alloy
+// has no tags: routing is the component graph, so each file gets its own
+// chain, and the two chains meet again at loki.write.
+local.file_match "text" {
+	path_targets = [{
+		__path__ = "/var/log/demo/app.log",
+		job      = "demo-app",
+	}]
+}
+
+// The tailing engine itself. path_key has no counterpart: Alloy adds the
+// filename label on its own. read_from_head: true is tail_from_end =
+// false, which is already the default.
+loki.source.file "text" {
+	targets    = local.file_match.text.targets
+	forward_to = [loki.process.text.receiver]
+}
+
+loki.process "text" {
+	// tail multiline.parser app_ml -> stage.multiline. The ^ anchor is
+	// safe here because both engines test one physical line at a time,
+	// before anything is joined.
+	// Alloy joins buffered lines with a newline. Fluent Bit terminates
+	// each one, so its records end with a newline and Alloy's don't. The
+	// app_trim parser on the Fluent Bit side removes that terminator.
+	stage.multiline {
+		firstline     = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z level="
+		max_wait_time = "3s"
+	}
+
+	// [FILTER] parser app_kv -> stage.regex. No ^ anchor here: this runs
+	// after the join, and Onigmo anchors ^ to every line where Go RE2
+	// anchors it to the whole entry. Go also spells groups (?P<name>...).
+	stage.regex {
+		expression = "level=(?P<level>\\w+) service=(?P<service>\\w+)"
+	}
+
+	// [OUTPUT] loki label_keys -> stage.labels.
+	stage.labels {
+		values = {
+			level   = "",
+			service = "",
+		}
+	}
+
+	forward_to = [loki.write.default.receiver]
+}
+
+local.file_match "json" {
+	path_targets = [{
+		__path__ = "/var/log/demo/orders.json",
+		job      = "demo-app",
+	}]
+}
+
+loki.source.file "json" {
+	targets    = local.file_match.json.targets
+	forward_to = [loki.process.json.receiver]
+}
+
+loki.process "json" {
+	// [FILTER] parser orders_json -> stage.json. `expressions` is an
+	// allowlist. Fluent Bit's json parser explodes the whole record, so
+	// there you name every unwanted field in remove_keys instead.
+	stage.json {
+		expressions = {
+			level    = "",
+			service  = "",
+			trace_id = "",
+		}
+	}
+
+	stage.labels {
+		values = {
+			level   = "",
+			service = "",
+		}
+	}
+
+	// [OUTPUT] loki structured_metadata -> stage.structured_metadata.
+	stage.structured_metadata {
+		values = {
+			trace_id = "",
+		}
+	}
+
+	forward_to = [loki.write.default.receiver]
+}
+
+// Two [OUTPUT] blocks -> one loki.write. Fluent Bit shapes the log line
+// on the output plugin, so a second line shape needs a second output.
+// Alloy shapes it in loki.process, so one writer serves both chains.
+loki.write "default" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+
+	external_labels = {
+		collector = "alloy",
+	}
+}

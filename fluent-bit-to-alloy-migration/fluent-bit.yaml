@@ -1,0 +1,129 @@
+# The "before" configuration. fluent-bit.conf and parsers.conf in this
+# directory are the classic-mode equivalent, kept for reference only:
+# classic mode is deprecated at the end of 2026 and neither file is
+# mounted into the container. config.alloy is the Alloy equivalent, and
+# the README maps every section below to the component that replaces it.
+
+service:
+  flush: 1
+  log_level: info
+  http_server: true
+  http_listen: 0.0.0.0
+  http_port: 2020
+
+# YAML declares parsers inline. Classic mode keeps them in a separate
+# file referenced by Parsers_File.
+parsers:
+  # Onigmo, not Go RE2: named groups are (?<name>...), and there is
+  # deliberately no ^ anchor. This runs after multiline concatenation,
+  # where Onigmo's ^ matches the start of every line.
+  - name: app_kv
+    format: regex
+    regex: 'level=(?<level>\w+) service=(?<service>\w+)'
+
+  - name: orders_json
+    format: json
+
+  # Fluent Bit terminates every line it concatenates, so a multiline
+  # record ends with a newline. Alloy's stage.multiline joins with a
+  # newline instead, so it doesn't. This trims the terminator to keep the
+  # two log lines byte-identical. (?m) is Onigmo's "dot matches newline",
+  # which Go RE2 spells (?s).
+  - name: app_trim
+    format: regex
+    regex: '(?m)\A(?<log>.*[^\n])'
+
+multiline_parsers:
+  - name: app_ml
+    type: regex
+    flush_timeout: 3000
+    rules:
+      - state: start_state
+        regex: '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z level=/'
+        next_state: cont
+      - state: cont
+        regex: '/^\s+at /'
+        next_state: cont
+
+pipeline:
+  inputs:
+    # No `parser` here on purpose. Without an input parser the record is
+    # just {"log": "<raw line>"}, which is what lets the raw line survive
+    # all the way to Loki.
+    #
+    # path_key is named filename to match the label loki.source.file adds
+    # on its own. read_from_head plus a db is what keeps Fluent Bit's
+    # line count equal to Alloy's across a restart.
+    - name: tail
+      alias: text
+      tag: app.text
+      path: /var/log/demo/app.log
+      path_key: filename
+      read_from_head: true
+      refresh_interval: 10
+      db: /tmp/fluent-bit-text.db
+      multiline.parser: app_ml
+
+    - name: tail
+      alias: json
+      tag: app.json
+      path: /var/log/demo/orders.json
+      path_key: filename
+      read_from_head: true
+      refresh_interval: 10
+      db: /tmp/fluent-bit-json.db
+
+  filters:
+    # preserve_key keeps `log` untouched and reserve_data keeps
+    # `filename`. Together they add the parsed fields alongside the raw
+    # line instead of replacing it.
+    - name: parser
+      match: app.text
+      key_name: log
+      parser: app_kv
+      preserve_key: true
+      reserve_data: true
+
+    # Drops the trailing newline the multiline parser leaves behind.
+    # preserve_key is false here because this filter replaces `log`
+    # rather than adding fields next to it.
+    - name: parser
+      match: app.text
+      key_name: log
+      parser: app_trim
+      preserve_key: false
+      reserve_data: true
+
+    - name: parser
+      match: app.json
+      key_name: log
+      parser: orders_json
+      preserve_key: true
+      reserve_data: true
+
+  outputs:
+    # label_keys promotes these three and strips them from the body,
+    # leaving only `log`. drop_single_key: raw then emits that value
+    # unquoted, which is the original line byte for byte.
+    - name: loki
+      match: app.text
+      host: loki
+      port: 3100
+      labels: job=demo-app,collector=fluentbit
+      label_keys: $level,$service,$filename
+      line_format: json
+      drop_single_key: raw
+
+    # The json parser exploded every field, so anything that isn't a
+    # label has to be named in remove_keys before drop_single_key can
+    # fire. Alloy needs none of this: stage.json never rewrites the line.
+    - name: loki
+      match: app.json
+      host: loki
+      port: 3100
+      labels: job=demo-app,collector=fluentbit
+      label_keys: $level,$service,$filename
+      structured_metadata: trace_id=$trace_id
+      remove_keys: ts,trace_id,msg
+      line_format: json
+      drop_single_key: raw

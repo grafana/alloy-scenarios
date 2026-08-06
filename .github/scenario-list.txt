@@ -4,6 +4,7 @@ continuous-profiling
 docker-monitoring
 elasticsearch-monitoring
 faro-frontend-observability
+fluent-bit-to-alloy-migration
 game-of-tracing
 gelf-log-ingestion
 java-profiling

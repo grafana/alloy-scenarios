@@ -1,0 +1,10 @@
+services:
+  # Writes /var/log/demo/app.log (multi-line logfmt) and
+  # /var/log/demo/orders.json (JSON lines). Both collectors tail both
+  # files, which is what makes their output directly comparable in Loki.
+  log-generator:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    volumes:
+      - ./main.py:/main.py
+      - ./logs:/var/log/demo
+    command: ["python3", "/main.py"]
