@@ -1,0 +1,7 @@
+services:
+  log-generator:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    volumes:
+      - ./app/generate_logs.py:/app/generate_logs.py
+      - ./logs:/logs
+    command: python3 /app/generate_logs.py
