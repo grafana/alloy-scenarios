@@ -1,0 +1,80 @@
+services:
+  coredns:
+    image: coredns/coredns:${COREDNS_VERSION:-1.14.6}
+    command: -conf /etc/coredns/Corefile
+    volumes:
+      - ./Corefile:/etc/coredns/Corefile:ro
+      - ./db.demo.local:/etc/coredns/db.demo.local:ro
+    networks:
+      dns_demo:
+        ipv4_address: 172.30.0.53
+
+  exporter-a:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    command: python3 /app/exporter.py
+    environment:
+      - INSTANCE=exporter-a
+    volumes:
+      - ./app/exporter.py:/app/exporter.py:ro
+    networks:
+      dns_demo:
+        ipv4_address: 172.30.0.11
+
+  exporter-b:
+    image: python:${PYTHON_VERSION:-3.11-slim}
+    command: python3 /app/exporter.py
+    environment:
+      - INSTANCE=exporter-b
+    volumes:
+      - ./app/exporter.py:/app/exporter.py:ro
+    networks:
+      dns_demo:
+        ipv4_address: 172.30.0.12
+
+  alloy:
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    dns:
+      - 172.30.0.53
+    ports:
+      - 12345:12345/tcp
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy:ro
+    depends_on:
+      - coredns
+      - prometheus
+    networks:
+      - dns_demo
+
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.1}
+    command:
+      - --web.enable-remote-write-receiver
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - 9090:9090/tcp
+    volumes:
+      - ./prom-config.yaml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - dns_demo
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-13.1.0}
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+    ports:
+      - 3000:3000/tcp
+    volumes:
+      - ./grafana:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - dns_demo
+
+networks:
+  dns_demo:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

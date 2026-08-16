@@ -1,6 +1,7 @@
 aws-firehose-logs
 blackbox-probing
 continuous-profiling
+dns-service-discovery
 docker-monitoring
 elasticsearch-monitoring
 faro-frontend-observability

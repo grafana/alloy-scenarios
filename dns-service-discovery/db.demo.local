@@ -1,0 +1,8 @@
+$ORIGIN demo.local.
+@ 60 IN SOA ns.demo.local. hostmaster.demo.local. 1 7200 3600 1209600 60
+@ 60 IN NS ns.demo.local.
+ns 60 IN A 172.30.0.53
+exporter-a 60 IN A 172.30.0.11
+exporter-b 60 IN A 172.30.0.12
+_metrics._tcp 60 IN SRV 10 10 8000 exporter-a.demo.local.
+_metrics._tcp 60 IN SRV 10 10 8000 exporter-b.demo.local.
