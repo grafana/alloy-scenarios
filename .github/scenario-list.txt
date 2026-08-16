@@ -33,6 +33,7 @@ redis-monitoring
 routing
 self-monitoring
 snmp
+statsd-metrics
 syslog
 systemd-journal
 trace-delivery

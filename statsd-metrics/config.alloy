@@ -1,0 +1,24 @@
+// Receive legacy StatsD packets, expose them as Prometheus targets, and
+// remote-write the scraped metrics to the local Prometheus instance.
+livedebugging {
+	enabled = true
+}
+
+prometheus.exporter.statsd "legacy_app" {
+	listen_udp          = "0.0.0.0:8125"
+	mapping_config_path = "/etc/alloy/statsd-mapping.yaml"
+}
+
+prometheus.scrape "statsd" {
+	targets         = prometheus.exporter.statsd.legacy_app.targets
+	forward_to      = [prometheus.remote_write.local.receiver]
+	job_name        = "statsd-metrics"
+	scrape_interval = "5s"
+	scrape_timeout  = "4s"
+}
+
+prometheus.remote_write "local" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}
