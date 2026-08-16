@@ -89,6 +89,7 @@ These scenarios collect and forward metrics with Alloy.
 | [Metric cardinality control](metric-cardinality-control/) | Compare original Prometheus metrics with a cardinality-controlled `prometheus.relabel` path that drops noisy series and volatile labels and normalizes dynamic routes. |
 | [OpenTelemetry SDK metrics across languages](app-instrumentation/metrics/opentelemetry-sdk/) | Instrument five languages with the OpenTelemetry metrics SDK and push them through Alloy to Prometheus. |
 | [Prometheus client metrics across languages](app-instrumentation/metrics/prometheus-client/) | Expose `/metrics` with native Prometheus client libraries in five languages and scrape them with Alloy. The pull-model counterpart to the OpenTelemetry SDK scenario. |
+| [Prometheus Pushgateway](prometheus-pushgateway/) | Scrape metrics retained for short-lived batch jobs by Prometheus Pushgateway and remote-write them through Alloy. |
 | [OTel metrics pipeline](otel-metrics-pipeline/) | Forward OpenTelemetry metrics from applications through Alloy. Alloy batches and transforms samples before it sends them to Prometheus. |
 
 ### Profiling
