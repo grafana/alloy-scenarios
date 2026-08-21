@@ -67,3 +67,4 @@ Checklist for a new scenario:
 - Alloy HTTP server runs on port 12345
 - Python demo apps use OpenTelemetry SDK for instrumentation (`telemetry.py` pattern)
 - Backend configs (loki, prometheus, tempo) are minimal single-instance dev configs — not production-ready
+- Security issues should be reported via [Grafana's security issue reporting page](https://grafana.com/legal/report-a-security-issue/) and not directly in this repository.
