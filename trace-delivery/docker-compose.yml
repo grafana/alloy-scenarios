@@ -16,7 +16,7 @@ services:
       - ./prom-config.yaml:/etc/prometheus/prometheus.yml
 
   memcached:
-    image: memcached:1.6.45@sha256:dc561d52bb8ad3c038867123ed2dc8357c4c128f047cdbd526cd65cf39408cbd
+    image: memcached:1.6.45@sha256:eeb9eaa939ffaa2304899674c9e88a9247ec8e5e40e424a892df7b09914bd2ec
     container_name: memcached
     ports:
       - "11211:11211"
