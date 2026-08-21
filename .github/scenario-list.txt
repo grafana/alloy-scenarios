@@ -29,6 +29,7 @@ otel-span-metrics
 otel-tail-sampling
 otel-tracing-service-graphs
 postgres-monitoring
+prometheus-pushgateway
 promtail-to-alloy-migration
 redis-monitoring
 routing

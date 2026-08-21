@@ -1,0 +1,20 @@
+// Scrape metrics retained by Pushgateway and remote-write them to Prometheus.
+livedebugging {
+	enabled = true
+}
+
+prometheus.scrape "pushgateway" {
+	targets = [
+		{"__address__" = "pushgateway:9091"},
+	]
+	forward_to      = [prometheus.remote_write.local.receiver]
+	job_name        = "pushgateway"
+	scrape_interval = "5s"
+	scrape_timeout  = "4s"
+}
+
+prometheus.remote_write "local" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}
