@@ -1,0 +1,17 @@
+# Give the legacy StatsD names stable Prometheus metric names and define the
+# timer as a histogram so latency quantiles can be queried in PromQL.
+defaults:
+  match_type: glob
+
+mappings:
+  - match: "legacy.checkout.requests"
+    name: "legacy_checkout_requests_total"
+
+  - match: "legacy.checkout.queue_depth"
+    name: "legacy_checkout_queue_depth"
+
+  - match: "legacy.checkout.request_duration"
+    name: "legacy_checkout_request_duration_seconds"
+    observer_type: histogram
+    histogram_options:
+      buckets: [0.05, 0.1, 0.25, 0.5, 1, 2.5]

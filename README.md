@@ -92,6 +92,7 @@ These scenarios collect and forward metrics with Alloy.
 | [Prometheus client metrics across languages](app-instrumentation/metrics/prometheus-client/) | Expose `/metrics` with native Prometheus client libraries in five languages and scrape them with Alloy. The pull-model counterpart to the OpenTelemetry SDK scenario. |
 | [Prometheus Pushgateway](prometheus-pushgateway/) | Scrape metrics retained for short-lived batch jobs by Prometheus Pushgateway and remote-write them through Alloy. |
 | [OTel metrics pipeline](otel-metrics-pipeline/) | Forward OpenTelemetry metrics from applications through Alloy. Alloy batches and transforms samples before it sends them to Prometheus. |
+| [StatsD metrics](statsd-metrics/) | Receive legacy StatsD counter, gauge, and timer packets in Alloy and remote-write mapped Prometheus metrics. |
 
 ### Profiling
 
