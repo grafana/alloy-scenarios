@@ -1,0 +1,33 @@
+// Resolve SRV records, attach a stable job label, then scrape the discovered
+// exporters and remote-write their metrics to Prometheus.
+livedebugging {
+	enabled = true
+}
+
+discovery.dns "metrics" {
+	names            = ["_metrics._tcp.demo.local"]
+	type             = "SRV"
+	refresh_interval = "5s"
+}
+
+discovery.relabel "metrics" {
+	targets = discovery.dns.metrics.targets
+
+	rule {
+		target_label = "job"
+		replacement  = "dns-service-discovery"
+	}
+}
+
+prometheus.scrape "metrics" {
+	targets         = discovery.relabel.metrics.output
+	forward_to      = [prometheus.remote_write.local.receiver]
+	scrape_interval = "5s"
+	scrape_timeout  = "4s"
+}
+
+prometheus.remote_write "local" {
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}

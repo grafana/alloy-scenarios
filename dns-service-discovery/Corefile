@@ -1,0 +1,9 @@
+demo.local:53 {
+    errors
+    file /etc/coredns/db.demo.local
+}
+
+. {
+    errors
+    forward . 127.0.0.11
+}
