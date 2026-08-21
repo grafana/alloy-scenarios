@@ -59,7 +59,7 @@ services:
       - dns_demo
 
   grafana:
-    image: grafana/grafana:${GRAFANA_VERSION:-13.1.0}
+    image: grafana/grafana:${GRAFANA_VERSION:-13.2.0}
     environment:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_ANONYMOUS_ENABLED=true
