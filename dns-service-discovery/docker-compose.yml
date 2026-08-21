@@ -32,7 +32,7 @@ services:
         ipv4_address: 172.30.0.12
 
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.18.1}
     command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
     dns:
       - 172.30.0.53
