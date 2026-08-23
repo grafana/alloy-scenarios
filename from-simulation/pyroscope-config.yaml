@@ -1,0 +1,8 @@
+---
+server:
+  http_listen_port: 4040
+
+storage:
+  backend: filesystem
+  filesystem:
+    dir: /data

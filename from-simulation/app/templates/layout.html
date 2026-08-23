@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}From — Fromville{% endblock %}</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+    <script
+      src="https://cdn.socket.io/4.7.5/socket.io.min.js"
+      crossorigin="anonymous"
+    ></script>
+  </head>
+  <body class="theme-dread">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">FROM</span>
+        <span class="brand-sub">Fromville Telemetry</span>
+      </div>
+      {% block hud %}{% endblock %}
+    </header>
+
+    <main class="layout">{% block main %}{% endblock %}</main>
+
+    <div id="cycle-reset-overlay" class="cycle-reset hidden" aria-hidden="true">
+      <div class="cycle-reset-inner">
+        <div class="cycle-reset-title">THE TOWN HAS FALLEN</div>
+        <div class="cycle-reset-sub">Cycle <span id="cycle-reset-num">1</span> begins</div>
+      </div>
+    </div>
+
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

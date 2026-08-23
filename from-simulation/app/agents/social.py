@@ -1,0 +1,832 @@
+"""
+Social rituals: meetings, conversations, arguments.
+
+Agent B owns this module. It is invoked by ``characters.tick_societies(world)``
+once per simulation tick. Three things happen here:
+
+1. **Pending meetings** — gather attendees, run a 20-tick deliberation, sample
+   a ``MeetingOutcome`` weighted by attendees' personality, and emit it.
+2. **Opportunistic conversations** — during DAY, when two compatible characters
+   are within 30 px, pair them into ``State.CONVERSING`` for a few ticks.
+3. **Imposter suspicion** — when any character's awareness of a yellow-touched
+   NPC crosses ``AWARENESS_TRIGGER``, propose a meeting; voting tallies the
+   attendees' guilt scores and reflects the verdict in the outcome payload.
+
+Meeting outcomes are written into ``world.meeting_outcomes`` — Agent C reads
+the ``imposter_suspicion`` ones, Agent A reads the ``food_supply`` ones (to
+flip ``world.expedition_authorised``).
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple
+
+from contracts import (
+    AgentKind,
+    Event,
+    MeetingOutcome,
+    Phase,
+    Role,
+    State,
+    Status,
+    World,
+)
+
+import legacy
+from agents.characters import Character
+
+
+# ---------------------------------------------------------------------------
+# Tunables
+# ---------------------------------------------------------------------------
+
+MEETING_DURATION_TICKS = 20
+ARGUE_DURATION_TICKS = 6
+CONVERSATION_DURATION_TICKS = 10
+CONVERSATION_RADIUS = 30.0
+AWARENESS_TRIGGER = 5.0
+
+
+# ---------------------------------------------------------------------------
+# Pending meeting bookkeeping
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _PendingMeeting:
+    topic: str
+    venue_id: str
+    caller_id: str
+    started_tick: int
+    deadline_tick: int
+    attendees: List[str] = field(default_factory=list)
+    payload: Dict[str, object] = field(default_factory=dict)
+    resolved: bool = False
+
+
+def _get_pendings(world: World) -> List[_PendingMeeting]:
+    """Lazily attach the pending-meeting list to the world."""
+    p = getattr(world, "_pending_meetings", None)
+    if p is None:
+        p = []
+        world._pending_meetings = p  # type: ignore[attr-defined]
+    return p
+
+
+def _get_pairings(world: World) -> Dict[str, Tuple[str, int]]:
+    """Lazily attach active conversation pairings: id -> (partner, until_tick)."""
+    p = getattr(world, "_conversation_pairs", None)
+    if p is None:
+        p = {}
+        world._conversation_pairs = p  # type: ignore[attr-defined]
+    return p
+
+
+def _get_awareness_cooldowns(world: World) -> Dict[str, int]:
+    p = getattr(world, "_awareness_cooldowns", None)
+    if p is None:
+        p = {}
+        world._awareness_cooldowns = p  # type: ignore[attr-defined]
+    return p
+
+
+# ---------------------------------------------------------------------------
+# Trust graph
+# ---------------------------------------------------------------------------
+
+
+def _trust_initialised(world: World) -> bool:
+    return bool(getattr(world, "_trust_initialised", False))
+
+
+def _initialise_trust(world: World) -> None:
+    """Seed every ordered pair of agents with the configured baseline once."""
+    baseline = world.config.trust_baseline
+    ids = list(world.agents.keys())
+    for i in range(len(ids)):
+        for j in range(len(ids)):
+            if i == j:
+                continue
+            key = (ids[i], ids[j])
+            if key not in world.trust:
+                world.trust[key] = baseline
+    world._trust_initialised = True  # type: ignore[attr-defined]
+
+
+def trust_for(world: World, a_id: str, b_id: str) -> float:
+    """Symmetric trust score in [0,1] between two agents.
+
+    Falls back to ``config.trust_baseline`` when the pair has no history.
+    The matrix is lazily initialised on first call.
+    """
+    if a_id == b_id:
+        return 0.0
+    if not _trust_initialised(world):
+        _initialise_trust(world)
+    baseline = world.config.trust_baseline
+    return world.trust.get((a_id, b_id), baseline)
+
+
+def adjust_trust(world: World, a_id: str, b_id: str, delta: float, reason: str) -> None:
+    """Apply a symmetric trust delta between two ids, clamped to [0,1]."""
+    if a_id == b_id or not a_id or not b_id:
+        return
+    if not _trust_initialised(world):
+        _initialise_trust(world)
+    baseline = world.config.trust_baseline
+    cur = world.trust.get((a_id, b_id), baseline)
+    new = max(0.0, min(1.0, cur + delta))
+    world.trust[(a_id, b_id)] = new
+    world.trust[(b_id, a_id)] = new
+    # Routine ±0.03..±0.05 shifts (every conversation, every meeting attendee
+    # pair) would drown the event log — a single 10-person meeting otherwise
+    # emits 45 events. Only the dramatic shifts surface to the UI; SQLite
+    # still records the full pair history below for narrative reconstruction.
+    if abs(delta) >= 0.10:
+        world.emit(Event(
+            tick=world.tick_count, type="trust_shift",
+            subject=a_id, detail=f"{a_id}<->{b_id} {delta:+.2f} ({reason}) -> {new:.2f}",
+            severity="info",
+        ))
+    # v5 — persist the trust shift to memory for both parties.
+    if world.memory is not None:
+        try:
+            world.memory.record_character_memory(
+                world, a_id, "trust_shift",
+                subject=b_id, detail=f"{delta:+.2f} {reason}",
+            )
+        except Exception:
+            pass
+        try:
+            world.memory.record_character_memory(
+                world, b_id, "trust_shift",
+                subject=a_id, detail=f"{delta:+.2f} {reason}",
+            )
+        except Exception:
+            pass
+
+
+# Role-pair compatibility hints — feeds the conversation pairing on top of trust.
+_ROLE_COMPAT: Dict[frozenset, float] = {
+    frozenset({Role.SHERIFF, Role.DEPUTY}): 1.8,
+    frozenset({Role.SHERIFF, Role.LEADER_COLONY}): 1.4,
+    frozenset({Role.PRIEST, Role.SEER}): 1.6,
+    frozenset({Role.PRIEST, Role.CARETAKER}): 1.5,
+    frozenset({Role.CARETAKER, Role.CHILD}): 1.7,
+    frozenset({Role.ENGINEER, Role.SHERIFF}): 1.3,
+    frozenset({Role.LEADER_COLONY, Role.BRIDGE}): 1.4,
+    frozenset({Role.BRIDGE, Role.SHERIFF}): 1.3,
+    frozenset({Role.INVESTIGATOR, Role.SEER}): 1.4,
+    frozenset({Role.INVESTIGATOR, Role.LEADER_COLONY}): 0.7,
+}
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def propose_meeting(
+    world: World,
+    caller_id: str,
+    topic: str,
+    venue_id: str,
+    payload: Optional[Dict[str, object]] = None,
+) -> Optional[_PendingMeeting]:
+    """Schedule a meeting. Returns the pending record or None if invalid."""
+    if caller_id not in world.agents:
+        return None
+    if venue_id not in world.buildings:
+        venue_id = "church"
+    pendings = _get_pendings(world)
+    # Don't double-propose the same topic.
+    for p in pendings:
+        if p.topic == topic and not p.resolved:
+            return p
+    pm = _PendingMeeting(
+        topic=topic,
+        venue_id=venue_id,
+        caller_id=caller_id,
+        started_tick=world.tick_count,
+        deadline_tick=world.tick_count + MEETING_DURATION_TICKS,
+        payload=dict(payload or {}),
+    )
+    pendings.append(pm)
+    world.emit(Event(
+        tick=world.tick_count, type="meeting_proposed",
+        subject=caller_id, detail=f"{topic} @ {venue_id}",
+    ))
+    return pm
+
+
+# ---------------------------------------------------------------------------
+# Main tick
+# ---------------------------------------------------------------------------
+
+
+def tick_social(world: World) -> None:
+    _check_awareness_triggers(world)
+    _drive_pending_meetings(world)
+    _drive_conversations(world)
+    _drive_co_occupants(world)
+
+
+# v8 — limit greeting events so a house full of characters + NPCs doesn't
+# flood the log with "Boyd shared shelter with Maeve" every tick.
+_LAST_GREETING_TICK: Dict[Tuple[str, str], int] = {}
+_GREETING_COOLDOWN_TICKS = 480  # ~8 sim-hours
+
+
+def _drive_co_occupants(world: World) -> None:
+    """v8 — when a character and an NPC share a building's occupants set,
+    nudge their mutual trust upward and occasionally surface a greeting.
+
+    Triggers only at DUSK / NIGHT so the effect reads as "we sheltered
+    together while it was dark". DAY-time co-occupancy is handled by the
+    conversation spawner instead.
+    """
+    if world.time.phase not in (Phase.DUSK, Phase.NIGHT):
+        return
+    for b in world.buildings.values():
+        if not b.occupants:
+            continue
+        char_ids: List[str] = []
+        npc_ids: List[str] = []
+        for occ_id in b.occupants:
+            agent = world.agents.get(occ_id)
+            if agent is None:
+                continue
+            kind = getattr(agent, "kind", None)
+            if kind == AgentKind.CHARACTER:
+                char_ids.append(occ_id)
+            elif kind == AgentKind.NPC:
+                # Cultists in your house do NOT comfort you.
+                if getattr(agent, "cult_state", "NONE") == "CONVERTED":
+                    continue
+                npc_ids.append(occ_id)
+        if not char_ids or not npc_ids:
+            continue
+        for cid in char_ids:
+            for nid in npc_ids:
+                # Slow, steady trust drift — easier than the per-conversation
+                # bump but cumulative across a night of sheltering together.
+                adjust_trust(world, cid, nid, 0.006, "shared_shelter")
+                # Occasional event so the user sees that something happens.
+                key = tuple(sorted((cid, nid)))
+                last = _LAST_GREETING_TICK.get(key, -10_000)
+                if (
+                    world.tick_count - last >= _GREETING_COOLDOWN_TICKS
+                    and world.rng.random() < 0.002
+                ):
+                    _LAST_GREETING_TICK[key] = world.tick_count
+                    npc = world.agents.get(nid)
+                    npc_label = (
+                        f"{npc.name} {npc.surname}".strip()
+                        if npc and getattr(npc, "surname", None)
+                        else (getattr(npc, "name", nid) if npc else nid)
+                    )
+                    world.emit(Event(
+                        tick=world.tick_count,
+                        type="conversation",
+                        subject=cid,
+                        detail=f"shared shelter with {npc_label}",
+                    ))
+
+
+# ---------------------------------------------------------------------------
+# Internals
+# ---------------------------------------------------------------------------
+
+
+def _characters(world: World) -> List[Character]:
+    return [a for a in world.agents.values()
+            if isinstance(a, Character) and a.status == Status.ACTIVE]
+
+
+def _check_awareness_triggers(world: World) -> None:
+    cooldowns = _get_awareness_cooldowns(world)
+    for ch in _characters(world):
+        if not ch.awareness:
+            continue
+        # Find the most suspicious NPC currently flagged for this character.
+        suspect, score = max(ch.awareness.items(), key=lambda kv: kv[1])
+        if score < AWARENESS_TRIGGER:
+            continue
+        # Cooldown so we don't spam meetings.
+        last = cooldowns.get(suspect, -10_000)
+        if world.tick_count - last < 300:
+            continue
+        cooldowns[suspect] = world.tick_count
+        propose_meeting(
+            world,
+            caller_id=ch.id,
+            topic="imposter_suspicion",
+            venue_id="church",
+            payload={"accused_npc_id": suspect},
+        )
+
+
+def _roll_npc_observers(world: World, pm: "_PendingMeeting") -> List[str]:
+    """v8 — pick NPCs to attend a meeting as silent observers.
+
+    Eligibility: NPC has a home_id (invested in the village), is ACTIVE, is
+    not IRRATIONAL or in the cult, and is currently within ~140 px of the
+    meeting venue (so they're "around"). Cap at 4 observers so the meeting
+    doesn't drown in NPCs.
+    """
+    venue = world.buildings.get(pm.venue_id) if pm.venue_id else None
+    if venue is None:
+        return []
+    out: List[str] = []
+    for a in world.agents.values():
+        if len(out) >= 4:
+            break
+        if getattr(a, "kind", None) != AgentKind.NPC:
+            continue
+        if getattr(a, "status", Status.ACTIVE) != Status.ACTIVE:
+            continue
+        if getattr(a, "home_id", None) is None:
+            continue
+        if getattr(a, "state", None) in (State.IRRATIONAL, State.SLEEPING):
+            continue
+        if getattr(a, "cult_state", "NONE") == "CONVERTED":
+            continue
+        d = math.hypot(a.x - venue.x, a.y - venue.y)
+        if d > 140.0:
+            continue
+        # 35% chance any qualifying NPC drops in.
+        if world.rng.random() < 0.35:
+            out.append(a.id)
+    return out
+
+
+def _attend_roll(world: World, ch: Character, topic: str, caller_id: Optional[str] = None) -> bool:
+    if ch.status != Status.ACTIVE:
+        return False
+    if ch.state in (State.SLEEPING, State.EXPEDITION, State.HYPNOTIZED, State.IRRATIONAL):
+        return False
+    social = ch.personality.get("social", 0.5)
+    leader = ch.personality.get("leader", 0.3)
+    base = 0.35 + 0.5 * social + 0.25 * leader
+    # Imposter suspicion pulls in the paranoid hard.
+    if topic == "imposter_suspicion":
+        base += 0.4 * ch.personality.get("paranoid", 0.5)
+    if topic == "food_supply":
+        base += 0.3 * ch.personality.get("leader", 0.3)
+    # Trust in the caller skews willingness to show up.
+    if caller_id and caller_id != ch.id:
+        t = trust_for(world, ch.id, caller_id)
+        # Centred around baseline so neutral trust is a no-op.
+        base += (t - world.config.trust_baseline) * 0.5
+    return world.rng.random() < min(0.95, base)
+
+
+def _pin_to_meeting(world: World, ch: Character, until_tick: int, venue_id: str) -> None:
+    ch.state = State.MEETING
+    ch.state_since_tick = world.tick_count
+    ch.meeting_until_tick = until_tick
+    b = world.buildings.get(venue_id)
+    if b is not None:
+        ch.target = (b.x, b.y)
+
+
+def _drive_pending_meetings(world: World) -> None:
+    pendings = _get_pendings(world)
+    for pm in list(pendings):
+        if pm.resolved:
+            continue
+        # Gather attendees the first tick after proposal.
+        if not pm.attendees and world.tick_count == pm.started_tick + 1:
+            for ch in _characters(world):
+                if _attend_roll(world, ch, pm.topic, caller_id=pm.caller_id):
+                    pm.attendees.append(ch.id)
+                    _pin_to_meeting(world, ch, pm.deadline_tick, pm.venue_id)
+            # Ensure caller is present.
+            caller = world.agents.get(pm.caller_id)
+            if isinstance(caller, Character) and caller.id not in pm.attendees:
+                pm.attendees.append(caller.id)
+                _pin_to_meeting(world, caller, pm.deadline_tick, pm.venue_id)
+            # v8 — NPCs with a home_id may also show up as observers. They
+            # don't vote on imposter trials (still char-only below) but they
+            # share the room and get trust uplift from the gathering.
+            npc_observers = _roll_npc_observers(world, pm)
+            for nid in npc_observers:
+                pm.attendees.append(nid)
+            if pm.attendees:
+                world.emit(Event(
+                    tick=world.tick_count, type="meeting_started",
+                    subject=pm.caller_id,
+                    detail=f"{pm.topic} ({len(pm.attendees)} attending)",
+                ))
+
+        # Resolve on deadline.
+        if world.tick_count >= pm.deadline_tick:
+            _resolve_meeting(world, pm)
+            pm.resolved = True
+
+    # Drop resolved meetings to keep the list small.
+    world._pending_meetings = [p for p in pendings if not p.resolved]  # type: ignore[attr-defined]
+
+
+def _resolve_meeting(world: World, pm: _PendingMeeting) -> None:
+    all_attendees = [world.agents[a] for a in pm.attendees if a in world.agents]
+    # ``attendees`` is the character-only voting bloc kept for downstream
+    # vote-counting / argument logic; NPC observers are pulled out separately
+    # so they still get the social trust uplift the meeting produced.
+    attendees = [a for a in all_attendees if isinstance(a, Character)]
+    npc_observers = [a for a in all_attendees if not isinstance(a, Character)]
+
+    if not attendees:
+        outcome = MeetingOutcome(
+            tick=world.tick_count, topic=pm.topic, venue_id=pm.venue_id,
+            attendees=[], decision="inconclusive", payload=dict(pm.payload),
+        )
+        world.meeting_outcomes.append(outcome)
+        world.emit(Event(
+            tick=world.tick_count, type="meeting_outcome",
+            subject=pm.caller_id, detail=f"{pm.topic}: inconclusive (no quorum)",
+        ))
+        return
+
+    payload = dict(pm.payload)
+    decision = "inconclusive"
+
+    if pm.topic == "imposter_suspicion":
+        accused = payload.get("accused_npc_id")
+        # Tally guilt scores: each attendee contributes their awareness of the
+        # accused, weighted by how much they trust the caller (the accuser).
+        guilt_yes = 0.0
+        guilt_no = 0.0
+        guilty_voters: List[str] = []
+        for a in attendees:
+            score = float(a.awareness.get(accused, 0.0))
+            paranoid = a.personality.get("paranoid", 0.5)
+            trust_w = trust_for(world, a.id, pm.caller_id) if a.id != pm.caller_id else 1.0
+            # v9 — voter's own beliefs feed back into the vote: a hard
+            # ``yellow_suspect:<accused>`` belief tilts them toward guilty;
+            # a ``yellow_resolved:<accused>`` (the imposter has been banished
+            # before) tilts them toward disbelief.
+            belief_bias = 0.0
+            mind = getattr(a, "mind", None)
+            if mind is not None and accused:
+                b_yes = mind.beliefs.get(f"yellow_suspect:{accused}")
+                if b_yes is not None:
+                    belief_bias += 0.5 * b_yes.confidence * (b_yes.polarity or 1.0)
+                b_no = mind.beliefs.get(f"yellow_resolved:{accused}")
+                if b_no is not None:
+                    belief_bias -= 0.5 * b_no.confidence
+            # Paranoid attendees tip toward guilty even with thin evidence.
+            vote_yes = (score + (paranoid - 0.5) * 2.0 + belief_bias) * (0.5 + trust_w)
+            if vote_yes > 0:
+                guilt_yes += vote_yes
+                guilty_voters.append(a.id)
+            else:
+                guilt_no += -vote_yes + 0.5
+        guilty = guilt_yes > guilt_no
+        decision = "agree" if guilty else "disagree"
+        payload["guilty"] = bool(guilty)
+        if accused is not None:
+            payload["accused_npc_id"] = accused
+        world.emit(Event(
+            tick=world.tick_count, type="imposter_vote",
+            subject=pm.caller_id,
+            detail=f"accused={accused} guilty={guilty}",
+            severity="warn" if guilty else "info",
+        ))
+        # Trust consequences for the verdict.
+        if guilty:
+            # Check whether the accusation was correct — accused must be a
+            # current Yellow tendril for the vote to be "right".
+            tendrils = set(world.yellow_active.tendrils or [])
+            disguised = world.yellow_active.disguised_as
+            if disguised:
+                tendrils.add(disguised)
+            correct = accused in tendrils
+            venue = world.buildings.get(pm.venue_id)
+            venue_name = venue.name if venue is not None else pm.venue_id
+            if correct:
+                # A genuine banishment — journal it.
+                world.emit(Event(
+                    tick=world.tick_count, type="imposter_banished",
+                    subject=pm.caller_id, detail=f"{accused} banished from {venue_name}",
+                    severity="warn",
+                ))
+                legacy.record(world, "imposter_banished", building=venue_name)
+            else:
+                # Witch-hunt: punish trust toward the accuser for everyone who
+                # voted guilty.
+                for voter_id in guilty_voters:
+                    if voter_id != pm.caller_id:
+                        adjust_trust(
+                            world, voter_id, pm.caller_id,
+                            -0.25, "innocent_npc_vote",
+                        )
+    elif pm.topic == "food_supply":
+        # Leaders + brave folk push for expedition.
+        push = sum(0.5 * a.personality.get("leader", 0.3)
+                   + 0.5 * a.personality.get("brave", 0.4)
+                   for a in attendees)
+        threshold = max(1.0, 0.5 * len(attendees))
+        agree = push >= threshold
+        decision = "agree" if agree else "disagree"
+        if agree:
+            world.expedition_authorised = True
+    elif pm.topic == "creature_breach_review":
+        decision = world.rng.choices(
+            ["agree", "disagree", "inconclusive"], weights=[0.5, 0.3, 0.2], k=1,
+        )[0]
+    elif pm.topic == "destroy_music_box":
+        # SEER / PRIEST / INVESTIGATOR vote AGREE strongly.
+        # Worm-infected characters compulsively vote DISAGREE.
+        # Brave lean AGREE; paranoid lean DISAGREE.
+        worms = set(getattr(world, "worms_infected", set()) or set())
+        agree_w = 0.0
+        disagree_w = 0.0
+        for a in attendees:
+            if a.id in worms:
+                disagree_w += 3.0  # compulsion overrides everything
+                continue
+            if a.role in (Role.SEER, Role.PRIEST, Role.INVESTIGATOR):
+                agree_w += 2.5
+            brave = a.personality.get("brave", 0.4)
+            paranoid = a.personality.get("paranoid", 0.5)
+            agree_w += 1.0 + 1.2 * brave
+            disagree_w += 0.5 + 1.2 * paranoid
+        if agree_w > disagree_w:
+            decision = "agree"
+            world.expedition_authorised = True
+            world._expedition_is_music_box = True  # type: ignore[attr-defined]
+            # Journal it once.
+            already_logged = getattr(world, "_destroy_music_box_logged", False)
+            if not already_logged:
+                try:
+                    legacy.record(world, "destroy_music_box_called", caller="Khatri")
+                except Exception:
+                    pass
+                world._destroy_music_box_logged = True  # type: ignore[attr-defined]
+        else:
+            decision = "disagree"
+    else:
+        # Generic resolution — weighted by attendees' leader / social vibe.
+        agree_w = sum(0.5 + 0.5 * a.personality.get("leader", 0.3) for a in attendees)
+        disagree_w = sum(0.3 + 0.6 * a.personality.get("paranoid", 0.5) for a in attendees)
+        if agree_w > disagree_w * 1.2:
+            decision = "agree"
+        elif disagree_w > agree_w * 1.2:
+            decision = "disagree"
+        else:
+            decision = "inconclusive"
+
+    outcome = MeetingOutcome(
+        tick=world.tick_count, topic=pm.topic, venue_id=pm.venue_id,
+        attendees=[a.id for a in attendees], decision=decision, payload=payload,
+    )
+    world.meeting_outcomes.append(outcome)
+    world.emit(Event(
+        tick=world.tick_count, type="meeting_outcome",
+        subject=pm.caller_id, detail=f"{pm.topic}: {decision}",
+        severity="warn" if pm.topic == "imposter_suspicion" else "info",
+    ))
+
+    # v5 — record a per-attendee memory row for the outcome.
+    if world.memory is not None and decision in ("agree", "disagree"):
+        kind = "meeting_agree" if decision == "agree" else "meeting_disagree"
+        for a in attendees:
+            try:
+                world.memory.record_character_memory(
+                    world, a.id, kind,
+                    subject=pm.topic, detail=pm.venue_id,
+                )
+            except Exception:
+                pass
+
+    # Trust deltas across the attendee graph. v8 — NPC observers join the
+    # uplift so attending a meeting actually shifts how the village sees
+    # them. We use a softer delta for char↔NPC pairs (half the magnitude)
+    # since NPCs didn't speak, only stood in the room.
+    if decision in ("agree", "disagree") and len(attendees) >= 2:
+        delta_char = 0.05 if decision == "agree" else -0.10
+        delta_npc = delta_char * 0.5
+        reason = f"meeting_{decision}:{pm.topic}"
+        char_ids = [a.id for a in attendees]
+        npc_ids = [a.id for a in npc_observers]
+        # Character-to-character (full delta).
+        for i in range(len(char_ids)):
+            for j in range(i + 1, len(char_ids)):
+                adjust_trust(world, char_ids[i], char_ids[j], delta_char, reason)
+        # Each character ↔ each NPC observer (softer delta).
+        for cid in char_ids:
+            for nid in npc_ids:
+                adjust_trust(world, cid, nid, delta_npc, reason)
+
+    # Release attendees from State.MEETING; on disagreement, flip a few to ARGUING.
+    if decision == "disagree" and len(attendees) >= 2:
+        n_arg = min(2, len(attendees))
+        arguers = world.rng.sample(attendees, n_arg)
+    else:
+        arguers = []
+    arg_set = {a.id for a in arguers}
+    arguer_ids = list(arg_set)
+    for a in attendees:
+        a.meeting_until_tick = 0
+        if a.id in arg_set:
+            a.state = State.ARGUING
+            a.state_since_tick = world.tick_count
+            a.arguing_until_tick = world.tick_count + ARGUE_DURATION_TICKS
+            a.fear = min(100.0, a.fear + 8.0)
+            a.sanity = max(0.0, a.sanity - 3.0)
+            world.emit(Event(
+                tick=world.tick_count, type="argument",
+                subject=a.id, detail=f"after {pm.topic}",
+            ))
+            # v5 — argument memory for each fighter, naming an opponent.
+            if world.memory is not None:
+                opponents = [x for x in arguer_ids if x != a.id]
+                opp = opponents[0] if opponents else pm.topic
+                try:
+                    world.memory.record_character_memory(
+                        world, a.id, "argument",
+                        subject=opp, detail=pm.topic,
+                    )
+                except Exception:
+                    pass
+        else:
+            a.state = State.WANDERING
+            a.state_since_tick = world.tick_count
+            a.target = None
+    # Pairwise trust hit for the arguers.
+    for i in range(len(arguer_ids)):
+        for j in range(i + 1, len(arguer_ids)):
+            adjust_trust(world, arguer_ids[i], arguer_ids[j], -0.15, "argument")
+
+    # Clear awareness for the accused once a verdict has landed.
+    if pm.topic == "imposter_suspicion":
+        accused = payload.get("accused_npc_id")
+        if accused is not None:
+            for a in attendees:
+                a.awareness.pop(accused, None)
+
+
+# ---------------------------------------------------------------------------
+# Opportunistic conversations
+# ---------------------------------------------------------------------------
+
+
+def _drive_conversations(world: World) -> None:
+    pairs = _get_pairings(world)
+
+    # First, expire pairings whose deadline passed.
+    expired: List[str] = []
+    for cid, (partner, until) in pairs.items():
+        if world.tick_count >= until:
+            expired.append(cid)
+    for cid in expired:
+        partner, _ = pairs.pop(cid)
+        pairs.pop(partner, None)
+        a = world.agents.get(cid)
+        b = world.agents.get(partner)
+        if isinstance(a, Character) and a.state == State.CONVERSING:
+            a.state = State.WANDERING
+            a.conversation_partner = None
+        if isinstance(b, Character) and b.state == State.CONVERSING:
+            b.state = State.WANDERING
+            b.conversation_partner = None
+
+    # Only spawn new conversations during DAY phase.
+    if world.time.phase != Phase.DAY:
+        return
+
+    chars = [
+        c for c in _characters(world)
+        if c.id not in pairs
+        and c.state not in (State.MEETING, State.ARGUING, State.CONVERSING,
+                            State.SLEEPING, State.EXPEDITION, State.HYPNOTIZED,
+                            State.IRRATIONAL, State.FLEEING)
+    ]
+    # Limit work: O(n^2) over 10 characters is fine.
+    for i in range(len(chars)):
+        a = chars[i]
+        if a.id in pairs:
+            continue
+        for j in range(i + 1, len(chars)):
+            b = chars[j]
+            if b.id in pairs:
+                continue
+            d = math.hypot(a.x - b.x, a.y - b.y)
+            if d > CONVERSATION_RADIUS:
+                continue
+            # Blend trust with the role-compat hint and social personality.
+            base = _ROLE_COMPAT.get(frozenset({a.role, b.role}), 1.0)
+            social = 0.5 * (a.personality.get("social", 0.5) + b.personality.get("social", 0.5))
+            paranoia = 0.5 * (a.personality.get("paranoid", 0.5) + b.personality.get("paranoid", 0.5))
+            t = trust_for(world, a.id, b.id)
+            # Centre trust around 0.5 so neutral is a no-op; max ~2x weighting.
+            score = base * (0.4 + 1.2 * social) * (1.1 - 0.5 * paranoia) * (0.5 + 2.0 * t)
+            if world.rng.random() < 0.05 * score:
+                until = world.tick_count + CONVERSATION_DURATION_TICKS
+                pairs[a.id] = (b.id, until)
+                pairs[b.id] = (a.id, until)
+                a.state = State.CONVERSING
+                b.state = State.CONVERSING
+                a.conversation_partner = b.id
+                b.conversation_partner = a.id
+                a.state_since_tick = world.tick_count
+                b.state_since_tick = world.tick_count
+                # Seers/caretakers chatting with supernaturals soften the sanity hit.
+                if a.role in (Role.SEER, Role.CARETAKER) or b.role in (Role.SEER, Role.CARETAKER):
+                    if world.supernaturals:
+                        a.sanity = min(100.0, a.sanity + 1.0)
+                        b.sanity = min(100.0, b.sanity + 1.0)
+                world.emit(Event(
+                    tick=world.tick_count, type="conversation",
+                    subject=a.id, detail=f"with {b.id}",
+                ))
+                # v5 — record a conversation memory row for both sides.
+                if world.memory is not None:
+                    try:
+                        world.memory.record_character_memory(
+                            world, a.id, "conversation", subject=b.id,
+                        )
+                    except Exception:
+                        pass
+                    try:
+                        world.memory.record_character_memory(
+                            world, b.id, "conversation", subject=a.id,
+                        )
+                    except Exception:
+                        pass
+                adjust_trust(world, a.id, b.id, 0.03, "conversation")
+                break
+
+    # ---------------------------------------------------------------- v8
+    # Character ↔ NPC conversations. Previously the two castes ignored each
+    # other entirely; characters and NPCs in the same building or square
+    # would walk past one another like ghosts. We now pair them when nearby:
+    # the character must be in a "social" state, the NPC must be wandering
+    # / socialising / working (not sheltering, not irrational), and the
+    # pair must be within CONVERSATION_RADIUS. A successful chat raises
+    # mutual trust like a char-char chat would.
+    char_available = [
+        c for c in _characters(world)
+        if c.id not in pairs
+        and c.state not in (State.MEETING, State.ARGUING, State.CONVERSING,
+                            State.SLEEPING, State.EXPEDITION, State.HYPNOTIZED,
+                            State.IRRATIONAL, State.FLEEING, State.SHELTERING)
+    ]
+    if char_available:
+        npc_kindset = {State.WANDERING, State.WORKING, State.SOCIALIZING}
+        for c in char_available:
+            if c.id in pairs:
+                continue
+            # Find the nearest eligible NPC.
+            best = None
+            best_d = CONVERSATION_RADIUS
+            for n in world.agents.values():
+                if getattr(n, "kind", None) != AgentKind.NPC:
+                    continue
+                if getattr(n, "status", Status.ACTIVE) != Status.ACTIVE:
+                    continue
+                if getattr(n, "state", None) not in npc_kindset:
+                    continue
+                if n.id in pairs:
+                    continue
+                d = math.hypot(c.x - n.x, c.y - n.y)
+                if d < best_d:
+                    best_d = d
+                    best = n
+            if best is None:
+                continue
+            social = c.personality.get("social", 0.5)
+            paranoia = c.personality.get("paranoid", 0.5)
+            t = trust_for(world, c.id, best.id)
+            # Cult NPCs are unfriendly — they don't chat; they unsettle.
+            cult = getattr(best, "cult_state", "NONE")
+            if cult == "CONVERTED":
+                continue
+            score = (0.4 + 1.2 * social) * (1.1 - 0.5 * paranoia) * (0.5 + 2.0 * t)
+            if world.rng.random() < 0.035 * score:
+                until = world.tick_count + CONVERSATION_DURATION_TICKS
+                pairs[c.id] = (best.id, until)
+                pairs[best.id] = (c.id, until)
+                c.state = State.CONVERSING
+                c.conversation_partner = best.id
+                c.state_since_tick = world.tick_count
+                npc_label = (
+                    f"{best.name} {best.surname}".strip()
+                    if getattr(best, "surname", None)
+                    else getattr(best, "name", best.id)
+                )
+                world.emit(Event(
+                    tick=world.tick_count, type="conversation",
+                    subject=c.id, detail=f"with {npc_label}",
+                ))
+                if world.memory is not None:
+                    try:
+                        world.memory.record_character_memory(
+                            world, c.id, "conversation", subject=best.id,
+                        )
+                    except Exception:
+                        pass
+                adjust_trust(world, c.id, best.id, 0.03, "char_npc_conversation")
