@@ -64,7 +64,7 @@ services:
       - memcached
 
   memcached:
-    image: memcached:1.6@sha256:dc561d52bb8ad3c038867123ed2dc8357c4c128f047cdbd526cd65cf39408cbd
+    image: memcached:1.6@sha256:75c93cc91e76853da7c029e74d6e8dbd44774dd3713c93be8cd1971ad26120a4
     container_name: memcached
     ports:
       - "11211:11211"
