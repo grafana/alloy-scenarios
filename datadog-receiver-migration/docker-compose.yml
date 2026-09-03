@@ -22,7 +22,7 @@ services:
       - alloy
 
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.18.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.19.2}
     volumes:
       - ./config.alloy:/etc/alloy/config.alloy
     command: run --server.http.listen-addr=0.0.0.0:12345 --stability.level=experimental /etc/alloy/config.alloy
