@@ -1,0 +1,227 @@
+{% extends "layout.html" %}
+
+{% block title %}Fromville — Live{% endblock %}
+
+{% block hud %}
+<div class="hud">
+  <div class="hud-cell clock">
+    <span class="hud-label">Clock</span>
+    <span id="hud-clock" class="hud-value">D0 06:00 DAY</span>
+  </div>
+  <div class="hud-cell phase">
+    <span class="hud-label">Phase</span>
+    <span id="hud-phase" class="hud-chip phase-day">DAY</span>
+  </div>
+  <div class="hud-cell cycle">
+    <span class="hud-label">Cycle</span>
+    <span id="hud-cycle" class="hud-badge">1</span>
+    <span id="hud-fragments" class="hud-fragments" title="journal fragments preserved">&#x1F4DC; 0 fragments</span>
+  </div>
+  <div class="hud-cell witnessed">
+    <span class="hud-label">Witnessed</span>
+    <span id="hud-cycles-witnessed" class="hud-witnessed">Cycle 1 of all that has ever been</span>
+  </div>
+  <div class="hud-cell food">
+    <span class="hud-label">Food</span>
+    <div class="bar"><div id="hud-food-fill" class="bar-fill"></div></div>
+    <span id="hud-food-text" class="bar-text">100 / 200</span>
+  </div>
+  <div class="hud-cell farm">
+    <span class="hud-label">Farm</span>
+    <div class="bar"><div id="hud-farm-fill" class="bar-fill"></div></div>
+    <span id="hud-farm-text" class="bar-text">100%</span>
+  </div>
+  <div class="hud-cell yellow">
+    <span id="hud-yellow" class="hud-chip yellow-dormant hidden">DORMANT</span>
+  </div>
+  <!-- v9: minds heatmap — Director pressure + goal-mix at a glance. -->
+  <div class="hud-cell minds" id="hud-minds-cell">
+    <span class="hud-label">Minds</span>
+    <div class="minds-row">
+      <div class="minds-pressure" title="Director pressure (0 = quiet, 1 = breaking)">
+        <div class="bar"><div id="hud-pressure-fill" class="bar-fill pressure"></div></div>
+        <span id="hud-pressure-text" class="bar-text">0.00</span>
+      </div>
+      <div class="minds-goals" id="hud-goals">
+        <span class="goal-pip goal-protect" title="PROTECT">P<span data-kind="protect">0</span></span>
+        <span class="goal-pip goal-investigate" title="INVESTIGATE">I<span data-kind="investigate">0</span></span>
+        <span class="goal-pip goal-revenge" title="REVENGE">R<span data-kind="revenge">0</span></span>
+        <span class="goal-pip goal-flee" title="FLEE">F<span data-kind="flee">0</span></span>
+        <span class="goal-pip goal-find_item" title="FIND ITEM">$<span data-kind="find_item">0</span></span>
+      </div>
+      <div class="minds-popstress" title="Population-stress: how much the Director is escalating because the town is thriving (0..0.4)">
+        <span class="minds-label">PS</span>
+        <span id="hud-pop-stress">0.00</span>
+      </div>
+      <div class="minds-beliefs" title="active beliefs across all minds">
+        <span class="minds-label">Beliefs</span>
+        <span id="hud-beliefs-count">0</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block main %}
+<section class="map-pane" id="world">
+  <div class="map-wrap" id="mapWrap" data-time="day">
+    <div class="lighting" id="lighting"></div>
+    {% include "_map_svg.html" %}
+  </div>
+</section>
+
+<!-- v6: floating dossier overlay populated by inspector.js on inspect_reply. -->
+<aside class="dossier hidden" id="dossier"></aside>
+
+<aside class="side-pane">
+  <details class="panel" open>
+    <summary>Event Log</summary>
+    <ol id="event-log" class="event-log"></ol>
+  </details>
+
+  <details class="panel" open>
+    <summary>Roster</summary>
+    <div class="roster">
+      <div class="roster-summary" id="roster-summary">
+        <span class="roster-count" data-pool="char">0 chars</span>
+        <span class="roster-count" data-pool="npc">0 NPCs</span>
+        <span class="roster-count" data-pool="creature">0 creatures</span>
+      </div>
+      <ul id="roster-list" class="roster-list"></ul>
+      <div id="roster-detail" class="roster-detail">
+        <div class="roster-empty">Click any token on the map to inspect.</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="panel" open>
+    <summary>Stats</summary>
+    <dl id="stats" class="stats">
+      <dt>Tick</dt><dd id="stat-tick">0</dd>
+      <dt>Cycle</dt><dd id="stat-cycle">1</dd>
+      <dt>Village wipes</dt><dd id="stat-wipes">0</dd>
+      <dt>Lighting</dt><dd id="stat-lighting">1.000</dd>
+      <dt>Food</dt><dd id="stat-food">100 / 200</dd>
+      <dt>Farm health</dt><dd id="stat-farm">100%</dd>
+      <dt>Characters</dt><dd id="stat-chars">0</dd>
+      <dt>NPCs</dt><dd id="stat-npcs">0</dd>
+      <dt>Creatures</dt><dd id="stat-creatures">0</dd>
+      <dt>Yellow Man</dt><dd id="stat-yellow">DORMANT</dd>
+      <dt>Cave clues</dt><dd id="stat-cave-clues">0</dd>
+      <dt>Barn</dt><dd id="stat-barn">intact</dd>
+    </dl>
+  </details>
+
+  <details class="panel" id="township-index" open>
+    <summary>Township Index</summary>
+    <div class="index-list" id="indexList">
+      <div class="n">1</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="2" y="7" width="12" height="8" fill="#7c5a3e" stroke="#1a1611" stroke-width="0.5"/><polygon points="1,7 15,7 13,4 3,4" fill="#3a261a" stroke="#1a1611" stroke-width="0.5"/><circle cx="5" cy="7" r="1.7" fill="#8a6a4a" stroke="#1a1611" stroke-width="0.4"/><polygon points="3.3,7 6.7,7 5,4.5" fill="#3a261a" stroke="#1a1611" stroke-width="0.4"/><rect x="7" y="11" width="2" height="4" fill="#2a1810"/></svg></div>
+      <div class="t">Colony House<span class="tag">&#x2605;</span></div>
+
+      <div class="n">2</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="8" width="10" height="7" fill="#a8b07a" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,8 14,8 12,4 4,4" fill="#4a5e34" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="11" width="2" height="4" fill="#2a2a18"/></svg></div>
+      <div class="t">Green House</div>
+
+      <div class="n">3</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="4" y="9" width="8" height="6" fill="#5a4632" stroke="#1a1611" stroke-width="0.5"/><polygon points="3,9 13,9 11,5 5,5" fill="#2a1810" stroke="#1a1611" stroke-width="0.5"/></svg></div>
+      <div class="t">Shed</div>
+
+      <div class="n">4</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="8" width="10" height="7" fill="#c9bca0" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,8 14,8 12,4 4,4" fill="#5d4a3a" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="10" width="2" height="4" fill="#a83a2a"/><rect x="6" y="11" width="4" height="2" fill="#a83a2a"/></svg></div>
+      <div class="t">Clinic<span class="tag">&#x2605;</span></div>
+
+      <div class="n">5</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><ellipse cx="8" cy="13" rx="6" ry="3" fill="#3a3024" opacity="0.5"/><ellipse cx="8" cy="11" rx="7" ry="4" fill="#7a5a3a" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="10" width="2" height="4" fill="#2a1810"/></svg></div>
+      <div class="t">Root Cellar</div>
+
+      <div class="n">6</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><ellipse cx="8" cy="14" rx="5" ry="1" fill="#3a3024" opacity="0.5"/><polygon points="5.5,14 5,5 7.5,3 10,5 9.5,14" fill="#6a5f48" stroke="#1a1611" stroke-width="0.5"/><path d="M 6.5 7 q 1.5 -1.5 3 0" stroke="#3a3024" stroke-width="0.4" fill="none"/></svg></div>
+      <div class="t">Choosing Ceremony Stone</div>
+
+      <div class="n">7</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="9" width="10" height="6" fill="#9a8e72" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,9 14,9 12,6 4,6" fill="#3a3024" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="4" width="2" height="3" fill="#7a6e58" stroke="#1a1611" stroke-width="0.4"/><polygon points="6.8,4 9.2,4 8,1.5" fill="#3a3024"/><rect x="7.7" y="0" width="0.6" height="3" fill="#1a1611"/><rect x="6.8" y="1" width="2.4" height="0.5" fill="#1a1611"/><circle cx="8" cy="11.5" r="0.7" fill="#d4a85a"/></svg></div>
+      <div class="t">Church<span class="tag">&#x2605;</span></div>
+
+      <div class="n">8</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="8" width="10" height="7" fill="#7a7468" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,8 14,8 12,4 4,4" fill="#3a3a32" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="11" width="2" height="4" fill="#2a2a22"/></svg></div>
+      <div class="t">Grey House</div>
+
+      <div class="n">9</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="8" width="10" height="7" fill="#6a7e92" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,8 14,8 12,4 4,4" fill="#3a4250" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="11" width="2" height="4" fill="#2a3038"/></svg></div>
+      <div class="t">Blue House</div>
+
+      <div class="n">10</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="2" y="7" width="12" height="8" rx="0.6" fill="#cabd9a" stroke="#1a1611" stroke-width="0.5"/><rect x="4" y="9" width="8" height="4" fill="#6a8a8e" stroke="#1a1611" stroke-width="0.4"/><path d="M4 11 h8 M8 9 v4" stroke="#4a6e72" stroke-width="0.4"/></svg></div>
+      <div class="t">Pool</div>
+
+      <div class="n">11</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="8" width="10" height="7" fill="#8a6a48" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,8 14,8 12,4 4,4" fill="#4a3024" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="11" width="2" height="4" fill="#2a1810"/></svg></div>
+      <div class="t">Lius' Home</div>
+
+      <div class="n">12</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="2" y="7" width="12" height="2" fill="#3a2820" stroke="#1a1611" stroke-width="0.4"/><rect x="3" y="9" width="1.8" height="2" fill="#a83a2a" stroke="#1a1611" stroke-width="0.3"/><rect x="2" y="9" width="12" height="6" fill="#5a4632" stroke="#1a1611" stroke-width="0.5"/><rect x="5" y="11" width="6" height="2" fill="#1a1611"/><text x="8" y="12.6" font-size="1.9" fill="#d8a83a" text-anchor="middle" font-family="Georgia, serif" font-weight="bold">BAR</text></svg></div>
+      <div class="t">Bar</div>
+
+      <div class="n">13</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="2" y="7" width="12" height="8" fill="#a83a2a" stroke="#1a1611" stroke-width="0.5"/><polygon points="1,7 15,7 13,4 3,4" fill="#2a1810" stroke="#1a1611" stroke-width="0.5"/><rect x="6" y="10" width="4" height="5" fill="#3a2418" stroke="#1a1611" stroke-width="0.4"/><path d="M6 10 L10 15 M10 10 L6 15" stroke="#f0e6c8" stroke-width="0.5"/></svg></div>
+      <div class="t">Barn</div>
+
+      <div class="n">14</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><path d="M 8 2 L 9.5 6.2 L 14 6.2 L 10.4 8.8 L 11.7 13 L 8 10.6 L 4.3 13 L 5.6 8.8 L 2 6.2 L 6.5 6.2 Z" fill="#d8a83a" stroke="#1a1611" stroke-width="0.6" stroke-linejoin="round"/></svg></div>
+      <div class="t">Sheriff's Office<span class="tag">&#x2605;</span></div>
+
+      <div class="n">15</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="1.5" y="7" width="13" height="6" rx="1" fill="#d8a83a" stroke="#1a1611" stroke-width="0.5"/><rect x="2.5" y="8" width="2" height="2" fill="#2a3038"/><rect x="5" y="8" width="2" height="2" fill="#2a3038"/><rect x="7.5" y="8" width="2" height="2" fill="#2a3038"/><rect x="10" y="8" width="2" height="2" fill="#2a3038"/><rect x="12.5" y="8" width="1.5" height="2" fill="#2a3038"/><circle cx="4" cy="13.5" r="1.2" fill="#1a1611"/><circle cx="12" cy="13.5" r="1.2" fill="#1a1611"/></svg></div>
+      <div class="t">Bus</div>
+
+      <div class="n">16</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="9" width="10" height="6" fill="#7a5640" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,9 7,9 6,5 4,5" fill="#3a2820" stroke="#1a1611" stroke-width="0.5"/><polygon points="9,9 14,9 13,6 10,8" fill="#3a2820" stroke="#1a1611" stroke-width="0.5"/><line x1="7" y1="9" x2="9" y2="9" stroke="#1a1611" stroke-width="0.4"/><circle cx="6" cy="12" r="0.6" fill="#3a2820"/><circle cx="10" cy="13" r="0.5" fill="#3a2820"/></svg></div>
+      <div class="t">Matthews' Home<span class="tag">&#x2605;</span></div>
+
+      <div class="n">17</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="-1" width="4.5" height="3" fill="#a83a2a" stroke="#1a1611" stroke-width="0.4"/><text x="5.3" y="1.2" font-size="1.8" fill="#f0e6c8" text-anchor="middle" font-family="Georgia, serif" font-weight="bold">DINER</text><line x1="5.3" y1="2" x2="5.3" y2="9" stroke="#1a1611" stroke-width="0.6"/><rect x="2" y="9" width="12" height="6" fill="#b07a3a" stroke="#1a1611" stroke-width="0.5"/><path d="M2 9 Q8 4 14 9" fill="#cdc6b4" stroke="#1a1611" stroke-width="0.5"/><rect x="3" y="11" width="10" height="2" fill="#1a1611" opacity="0.5"/></svg></div>
+      <div class="t">Diner</div>
+
+      <div class="n">18</div>
+      <div class="ic"><svg viewBox="-1 0 18 17"><rect x="3" y="8" width="10" height="7" fill="#8a6a48" stroke="#1a1611" stroke-width="0.5"/><polygon points="2,8 14,8 12,4 4,4" fill="#4a3024" stroke="#1a1611" stroke-width="0.5"/><rect x="7" y="11" width="2" height="4" fill="#2a1810"/></svg></div>
+      <div class="t">Myers' Home</div>
+    </div>
+  </details>
+
+  <details class="panel narration-panel" id="narration-panel" style="display:none;">
+    <summary>Narration</summary>
+    <ol id="narration" class="narration"></ol>
+  </details>
+
+  <details class="panel" id="journal">
+    <summary>Khatri's Journal</summary>
+    <ol id="journal-list" class="journal-list"></ol>
+  </details>
+
+  <details class="panel" id="lighthouse-voice" style="display:none;">
+    <summary>Voice from the Lighthouse</summary>
+    <ol id="lighthouse-voice-list" class="lighthouse-voice-list"></ol>
+  </details>
+
+  <details class="panel" id="bus-panel" style="display:none;">
+    <summary>The Bus</summary>
+    <div class="bus-body">
+      <div id="bus-countdown" class="bus-countdown">—</div>
+      <ul id="bus-passengers" class="bus-passengers"></ul>
+    </div>
+  </details>
+</aside>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.FROM_SIM = {
+    llmEnabled: {{ 'true' if llm_enabled else 'false' }},
+  };
+</script>
+<script src="{{ url_for('static', filename='js/lighting.js') }}"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/inspector.js') }}"></script>
+<script src="{{ url_for('static', filename='js/socket.js') }}"></script>
+{% endblock %}
