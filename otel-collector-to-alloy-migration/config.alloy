@@ -1,0 +1,41 @@
+livedebugging {
+	enabled = true
+}
+
+// This is the River equivalent of collector-config.yaml. Both pipelines
+// receive the same OTLP telemetry from the demo app and use batch processing.
+otelcol.receiver.otlp "default" {
+	grpc { }
+
+	output {
+		traces  = [otelcol.processor.batch.default.input]
+		metrics = [otelcol.processor.batch.default.input]
+	}
+}
+
+otelcol.processor.batch "default" {
+	output {
+		traces  = [otelcol.exporter.otlp.tempo.input]
+		metrics = [otelcol.exporter.otlphttp.prometheus.input]
+	}
+}
+
+otelcol.exporter.otlp "tempo" {
+	client {
+		endpoint = "tempo-alloy:4317"
+
+		tls {
+			insecure = true
+		}
+	}
+}
+
+otelcol.exporter.otlphttp "prometheus" {
+	client {
+		endpoint = "http://prometheus-alloy:9090/api/v1/otlp"
+
+		tls {
+			insecure = true
+		}
+	}
+}
