@@ -68,6 +68,7 @@ These scenarios show distributed tracing with OpenTelemetry and Tempo.
 | [Distributed tracing](trace-delivery/) | Learn distributed tracing through a sofa delivery workflow from order to doorstep. |
 | [Game of tracing](game-of-tracing/) | Play an interactive strategy game that teaches distributed tracing, sampling, and service graphs. |
 | [OpenTelemetry basic tracing](otel-basic-tracing/) | Collect and visualize OpenTelemetry traces with Alloy and Tempo. |
+| [OpenTelemetry Collector to Alloy migration](otel-collector-to-alloy-migration/) | Compare equivalent OTLP pipelines in the OpenTelemetry Collector and Alloy with matching telemetry. |
 | [OpenTelemetry SDK traces across languages](app-instrumentation/traces/opentelemetry-sdk/) | Instrument five languages with the OpenTelemetry tracing SDK and collect standalone traces through Alloy into Tempo. |
 | [OpenTelemetry Jaeger and Zipkin receivers](otel-jaeger-zipkin-receiver/) | Ingest Jaeger and Zipkin trace formats with Alloy and forward them to Tempo over OTLP. |
 | [Zero-code eBPF instrumentation](beyla-zero-code-instrumentation/) | Auto-instrument an unmodified Go HTTP service with `beyla.ebpf` -- no OpenTelemetry SDK, no agent, no code changes. Produces RED metrics and traces from eBPF probes alone. |

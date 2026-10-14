@@ -1,0 +1,119 @@
+services:
+  app:
+    build:
+      context: ./app
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.11-slim}
+    depends_on:
+      - alloy
+      - collector
+
+  # The Alloy implementation of the pipeline in collector-config.yaml.
+  alloy:
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.19.2}
+    ports:
+      - 12345:12345
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    depends_on:
+      - tempo-alloy
+      - prometheus-alloy
+
+  # The stock Collector configuration used as the migration baseline.
+  collector:
+    image: otel/opentelemetry-collector:${OTELCOL_VERSION:-0.140.1}
+    volumes:
+      - ./collector-config.yaml:/etc/otelcol/config.yaml
+    command: ["--config=/etc/otelcol/config.yaml"]
+    depends_on:
+      - tempo-collector
+      - prometheus-collector
+
+  prometheus-alloy:
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.1}
+    command:
+      - --web.enable-otlp-receiver
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./prom-config.yaml:/etc/prometheus/prometheus.yml
+
+  prometheus-collector:
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.1}
+    command:
+      - --web.enable-otlp-receiver
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./prom-config.yaml:/etc/prometheus/prometheus.yml
+
+  tempo-alloy:
+    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.7}
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo-config.yaml:/etc/tempo.yaml
+
+  tempo-collector:
+    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.7}
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo-config.yaml:/etc/tempo.yaml
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-13.1.0}
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+    ports:
+      - 3000:3000
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /etc/grafana/provisioning/datasources
+        cat <<EOF > /etc/grafana/provisioning/datasources/ds.yaml
+        apiVersion: 1
+        datasources:
+        - name: Prometheus (Alloy)
+          type: prometheus
+          access: proxy
+          orgId: 1
+          url: http://prometheus-alloy:9090
+          basicAuth: false
+          isDefault: true
+          version: 1
+          editable: false
+        - name: Prometheus (Collector)
+          type: prometheus
+          access: proxy
+          orgId: 1
+          url: http://prometheus-collector:9090
+          basicAuth: false
+          isDefault: false
+          version: 1
+          editable: false
+        - name: Tempo (Alloy)
+          type: tempo
+          access: proxy
+          orgId: 1
+          url: http://tempo-alloy:3200
+          basicAuth: false
+          isDefault: false
+          version: 1
+          editable: false
+        - name: Tempo (Collector)
+          type: tempo
+          access: proxy
+          orgId: 1
+          url: http://tempo-collector:3200
+          basicAuth: false
+          isDefault: false
+          version: 1
+          editable: false
+        EOF
+        /run.sh
+    depends_on:
+      - prometheus-alloy
+      - prometheus-collector
+      - tempo-alloy
+      - tempo-collector

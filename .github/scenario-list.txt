@@ -23,6 +23,7 @@ mssql-monitoring
 mysql-monitoring
 nginx-monitoring
 otel-basic-tracing
+otel-collector-to-alloy-migration
 otel-loadbalancing
 otel-metrics-pipeline
 otel-span-metrics
