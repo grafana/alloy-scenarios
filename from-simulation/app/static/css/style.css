@@ -1,0 +1,1490 @@
+/* ============================================================
+ * Fromville — UI styles
+ * Dark Americana / gothic dread theme. Sans-serif body,
+ * serif accents in HUD chips. Panels are scrollable.
+ * ============================================================ */
+
+:root {
+  --bg-0: #08080a;
+  --bg-1: #11121a;
+  --bg-2: #181a24;
+  --bg-3: #20232f;
+  --line: #2a2d3a;
+  --text: #cfd1da;
+  --muted: #8a8e9c;
+  --warn: #c8a14a;
+  --crit: #b94747;
+  --ok: #5a8a5a;
+
+  --char: #f3e3c2;        /* warm cream */
+  --npc: #8a8e9c;          /* muted grey */
+  --creature: #c44141;     /* blood red */
+  --boy-in-white: #f6f3e2; /* luminous */
+  --man-in-yellow: #d8b340;
+  --anghkooey: #6c4a90;
+  --faraway-tree: #3f9b8a;
+  --talisman: #cda74d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-0);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  height: 100%;
+}
+
+body.theme-dread {
+  background:
+    radial-gradient(ellipse at top, #1a1525 0%, #08080a 60%) fixed,
+    var(--bg-0);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============================== topbar HUD ============================== */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  background: linear-gradient(180deg, rgba(20, 18, 32, 0.95), rgba(8, 8, 12, 0.95));
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.brand-mark {
+  font-family: "Georgia", serif;
+  font-size: 22px;
+  letter-spacing: 6px;
+  color: var(--talisman);
+}
+.brand-sub {
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hud {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.hud-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  min-height: 28px;
+}
+/* Hide HUD cells whose only child is .hidden (keeps the bar from
+   showing an empty 18px-wide bordered box when e.g. the yellow chip
+   is dormant-hidden). */
+.hud-cell:empty,
+.hud-cell:has(> .hidden:only-child) {
+  display: none;
+}
+.hud-label {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.hud-value {
+  font-family: "Georgia", serif;
+  font-size: 13px;
+  color: var(--text);
+}
+.hud-badge {
+  display: inline-block;
+  background: var(--bg-3);
+  color: var(--talisman);
+  border: 1px solid var(--talisman);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.hud-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+}
+.phase-day { background: rgba(218, 192, 121, 0.18); color: #f5e3a8; border-color: #6a5524; }
+.phase-dusk { background: rgba(180, 88, 56, 0.2); color: #f0b48a; border-color: #6e3a24; }
+.phase-night { background: rgba(40, 36, 80, 0.45); color: #b8b1ff; border-color: #3a3460; }
+.phase-dawn { background: rgba(120, 92, 130, 0.25); color: #e7c4ed; border-color: #5a3b66; }
+
+.yellow-visible_march {
+  background: rgba(216, 179, 64, 0.18);
+  border-color: var(--man-in-yellow);
+  color: var(--man-in-yellow);
+}
+.yellow-imposter {
+  background: rgba(216, 179, 64, 0.12);
+  border-color: var(--man-in-yellow);
+  color: #f4d77a;
+  animation: pulse-yellow 1.8s ease-in-out infinite;
+}
+.yellow-dormant { opacity: 0.4; }
+@keyframes pulse-yellow {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; box-shadow: 0 0 8px rgba(216, 179, 64, 0.6); }
+}
+
+.bar {
+  position: relative;
+  width: 80px;
+  height: 6px;
+  background: var(--bg-3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.bar-fill {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  background: linear-gradient(90deg, #5a8a5a, #cda74d);
+  transition: width 600ms ease-out;
+}
+.bar-text {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ============================== layout ============================== */
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 12px;
+  padding: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.map-pane {
+  position: relative;
+  background: #0a0a0e;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.6);
+}
+
+#world {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.side-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 4px;
+  min-height: 0;
+}
+/* Panels are flex items in the side-pane. Without flex-shrink: 0
+   they would be squashed to fit the column's available height,
+   which silently hides content. Let the side-pane scroll instead. */
+.side-pane > .panel {
+  flex: 0 0 auto;
+}
+
+/* ============================== panels ============================== */
+.panel {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.panel > summary {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+  list-style: none;
+  user-select: none;
+}
+.panel > summary::-webkit-details-marker { display: none; }
+.panel > summary::after {
+  content: "−";
+  float: right;
+  color: var(--talisman);
+}
+.panel:not([open]) > summary::after { content: "+"; }
+.panel > *:not(summary) {
+  padding: 8px 12px;
+}
+/* Lists that grow unbounded over the run get capped so they don't
+   dominate the side-pane scroll. Static / short panels (Stats,
+   Township Index, Roster, Bus) size to their content and the
+   side-pane is the single scroll container. */
+#event-log,
+#journal-list,
+#lighthouse-voice-list,
+#narration {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* scrollbars */
+.panel > *:not(summary)::-webkit-scrollbar,
+.side-pane::-webkit-scrollbar {
+  width: 8px;
+}
+.panel > *:not(summary)::-webkit-scrollbar-track,
+.side-pane::-webkit-scrollbar-track {
+  background: transparent;
+}
+.panel > *:not(summary)::-webkit-scrollbar-thumb,
+.side-pane::-webkit-scrollbar-thumb {
+  background: var(--bg-3);
+  border-radius: 4px;
+}
+
+/* ============================== event log ============================== */
+.event-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+.event-log li {
+  padding: 4px 0;
+  border-bottom: 1px dotted var(--line);
+  display: grid;
+  grid-template-columns: 60px 110px 1fr;
+  gap: 6px;
+  align-items: baseline;
+}
+.event-log .ev-tick {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.event-log .ev-type {
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--talisman);
+}
+.event-log .ev-detail {
+  color: var(--text);
+  word-break: break-word;
+}
+.event-log li.sev-warn .ev-type { color: var(--warn); }
+.event-log li.sev-crit .ev-type { color: var(--crit); }
+.event-log li.sev-crit .ev-detail { color: #f6c5c5; }
+
+.event-log .ev-type.t-creature_spawn,
+.event-log .ev-type.t-creature_breach,
+.event-log .ev-type.t-hypnosis_attempt { color: var(--creature); }
+.event-log .ev-type.t-boy_in_white { color: var(--boy-in-white); }
+.event-log .ev-type.t-anghkooey_chant { color: var(--anghkooey); }
+.event-log .ev-type.t-yellow_appearance,
+.event-log .ev-type.t-yellow_imposter_join,
+.event-log .ev-type.t-yellow_imposter_acted { color: var(--man-in-yellow); }
+.event-log .ev-type.t-village_wipe,
+.event-log .ev-type.t-village_reseed { color: var(--crit); font-weight: 700; }
+
+/* ============================== roster ============================== */
+.roster-summary {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.roster-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.roster-list li {
+  padding: 3px 8px;
+  cursor: pointer;
+  border-bottom: 1px dotted var(--line);
+}
+.roster-list li:hover { background: var(--bg-2); }
+.roster-list li.selected { background: var(--bg-3); }
+.roster-detail {
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 12px;
+  min-height: 60px;
+}
+.roster-detail h4 {
+  margin: 0 0 6px 0;
+  font-family: "Georgia", serif;
+  color: var(--talisman);
+}
+.roster-detail .kv {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.roster-detail .kv dt { color: var(--muted); }
+.roster-detail .kv dd { margin: 0; word-break: break-word; }
+.roster-empty { color: var(--muted); font-style: italic; }
+
+/* ============================== stats ============================== */
+.stats {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+.stats dt {
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+.stats dd {
+  margin: 0;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================== narration ============================== */
+.narration {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: "Georgia", serif;
+  font-size: 12px;
+  font-style: italic;
+  color: #d8d0bd;
+}
+.narration li {
+  padding: 6px 0;
+  border-bottom: 1px dotted var(--line);
+}
+
+/* ============================== entities (SVG dots) ============================== */
+#entities circle {
+  cursor: pointer;
+  transition: cx 500ms linear, cy 500ms linear, r 250ms ease, opacity 400ms ease;
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 0.6;
+}
+#entities circle:hover {
+  stroke: var(--talisman);
+  stroke-width: 1.4;
+}
+#entities .char       { fill: var(--char); }
+#entities .npc        { fill: var(--npc); }
+#entities .creature   { fill: var(--creature); }
+#entities .boy-in-white {
+  fill: var(--boy-in-white);
+  filter: drop-shadow(0 0 4px rgba(246, 243, 226, 0.8));
+}
+#entities .man-in-yellow {
+  fill: var(--man-in-yellow);
+  filter: drop-shadow(0 0 4px rgba(216, 179, 64, 0.6));
+}
+#entities .anghkooey  { fill: var(--anghkooey); }
+#entities .faraway-tree {
+  fill: none;
+  stroke: var(--faraway-tree);
+  stroke-width: 1.2;
+  opacity: 0.85;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: faraway-pulse 1.6s ease-in-out infinite;
+}
+@keyframes faraway-pulse {
+  0%, 100% { transform: scale(0.8); opacity: 0.3; }
+  50%      { transform: scale(1.8); opacity: 0.9; }
+}
+
+#entities text.label {
+  font-size: 8px;
+  fill: var(--muted);
+  pointer-events: none;
+  text-anchor: middle;
+}
+
+/* talisman runes (drawn into the SVG itself) — pulse */
+.talisman {
+  animation: rune-glow 6s ease-in-out infinite;
+  transform-origin: center;
+}
+@keyframes rune-glow {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.95; }
+}
+
+/* lighthouse glow class — toggled by lighting.js when phase != DAY */
+#lighthouse-area.lit circle[fill="#f4d77a"] {
+  filter: drop-shadow(0 0 6px rgba(244, 215, 122, 0.95));
+}
+
+/* lighting overlay rectangle — transition the alpha smoothly */
+#lighting rect {
+  transition: fill 1000ms linear;
+  pointer-events: none;
+}
+
+/* ============================== cycle-reset overlay ============================== */
+.cycle-reset {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.96);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 1;
+  transition: opacity 1800ms ease;
+}
+.cycle-reset.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.cycle-reset-inner {
+  text-align: center;
+}
+.cycle-reset-title {
+  font-family: "Georgia", serif;
+  color: var(--crit);
+  font-size: 42px;
+  letter-spacing: 8px;
+  text-shadow: 0 0 12px rgba(185, 71, 71, 0.6);
+}
+.cycle-reset-sub {
+  margin-top: 12px;
+  color: #c0a070;
+  font-size: 14px;
+  letter-spacing: 4px;
+}
+
+.hidden { display: none !important; }
+
+/* ============================================================
+ * v2 additions — legacy hash marks, bus, outsiders, tendrils,
+ * lighthouse-called, dream mode, journal / voice / bus panels.
+ * ============================================================ */
+
+/* v9 — Minds heatmap HUD cell + dossier mind section. */
+.hud-cell.minds {
+  min-width: 280px;
+}
+.minds-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.minds-pressure {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 110px;
+}
+.minds-pressure .bar {
+  width: 80px;
+  height: 6px;
+  background: #1a1611;
+  border: 1px solid #3a3024;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.minds-pressure .bar-fill.pressure {
+  height: 100%;
+  width: 0%;
+  background: #4a8a4a;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+.minds-goals {
+  display: flex;
+  gap: 4px;
+}
+.minds-goals .goal-pip {
+  font-size: 9px;
+  letter-spacing: 0.3px;
+  padding: 1px 4px;
+  border-radius: 8px;
+  background: #2a2418;
+  color: #c0a070;
+  border: 1px solid #3a3024;
+}
+.minds-goals .goal-pip.goal-protect      { color: #8ed8a4; border-color: #2a5a3a; }
+.minds-goals .goal-pip.goal-investigate  { color: #a4b8d8; border-color: #2a3a5a; }
+.minds-goals .goal-pip.goal-revenge      { color: #d88a8a; border-color: #5a2a2a; }
+.minds-goals .goal-pip.goal-flee         { color: #d8b070; border-color: #5a4a2a; }
+.minds-goals .goal-pip.goal-find_item    { color: #d8d090; border-color: #5a5024; }
+.minds-goals .goal-pip span { margin-left: 2px; font-weight: bold; }
+.minds-beliefs,
+.minds-popstress {
+  font-size: 10px;
+  color: #c0a070;
+  display: flex;
+  gap: 4px;
+}
+.minds-popstress {
+  font-variant-numeric: tabular-nums;
+}
+.minds-beliefs .minds-label {
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  opacity: 0.7;
+}
+
+/* Mind section inside the dossier — beliefs list + active goal. */
+.dossier .mind-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #3a3024;
+}
+.dossier .mind-section h4 {
+  margin: 0 0 6px 0;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #c0a070;
+}
+.dossier .mind-goal {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+.dossier .mind-goal .goal-kind {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-size: 9px;
+  background: #2a2418;
+  color: #d8a83a;
+  border: 1px solid #3a3024;
+}
+.dossier .mind-goal .goal-target {
+  font-family: "Georgia", serif;
+  font-style: italic;
+}
+.dossier .mind-goal .goal-priority {
+  margin-left: auto;
+  font-size: 9px;
+  opacity: 0.7;
+}
+.dossier .mind-beliefs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dossier .mind-beliefs li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  padding: 2px 0;
+  border-bottom: 1px dotted #2a2418;
+}
+.dossier .mind-beliefs li:last-child {
+  border-bottom: none;
+}
+.dossier .mind-beliefs .belief-key {
+  font-family: "Menlo", monospace;
+  font-size: 9px;
+  color: #8a9a78;
+}
+.dossier .mind-beliefs .belief-polarity-positive { color: #b94747; }
+.dossier .mind-beliefs .belief-polarity-negative { color: #4a8a8a; }
+.dossier .mind-beliefs .belief-conf {
+  margin-left: auto;
+  width: 32px;
+  height: 4px;
+  background: #1a1611;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.dossier .mind-beliefs .belief-conf-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6a5524, #d8a83a);
+}
+.dossier .mind-empty {
+  font-size: 10px;
+  font-style: italic;
+  color: #6a5f48;
+}
+
+/* HUD: cycles_witnessed badge + fragments indicator */
+.hud-fragments {
+  margin-left: 8px;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: #c0a070;
+  font-variant-numeric: tabular-nums;
+}
+.hud-witnessed {
+  font-family: "Georgia", serif;
+  font-style: italic;
+  font-size: 11px;
+  color: #c0a070;
+  letter-spacing: 0.5px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Hash-mark tallies above breached buildings */
+.hash-marks line {
+  stroke: #1c1610;
+  stroke-width: 1;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+.hash-marks .hash-overflow,
+text.hash-overflow {
+  fill: #2a1d12;
+  font-size: 8px;
+  font-family: "Georgia", serif;
+}
+
+/* Bus — yellow rect, black windows, soft drop shadow */
+.bus {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
+  transition: transform 800ms ease-out;
+}
+.bus .bus-body-rect {
+  fill: #e9c93d;
+  stroke: #1c1304;
+  stroke-width: 1.2;
+}
+.bus .bus-window {
+  fill: #0a0a10;
+  stroke: #1c1304;
+  stroke-width: 0.5;
+}
+.bus .bus-door {
+  fill: #6c5320;
+  stroke: #1c1304;
+  stroke-width: 0.5;
+}
+.bus .bus-wheel {
+  fill: #0a0805;
+  stroke: #1c1304;
+  stroke-width: 0.6;
+}
+
+/* Outsiders — pale-gold circle slightly larger than NPC, with "+" glyph above */
+#entities circle.outsider {
+  fill: #d9c486;
+  r: 5.5;
+  stroke: rgba(80, 60, 20, 0.7);
+  stroke-width: 0.8;
+}
+.outsider-glyph {
+  fill: #e8d9a4;
+  font-size: 9px;
+  font-family: "Georgia", serif;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* Yellow Man tendrils — mustard pulsing ring */
+#overlays circle.tendril {
+  stroke: #c2a23f;
+  stroke-width: 1.4;
+  opacity: 0.7;
+  r: 9;
+  animation: tendril-pulse 2.2s ease-in-out infinite;
+}
+#overlays circle.tendril-leader {
+  stroke: #f4d77a;
+  stroke-width: 2;
+  opacity: 0.9;
+  r: 10;
+  animation: tendril-pulse 1.6s ease-in-out infinite;
+  filter: drop-shadow(0 0 5px rgba(244, 215, 122, 0.7));
+}
+@keyframes tendril-pulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
+}
+
+/* Lighthouse-called — slow aqua pulse */
+#overlays circle.called {
+  stroke: #6bd3d1;
+  stroke-width: 1.6;
+  opacity: 0.8;
+  r: 11;
+  fill: none;
+  animation: called-pulse 3.2s ease-in-out infinite;
+  filter: drop-shadow(0 0 6px rgba(107, 211, 209, 0.6));
+}
+@keyframes called-pulse {
+  0%, 100% { opacity: 0.35; r: 10; }
+  50%      { opacity: 0.9;  r: 13; }
+}
+
+/* Dream-mode — washes the whole SVG in a hue-rotated, desaturated tint */
+svg#world {
+  transition: filter 1000ms ease;
+}
+svg#world.dream-mode {
+  filter: hue-rotate(80deg) saturate(0.6) brightness(0.85);
+}
+
+/* Dream dialog text — green serif, faded edges */
+.dream-dialog text {
+  font-family: "Georgia", serif;
+  font-size: 9px;
+  fill: #8edc9c;
+  opacity: 0.85;
+  text-shadow: 0 0 4px rgba(60, 100, 60, 0.4);
+  paint-order: stroke;
+  stroke: rgba(8, 16, 8, 0.85);
+  stroke-width: 0.6;
+}
+
+/* Roster drift indicator */
+.roster-list li.drifted {
+  color: #e7c4ed;
+  font-style: italic;
+}
+
+/* ============================== Journal panel ============================== */
+#journal {
+  background: #2a2014;
+  border-color: #5a4528;
+}
+#journal > summary {
+  background: #3a2c18;
+  color: #e7c98a;
+  border-bottom-color: #5a4528;
+}
+.journal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: "Georgia", "Times New Roman", serif;
+  font-style: italic;
+  font-size: 12px;
+  color: #efe2bf;
+}
+.journal-list li {
+  padding: 5px 0;
+  border-bottom: 1px dotted #5a4528;
+  line-height: 1.4;
+}
+
+/* ============================== Lighthouse voice panel ============================== */
+#lighthouse-voice {
+  background: #02100a;
+  border-color: #1f6240;
+}
+#lighthouse-voice > summary {
+  background: #051a10;
+  color: #6bd3a1;
+  border-bottom-color: #1f6240;
+}
+.lighthouse-voice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: "Courier New", "Menlo", monospace;
+  font-size: 12px;
+  color: #6bd3a1;
+  letter-spacing: 1.2px;
+  text-shadow: 0 0 3px rgba(107, 211, 161, 0.4);
+}
+.lighthouse-voice-list li {
+  padding: 4px 0;
+  border-bottom: 1px dotted #1f6240;
+  animation: crt-twitch 4s steps(20, end) infinite;
+}
+@keyframes crt-twitch {
+  0%, 92%, 100% { letter-spacing: 1.2px; }
+  93%           { letter-spacing: 2.2px; opacity: 0.8; }
+  95%           { letter-spacing: 0.8px; opacity: 1; }
+}
+
+/* ============================== Bus panel ============================== */
+#bus-panel {
+  border-color: #c2a23f;
+}
+#bus-panel > summary {
+  background: #1f1a08;
+  color: #f4d77a;
+  border-bottom-color: #c2a23f;
+}
+.bus-countdown {
+  font-family: "Georgia", serif;
+  font-size: 12px;
+  color: #f4d77a;
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+.bus-passengers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+.bus-passengers li {
+  padding: 4px 0;
+  border-bottom: 1px dotted var(--line);
+}
+.bus-passengers li strong { color: var(--char); }
+.bus-passengers li .bus-back {
+  color: var(--muted);
+  font-style: italic;
+}
+.bus-passengers li.bus-empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ============================================================
+ * v3 additions — hand-drawn map, character tokens, day/night
+ * lighting overlay (radial-gradient + windows + beam sweep),
+ * Township Index panel.
+ * ============================================================ */
+
+/* The hand-drawn map sits inside .map-wrap, which contains the inline
+ * SVG and the radial lighting overlay <div>. */
+.map-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1000 / 700;
+  background: #c9c2a8;
+  overflow: hidden;
+}
+.map-wrap > svg#map {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Lighting overlay: empty/dark on DAY, radial gradient on DUSK / NIGHT */
+.lighting {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  transition: background 800ms ease, opacity 800ms ease;
+  opacity: 0;
+}
+.lighting.dusk {
+  opacity: 1;
+  background:
+    radial-gradient(75% 85% at 47% 65%,
+      rgba(110, 70, 90, 0.0) 0%,
+      rgba(50, 28, 56, 0.18) 55%,
+      rgba(20, 14, 36, 0.32) 100%);
+}
+/* v8 — was darkened to near-pitch and silhouettes vanished. Dropped
+   the gradient stops so the village is still visibly dim but tokens
+   read clearly. Mood survives via the cool-blue tint, not opacity. */
+.lighting.night {
+  opacity: 1;
+  background:
+    radial-gradient(75% 85% at 47% 65%,
+      rgba(12, 16, 36, 0.18) 0%,
+      rgba(8, 12, 28, 0.38) 55%,
+      rgba(4, 6, 18, 0.55) 100%);
+}
+
+/* Building windows light up at DUSK / NIGHT — controlled by mapWrap[data-time]. */
+.map-wrap .windows { opacity: 0; transition: opacity 800ms ease; }
+.map-wrap[data-time="dusk"]  .windows { opacity: 0.55; }
+.map-wrap[data-time="night"] .windows { opacity: 1; }
+
+/* Lighthouse rotating beam — sweeps continuously, fades in at DUSK/NIGHT. */
+.lighthouse-beam {
+  opacity: 0;
+  transition: opacity 800ms ease;
+  transform-origin: 140px 585px;
+  animation: sweep 9s linear infinite;
+}
+.map-wrap[data-time="dusk"]  .lighthouse-beam { opacity: 0.4; }
+.map-wrap[data-time="night"] .lighthouse-beam { opacity: 0.85; }
+@keyframes sweep {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Talisman sigils on talisman buildings — re-uses v1 rune-glow keyframes. */
+.map-wrap use[href="#talisman"] {
+  animation: rune-glow 6s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* ----- character token sprites ----- */
+.token {
+  cursor: pointer;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+  transition: transform 500ms linear;
+}
+.token.char:hover {
+  filter: drop-shadow(0 0 6px #d8a83a);
+}
+.token.yellow {
+  filter: drop-shadow(0 0 8px rgba(216, 200, 74, 0.85));
+}
+.token.white {
+  filter: drop-shadow(0 0 10px rgba(244, 246, 255, 0.9));
+  opacity: 0.95;
+}
+
+/* ----- simple shape entities (NPCs / creatures / anghkooey) ----- */
+#entities .npc {
+  fill: #6d6856;
+  stroke: #1a1611;
+  stroke-width: 0.6;
+  cursor: pointer;
+  transition: cx 500ms linear, cy 500ms linear;
+}
+#entities .npc:hover { stroke: var(--talisman); stroke-width: 1.4; }
+
+#entities .creature {
+  fill: #8a2418;
+  stroke: #ffb4a0;
+  stroke-width: 0.6;
+  opacity: 0.95;
+  cursor: pointer;
+  transition: transform 500ms linear;
+  filter: drop-shadow(0 0 3px rgba(255, 80, 50, 0.7));
+}
+#entities .creature:hover { stroke: #ffd4c0; stroke-width: 1.2; }
+
+#entities .anghkooey {
+  fill: #7d6dc0;
+  opacity: 0.7;
+  stroke: #1a1611;
+  stroke-width: 0.5;
+  cursor: pointer;
+  transition: cx 500ms linear, cy 500ms linear;
+}
+
+/* ----- hash marks: thin charcoal tallies above breach-prone buildings ----- */
+#overlays .hash-marks line {
+  stroke: #1a1611;
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+#overlays .hash-marks text {
+  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  font-size: 8px;
+  fill: #1a1611;
+}
+
+/* ----- v4: music box, cicada, cooling-off haze --------------------------- */
+#entities .music-box {
+  fill: #d8a83a;
+  stroke: #1a1611;
+  stroke-width: 0.8;
+  cursor: pointer;
+  filter: drop-shadow(0 0 4px rgba(216, 168, 58, 0.6));
+  animation: musicBoxPulse 2.2s ease-in-out infinite;
+  transition: transform 400ms linear;
+}
+@keyframes musicBoxPulse {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(216, 168, 58, 0.55)); }
+  50%      { filter: drop-shadow(0 0 9px rgba(216, 168, 58, 0.95)); }
+}
+
+#entities .cicada {
+  fill: #6b5b3a;
+  opacity: 0.85;
+  stroke: #1a1611;
+  stroke-width: 0.3;
+  pointer-events: none;
+  animation: cicadaTwitch 0.4s steps(2) infinite;
+}
+@keyframes cicadaTwitch {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(1px, -1px); }
+  100% { transform: translate(-1px, 0); }
+}
+
+#overlays .cooling-off rect {
+  fill: rgba(168, 58, 42, 0.18);
+  stroke: rgba(168, 58, 42, 0.55);
+  stroke-width: 0.8;
+  stroke-dasharray: 3 4;
+  pointer-events: none;
+  animation: coolingPulse 3s ease-in-out infinite;
+}
+@keyframes coolingPulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.95; }
+}
+
+/* ----- v5: sub-main NPCs and tombstones --------------------------------- */
+#entities circle.sub-main {
+  fill: #b8946c;                /* warmer than the base NPC grey */
+  stroke: #d8a83a;              /* gold ring so they read as "promoted" */
+  stroke-width: 1.4;
+  filter: drop-shadow(0 0 3px rgba(216, 168, 58, 0.55));
+}
+#entities .sub-main-chev {
+  fill: none;
+  stroke: #d8a83a;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+#entities .tombstone {
+  opacity: 0.55;
+  animation: tombstoneFade 2s ease-out forwards;
+}
+#entities .tombstone-cross {
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 11px;
+  fill: #d8cfb4;
+  opacity: 0.85;
+  pointer-events: none;
+  animation: tombstoneFade 2s ease-out forwards;
+}
+@keyframes tombstoneFade {
+  0%   { opacity: 0.9; }
+  100% { opacity: 0.0; }
+}
+
+/* ----- Township Index panel ----- */
+#township-index .index-list {
+  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  display: grid;
+  grid-template-columns: 22px 24px 1fr;
+  gap: 5px 8px;
+  align-items: center;
+  color: var(--text);
+  line-height: 1.5;
+}
+#township-index .index-list .n {
+  color: var(--talisman);
+  text-align: right;
+}
+#township-index .index-list .ic {
+  width: 22px;
+  height: 16px;
+  display: block;
+}
+#township-index .index-list .ic svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+#township-index .index-list .t .tag {
+  color: #a83a2a;
+  margin-left: 6px;
+  font-size: 10px;
+}
+
+/* World host (now a div, not an SVG) hosts the dream-mode hue rotation. */
+#world {
+  transition: filter 1000ms ease;
+}
+#world.dream-mode,
+.map-wrap.dream-mode {
+  filter: hue-rotate(80deg) saturate(0.6) brightness(0.85);
+}
+
+/* ============================================================
+ * v6 additions — dossier popup, swarmer creatures, car + wrecks,
+ * roster intent line.
+ * ============================================================ */
+
+/* ----- dossier popup (overlays the map, anchored top-right) ------------- */
+.dossier {
+  position: fixed;
+  right: 408px;            /* sits to the left of the 380px side-pane */
+  top: 80px;
+  width: 360px;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 16px 16px 14px;
+  background: rgba(20, 18, 14, 0.96);
+  border: 1px solid var(--talisman);
+  border-radius: 8px;
+  color: #e8e1d0;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.7);
+  z-index: 100;
+  font-size: 12px;
+  line-height: 1.45;
+  animation: dossierIn 220ms ease-out;
+}
+@keyframes dossierIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.dossier.hidden { display: none; }
+
+.dossier .header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px dotted #5a4528;
+  padding-bottom: 10px;
+}
+.dossier .header svg {
+  width: 60px;
+  height: 80px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
+  flex: 0 0 auto;
+}
+.dossier .header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.dossier .header h2 {
+  margin: 0;
+  font-family: "Georgia", serif;
+  font-size: 18px;
+  color: var(--talisman);
+  letter-spacing: 0.5px;
+}
+.dossier .header .role {
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dossier .intent {
+  margin: 10px 0 12px;
+  font-family: "Georgia", serif;
+  font-style: italic;
+  font-size: 13px;
+  color: #d8c89a;
+  line-height: 1.4;
+}
+
+.dossier h3 {
+  margin: 14px 0 6px;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px dotted #3a2e1a;
+  padding-bottom: 3px;
+}
+
+/* ----- vitals (overrides the topbar .bar layout in dossier scope) ------- */
+.dossier .vitals { display: flex; flex-direction: column; gap: 6px; }
+.dossier .vital {
+  display: grid;
+  grid-template-columns: 60px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.dossier .vital-label {
+  color: var(--muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+.dossier .vital-val {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.dossier .bar {
+  position: relative;
+  width: auto;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #2a1f12;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.dossier .bar .bar-fill {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  transition: width 400ms ease-out;
+}
+.dossier .bar.fear   .bar-fill { background: linear-gradient(90deg, #6a2a22, #b94747); }
+.dossier .bar.sanity .bar-fill { background: linear-gradient(90deg, #1f6240, #6bd3a1); }
+.dossier .bar.hunger .bar-fill { background: linear-gradient(90deg, #6a5524, #d8a83a); }
+
+/* ----- inventory --------------------------------------------------------- */
+.dossier .inventory {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dossier .inventory li {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.dossier .inventory li .item-name { color: #e8e1d0; text-transform: capitalize; }
+.dossier .inventory li .item-qty  { color: var(--talisman); }
+.dossier .inventory li.muted { color: var(--muted); font-style: italic; justify-content: flex-start; }
+
+/* ----- relationships ----------------------------------------------------- */
+.dossier .relationships .rel-list {
+  list-style: none;
+  margin: 0 0 4px;
+  padding: 0;
+}
+.dossier .relationships .rel-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 6px;
+  font-size: 11px;
+  border-bottom: 1px dotted #2a2418;
+}
+.dossier .relationships .rel-list li:last-child { border-bottom: none; }
+.dossier .relationships .rel-list li.muted { color: var(--muted); font-style: italic; }
+.dossier .relationships .rel-name { color: #e8e1d0; }
+.dossier .relationships .rel-score {
+  font-variant-numeric: tabular-nums;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10px;
+}
+.dossier .relationships .pos { color: #7dd1a8; }
+.dossier .relationships .neg { color: #d87878; }
+.dossier .relationships .rel-score.pos {
+  background: rgba(125, 209, 168, 0.12);
+  border: 1px solid rgba(125, 209, 168, 0.4);
+}
+.dossier .relationships .rel-score.neg {
+  background: rgba(216, 120, 120, 0.12);
+  border: 1px solid rgba(216, 120, 120, 0.4);
+}
+
+/* ----- memory feed ------------------------------------------------------- */
+.dossier .memory {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dossier .memory li {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 2px 6px;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
+  line-height: 1.35;
+}
+.dossier .memory .mem-tick {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+.dossier .memory .kind {
+  color: var(--talisman);
+  font-size: 9px;
+  letter-spacing: 1px;
+  grid-column: 2;
+  word-break: break-all;
+}
+.dossier .memory .detail {
+  color: #d8d0bd;
+  word-break: break-word;
+  grid-column: 2;
+}
+.dossier .memory li.muted { color: var(--muted); font-style: italic; display: block; }
+
+/* ----- close button + error state --------------------------------------- */
+.dossier .close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  font-family: "Georgia", serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+.dossier .close:hover {
+  color: var(--talisman);
+  border-color: var(--talisman);
+}
+.dossier .error {
+  color: #d87878;
+  font-style: italic;
+  padding: 6px 0;
+}
+
+/* ----- v6 token: car + permanent wrecks --------------------------------- */
+.token-car {
+  cursor: pointer;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+  transition: transform 500ms linear;
+}
+#overlays #wrecks .wreck {
+  opacity: 0.65;
+  filter: grayscale(0.5) brightness(0.85);
+  pointer-events: none;
+}
+
+/* ----- v8 building dossier (occupant list) ------------------------------- */
+.dossier .building-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dossier .building-list li {
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.dossier .building-list .rel-name {
+  color: #e8e1d0;
+}
+.dossier .building-list .building-role {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.dossier .muted-line {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 12px;
+  padding: 4px 0 6px;
+}
+
+/* ----- v8 creature dossier facts (replaces vitals/inventory for creatures) - */
+.dossier .creature-facts {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 4px 12px;
+  margin: 6px 0 4px;
+  font-size: 12px;
+}
+.dossier .creature-facts dt {
+  color: var(--muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-size: 10px;
+  align-self: center;
+}
+.dossier .creature-facts dd {
+  margin: 0;
+  color: #e8e1d0;
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+
+/* ----- v8 cultist NPC marker ------------------------------------------- */
+#entities .npc.cultist {
+  fill: #6a1f24;
+  stroke: #d8a83a;
+  stroke-width: 1.4;
+  filter: drop-shadow(0 0 4px rgba(216, 168, 58, 0.7));
+  animation: cultPulse 2.4s ease-in-out infinite;
+}
+@keyframes cultPulse {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(216, 168, 58, 0.55)); }
+  50%      { filter: drop-shadow(0 0 7px rgba(216, 168, 58, 0.95)); }
+}
+
+/* ----- v6 swarmer creature (smaller, hotter, faster pulse) -------------- */
+#entities .creature-swarm {
+  fill: #b8413a;
+  stroke: #ffd4c0;
+  stroke-width: 0.5;
+  opacity: 0.95;
+  cursor: pointer;
+  transition: transform 320ms linear;
+  filter: drop-shadow(0 0 2px rgba(255, 80, 50, 0.65));
+  animation: swarmPulse 0.9s ease-in-out infinite;
+}
+#entities .creature-swarm:hover { stroke: #ffe7d8; stroke-width: 1; }
+@keyframes swarmPulse {
+  0%, 100% { filter: drop-shadow(0 0 2px rgba(255, 80, 50, 0.55)); }
+  50%      { filter: drop-shadow(0 0 5px rgba(255, 100, 60, 0.95)); }
+}
+
+/* ----- roster intent muted second line ---------------------------------- */
+.roster-list li .roster-title {
+  font-size: 12px;
+}
+.roster-list li .intent {
+  font-size: 10px;
+  font-style: italic;
+  color: var(--muted);
+  margin-top: 1px;
+  line-height: 1.35;
+  word-break: break-word;
+}
