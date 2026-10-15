@@ -6,7 +6,7 @@
 
 This repository provides self-contained, runnable scenarios that show how to use [Grafana Alloy](https://grafana.com/docs/alloy/) for telemetry collection and processing.
 Most scenarios include Docker Compose files for Alloy and the backends that demo needs, such as Loki, Grafana, Prometheus, and Tempo.
-Each scenario also includes pre-configured dashboards when Grafana is part of the stack.
+Most scenarios configure Grafana with the data sources the stack needs, and some also ship pre-built dashboards.
 
 ## Before you begin
 
@@ -15,7 +15,13 @@ Ensure you have the following:
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/).
 - Git, to clone the repository.
 
-## Run a scenario
+## Start a scenario
+
+Clone the repository:
+
+```shell
+git clone https://github.com/grafana/alloy-scenarios.git
+```
 
 Navigate to the scenario directory and open the README file.
 The scenario README documents everything you need to know to deploy and explore the scenario.
@@ -36,6 +42,8 @@ Refer to the scenario README for additional endpoints.
 Browse scenarios by telemetry type.
 Each row links to a directory with a README and all the configuration files required to deploy and run the scenario.
 
+<!-- alloy-docs: slug=logs -->
+
 ### Logs
 
 These scenarios focus on log collection, log parsing, log routing, and log redaction.
@@ -43,7 +51,8 @@ These scenarios focus on log collection, log parsing, log routing, and log redac
 | Scenario | Description |
 | -------- | ----------- |
 | [Amazon Data Firehose logs](aws-firehose-logs/) | Ingest Amazon Data Firehose deliveries with `loki.source.awsfirehose`. Uses a local sender. No AWS account required. |
-| [Azure Event Hubs logs](azure-event-hubs-logs/) | Ingest Azure Event Hubs messages with `loki.source.azure_event_hubs`. Uses a self-hosted broker speaking the same wire protocol. No Azure subscription required. |
+| [Azure Event Hubs logs](azure-event-hubs-logs/) | Ingest Azure Event Hubs messages with `loki.source.azure_event_hubs`. Uses a self-managed broker speaking the same wire protocol. No Azure subscription required. |
+| [Faro frontend observability](faro-frontend-observability/) | Collect frontend web telemetry, including logs, errors, and web vitals, from browser applications with the Faro Web SDK. |
 | [GELF log ingestion](gelf-log-ingestion/) | Ingest Graylog Extended Log Format logs over `UDP`. |
 | [Kafka logs](kafka/) | Consume and process logs from Apache Kafka topics. |
 | [Log API gateway](log-api-gateway/) | Use Alloy as a centralized log gateway that accepts logs via a Loki-compatible push API endpoint. |
@@ -59,7 +68,9 @@ These scenarios focus on log collection, log parsing, log routing, and log redac
 | [systemd journal](systemd-journal/) | Forward systemd journal entries to Loki with filters and labels tuned for fast queries. |
 | [Windows security events](windows-events/) | Forward Windows Security event logs to Loki with filters and field extraction for security operations center workflows. |
 
-### Tracing
+<!-- alloy-docs: slug=traces -->
+
+### Traces
 
 These scenarios show distributed tracing with OpenTelemetry and Tempo.
 
@@ -78,13 +89,14 @@ These scenarios show distributed tracing with OpenTelemetry and Tempo.
 | [OpenTelemetry tail sampling](otel-tail-sampling/) | Apply tail sampling policies to OpenTelemetry traces with Alloy and Tempo. |
 | [Trace correlation with exemplars](trace-log-correlation-exemplars/) | Jump from a latency histogram to the exact trace behind it with OpenMetrics exemplars flowing through Alloy into Prometheus and Tempo. |
 
+<!-- alloy-docs: slug=metrics -->
+
 ### Metrics
 
 These scenarios collect and forward metrics with Alloy.
 
 | Scenario | Description |
 | -------- | ----------- |
-| [Alloy clustering](alloy-clustering/) | Run a three-node Alloy cluster that consistent-hashes `prometheus.scrape` targets across nodes. Stop a node and its targets redistribute to the survivors within seconds. |
 | [Blackbox probing](blackbox-probing/) | Monitor endpoint availability and response times with synthetic HTTP probes. |
 | [Datadog receiver migration](datadog-receiver-migration/) | Ingest Datadog Agent metrics and traces with `otelcol.receiver.datadog` and forward them to Prometheus and Tempo. |
 | [DNS service discovery](dns-service-discovery/) | Discover and scrape two Prometheus targets from DNS SRV records with `discovery.dns`. |
@@ -96,7 +108,9 @@ These scenarios collect and forward metrics with Alloy.
 | [OTel metrics pipeline](otel-metrics-pipeline/) | Forward OpenTelemetry metrics from applications through Alloy. Alloy batches and transforms samples before it sends them to Prometheus. |
 | [StatsD metrics](statsd-metrics/) | Receive legacy StatsD counter, gauge, and timer packets in Alloy and remote-write mapped Prometheus metrics. |
 
-### Profiling
+<!-- alloy-docs: slug=profiles -->
+
+### Profiles
 
 These scenarios collect continuous profiles from applications.
 
@@ -106,44 +120,37 @@ These scenarios collect continuous profiles from applications.
 | [eBPF host profiling](ebpf-host-profiling/) | Profile every process on a Linux host with `pyroscope.ebpf` -- no language agents, no application code changes. Uses Docker container discovery to attribute samples per workload. |
 | [Java profiling](java-profiling/) | Attach async-profiler to a running JVM with `pyroscope.java` -- CPU and allocation flame graphs with no agent jar and no code changes. |
 
-### Secrets and configuration
+<!-- alloy-docs: slug=alloy-operations -->
 
-These scenarios load credentials and configuration from external stores.
+### Alloy operations
+
+These scenarios run, scale, and monitor Alloy itself.
 
 | Scenario | Description |
 | -------- | ----------- |
+| [Alloy clustering](alloy-clustering/) | Run a three-node Alloy cluster that consistent-hashes `prometheus.scrape` targets across nodes. Stop a node and its targets redistribute to the survivors within seconds. |
+| [Self-monitoring](self-monitoring/) | Configure Alloy to monitor itself and collect its own metrics and logs. |
 | [Vault secrets](vault-secrets/) | Pull `prometheus.remote_write` `basic_auth` credentials from HashiCorp Vault at runtime with `remote.vault`. Credentials reload on rotation. |
 
-### Frontend
+<!-- alloy-docs: slug=infrastructure-and-platforms -->
 
-These scenarios collect telemetry from browser applications.
+### Infrastructure and platforms
 
-| Scenario | Description |
-| -------- | ----------- |
-| [Faro frontend observability](faro-frontend-observability/) | Collect frontend web telemetry, including logs, errors, and web vitals, from browser applications with the Faro Web SDK. |
-
-### Cloud monitoring
-
-These scenarios pull telemetry from cloud provider APIs.
+These scenarios monitor hosts, containers, network devices, cloud providers, and Kubernetes clusters.
 
 | Scenario | Description |
 | -------- | ----------- |
 | [Amazon CloudWatch metrics](cloudwatch-metrics/) | Pull metrics from Amazon CloudWatch into Prometheus with `prometheus.exporter.cloudwatch`. Uses LocalStack for offline reproducibility. No AWS account required. |
-
-### Infrastructure monitoring
-
-These scenarios monitor hosts, containers, and network devices.
-
-| Scenario | Description |
-| -------- | ----------- |
 | [Docker monitoring](docker-monitoring/) | Monitor Docker container metrics and logs. |
+| [Kubernetes](k8s/) | Scenarios for Alloy on Kubernetes with the k8s-monitoring Helm chart or plain manifests. See subdirectories for logs, metrics, profiling, tracing, cluster events, and standalone kube-state-metrics + cAdvisor scraping. |
 | [Linux monitoring](linux/) | Collect Linux system metrics, journal entries, and log files with Alloy. |
-| [Windows monitoring](windows/) | Monitor Windows system metrics and Event Logs. |
 | [NGINX monitoring](nginx-monitoring/) | Monitor NGINX access and error logs plus `stub_status` metrics with Alloy. |
-| [Self-monitoring](self-monitoring/) | Configure Alloy to monitor itself and collect its own metrics and logs. |
 | [SNMP monitoring](snmp/) | Monitor devices with the Alloy SNMP exporter for Simple Network Management Protocol. |
+| [Windows monitoring](windows/) | Monitor Windows system metrics and Event Logs. |
 
-### Database and cache monitoring
+<!-- alloy-docs: slug=databases-and-caches -->
+
+### Databases and caches
 
 These scenarios monitor databases and in-memory caches.
 
@@ -158,19 +165,13 @@ These scenarios monitor databases and in-memory caches.
 | [RabbitMQ monitoring](rabbitmq-monitoring/) | Monitor RabbitMQ queue, connection, and channel metrics plus broker container logs. |
 | [Redis monitoring](redis-monitoring/) | Monitor Redis instance metrics, including connections, memory usage, and command throughput. |
 
-### Kubernetes
+<!-- alloy-docs: slug=opentelemetry-engine -->
 
-The `k8s/` directory groups Helm-based and manifest-based examples for Alloy on Kubernetes.
+### OpenTelemetry Engine
 
-| Scenario | Description |
-| -------- | ----------- |
-| [Kubernetes](k8s/) | Scenarios for Alloy on Kubernetes with the k8s-monitoring Helm chart or plain manifests. See subdirectories for logs, metrics, profiling, tracing, cluster events, and standalone kube-state-metrics + cAdvisor scraping. |
-
-### Experimental OTel engine examples
-
-Alloy v1.14 and later include an experimental **OTel Engine** that runs standard OpenTelemetry Collector YAML configurations directly.
-These scenarios use OTel YAML syntax for teh OTel Engine and a minimal Alloy configuration to enable the Alloy UI.
-Refer to the [OTel examples README](otel-examples/) for details.
+Alloy v1.14 and later include an experimental **OpenTelemetry Engine** that runs standard OpenTelemetry Collector YAML configurations directly.
+These scenarios use OpenTelemetry YAML syntax for the OpenTelemetry Engine and a minimal Alloy configuration to enable the Alloy UI.
+Refer to the [OpenTelemetry examples README](otel-examples/) for details.
 
 | Scenario | Description |
 | -------- | ----------- |
