@@ -1,6 +1,6 @@
 services:
   coredns:
-    image: coredns/coredns:${COREDNS_VERSION:-1.14.6}
+    image: coredns/coredns:${COREDNS_VERSION:-1.14.7}
     command: -conf /etc/coredns/Corefile
     volumes:
       - ./Corefile:/etc/coredns/Corefile:ro
