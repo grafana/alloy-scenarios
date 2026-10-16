@@ -47,13 +47,13 @@ services:
       - ./prom-config.yaml:/etc/prometheus/prometheus.yml
 
   tempo-alloy:
-    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.7}
+    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.8}
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./tempo-config.yaml:/etc/tempo.yaml
 
   tempo-collector:
-    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.7}
+    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.8}
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./tempo-config.yaml:/etc/tempo.yaml
