@@ -1,0 +1,260 @@
+# Source of truth for the scenario tables in README.md and in the Grafana Alloy
+# documentation. After you edit this file, run:
+#
+#   python3 .github/scripts/generate_scenarios_docs.py
+#
+# Each category's slug names its generated file in docs/alloy/. The Alloy
+# documentation imports that file, so don't rename a slug without updating Alloy.
+categories:
+- slug: logs
+  title: Logs
+  intro: |
+    These scenarios focus on log collection, log parsing, log routing, and log redaction.
+  scenarios:
+  - name: Amazon Data Firehose logs
+    path: aws-firehose-logs
+    description: Ingest Amazon Data Firehose deliveries with `loki.source.awsfirehose`. Uses a local sender. No AWS account required.
+  - name: Azure Event Hubs logs
+    path: azure-event-hubs-logs
+    description: Ingest Azure Event Hubs messages with `loki.source.azure_event_hubs`. Uses a self-managed broker speaking the same wire protocol. No Azure subscription required.
+  - name: Faro frontend observability
+    path: faro-frontend-observability
+    description: Collect frontend web telemetry, including logs, errors, and web vitals, from browser applications with the Faro Web SDK.
+  - name: GELF log ingestion
+    path: gelf-log-ingestion
+    description: Ingest Graylog Extended Log Format logs over `UDP`.
+  - name: Kafka logs
+    path: kafka
+    description: Consume and process logs from Apache Kafka topics.
+  - name: Log API gateway
+    path: log-api-gateway
+    description: Use Alloy as a centralized log gateway that accepts logs via a Loki-compatible push API endpoint.
+  - name: Log routing
+    path: routing
+    description: Route logs from multiple sources to different Loki tenants based on log content and origin.
+  - name: Log secret filtering
+    path: log-secret-filtering
+    description: Redact sensitive credentials and secrets from logs with pattern rules before storage.
+  - name: Log-to-metrics
+    path: log-to-metrics
+    description: Extract a request counter and latency histogram from application logs while forwarding the raw logs to Loki.
+  - name: Logs from file
+    path: logs-file
+    description: Tail log files with Alloy.
+  - name: Logs over TCP
+    path: logs-tcp
+    description: Receive and process TCP logs in JSON format.
+  - name: Popular logging frameworks
+    path: app-instrumentation/logging/popular-logging-frameworks
+    description: Parse logs from popular logging frameworks across 7 programming languages.
+  - name: Promtail to Alloy migration
+    path: promtail-to-alloy-migration
+    description: Run Promtail (EOL March 2026) and its `alloy convert` equivalent side by side against one log file and verify identical results in Loki.
+  - name: Structured log parsing
+    path: mail-house
+    description: Parse structured logs into labels and structured metadata.
+  - name: Syslog monitoring
+    path: syslog
+    description: Monitor non-RFC5424 compliant syslog messages with `rsyslog` and Alloy.
+  - name: systemd journal
+    path: systemd-journal
+    description: Forward systemd journal entries to Loki with filters and labels tuned for fast queries.
+  - name: Windows security events
+    path: windows-events
+    description: Forward Windows Security event logs to Loki with filters and field extraction for security operations center workflows.
+- slug: traces
+  title: Traces
+  intro: |
+    These scenarios show distributed tracing with OpenTelemetry and Tempo.
+  scenarios:
+  - name: Distributed tracing
+    path: trace-delivery
+    description: Learn distributed tracing through a sofa delivery workflow from order to doorstep.
+  - name: Game of tracing
+    path: game-of-tracing
+    description: Play an interactive strategy game that teaches distributed tracing, sampling, and service graphs.
+  - name: OpenTelemetry basic tracing
+    path: otel-basic-tracing
+    description: Collect and visualize OpenTelemetry traces with Alloy and Tempo.
+  - name: OpenTelemetry Collector to Alloy migration
+    path: otel-collector-to-alloy-migration
+    description: Compare equivalent OTLP pipelines in the OpenTelemetry Collector and Alloy with matching telemetry.
+  - name: OpenTelemetry SDK traces across languages
+    path: app-instrumentation/traces/opentelemetry-sdk
+    description: Instrument five languages with the OpenTelemetry tracing SDK and collect standalone traces through Alloy into Tempo.
+  - name: OpenTelemetry Jaeger and Zipkin receivers
+    path: otel-jaeger-zipkin-receiver
+    description: Ingest Jaeger and Zipkin trace formats with Alloy and forward them to Tempo over OTLP.
+  - name: Zero-code eBPF instrumentation
+    path: beyla-zero-code-instrumentation
+    description: Auto-instrument an unmodified Go HTTP service with `beyla.ebpf` -- no OpenTelemetry SDK, no agent, no code changes. Produces RED metrics and traces from eBPF probes alone.
+  - name: OpenTelemetry load balancing
+    path: otel-loadbalancing
+    description: Shard traces across two tail-sampling Alloy instances with `otelcol.exporter.loadbalancing` -- same trace ID, same backend.
+  - name: OpenTelemetry service graphs
+    path: otel-tracing-service-graphs
+    description: Generate service graphs with the Alloy `servicegraph` connector.
+  - name: OpenTelemetry span metrics
+    path: otel-span-metrics
+    description: Generate RED metrics from OpenTelemetry traces with the span metrics connector. Request rate, error rate, and duration.
+  - name: OpenTelemetry tail sampling
+    path: otel-tail-sampling
+    description: Apply tail sampling policies to OpenTelemetry traces with Alloy and Tempo.
+  - name: Trace correlation with exemplars
+    path: trace-log-correlation-exemplars
+    description: Jump from a latency histogram to the exact trace behind it with OpenMetrics exemplars flowing through Alloy into Prometheus and Tempo.
+- slug: metrics
+  title: Metrics
+  intro: |
+    These scenarios collect and forward metrics with Alloy.
+  scenarios:
+  - name: Blackbox probing
+    path: blackbox-probing
+    description: Monitor endpoint availability and response times with synthetic HTTP probes.
+  - name: Datadog receiver migration
+    path: datadog-receiver-migration
+    description: Ingest Datadog Agent metrics and traces with `otelcol.receiver.datadog` and forward them to Prometheus and Tempo.
+  - name: DNS service discovery
+    path: dns-service-discovery
+    description: Discover and scrape two Prometheus targets from DNS SRV records with `discovery.dns`.
+  - name: Prometheus Operator Probes
+    path: k8s/prometheus-operator-probes
+    description: Scrape Prometheus Operator `Probe` resources with Alloy as the blackbox prober (`/probe` path).
+  - name: Metric cardinality control
+    path: metric-cardinality-control
+    description: Compare original Prometheus metrics with a cardinality-controlled `prometheus.relabel` path that drops noisy series and volatile labels and normalizes dynamic routes.
+  - name: OpenTelemetry SDK metrics across languages
+    path: app-instrumentation/metrics/opentelemetry-sdk
+    description: Instrument five languages with the OpenTelemetry metrics SDK and push them through Alloy to Prometheus.
+  - name: Prometheus client metrics across languages
+    path: app-instrumentation/metrics/prometheus-client
+    description: Expose `/metrics` with native Prometheus client libraries in five languages and scrape them with Alloy. The pull-model counterpart to the OpenTelemetry SDK scenario.
+  - name: Prometheus Pushgateway
+    path: prometheus-pushgateway
+    description: Scrape metrics retained for short-lived batch jobs by Prometheus Pushgateway and remote-write them through Alloy.
+  - name: OTel metrics pipeline
+    path: otel-metrics-pipeline
+    description: Forward OpenTelemetry metrics from applications through Alloy. Alloy batches and transforms samples before it sends them to Prometheus.
+  - name: StatsD metrics
+    path: statsd-metrics
+    description: Receive legacy StatsD counter, gauge, and timer packets in Alloy and remote-write mapped Prometheus metrics.
+- slug: profiles
+  title: Profiles
+  intro: |
+    These scenarios collect continuous profiles from applications.
+  scenarios:
+  - name: Continuous profiling
+    path: continuous-profiling
+    description: Collect and visualize CPU, memory, and goroutine profiles from Go applications with Grafana Pyroscope.
+  - name: eBPF host profiling
+    path: ebpf-host-profiling
+    description: Profile every process on a Linux host with `pyroscope.ebpf` -- no language agents, no application code changes. Uses Docker container discovery to attribute samples per workload.
+  - name: Java profiling
+    path: java-profiling
+    description: Attach async-profiler to a running JVM with `pyroscope.java` -- CPU and allocation flame graphs with no agent jar and no code changes.
+- slug: alloy-operations
+  title: Alloy operations
+  intro: |
+    These scenarios run, scale, and monitor Alloy itself.
+  scenarios:
+  - name: Alloy clustering
+    path: alloy-clustering
+    description: Run a three-node Alloy cluster that consistent-hashes `prometheus.scrape` targets across nodes. Stop a node and its targets redistribute to the survivors within seconds.
+  - name: Self-monitoring
+    path: self-monitoring
+    description: Configure Alloy to monitor itself and collect its own metrics and logs.
+  - name: Vault secrets
+    path: vault-secrets
+    description: Pull `prometheus.remote_write` `basic_auth` credentials from HashiCorp Vault at runtime with `remote.vault`. Credentials reload on rotation.
+- slug: infrastructure-and-platforms
+  title: Infrastructure and platforms
+  intro: |
+    These scenarios monitor hosts, containers, network devices, cloud providers, and Kubernetes clusters.
+  scenarios:
+  - name: Amazon CloudWatch metrics
+    path: cloudwatch-metrics
+    description: Pull metrics from Amazon CloudWatch into Prometheus with `prometheus.exporter.cloudwatch`. Uses LocalStack for offline reproducibility. No AWS account required.
+  - name: Docker monitoring
+    path: docker-monitoring
+    description: Monitor Docker container metrics and logs.
+  - name: Kubernetes
+    path: k8s
+    description: Scenarios for Alloy on Kubernetes with the k8s-monitoring Helm chart or plain manifests. See subdirectories for logs, metrics, profiling, tracing, cluster events, and standalone kube-state-metrics + cAdvisor scraping.
+  - name: Linux monitoring
+    path: linux
+    description: Collect Linux system metrics, journal entries, and log files with Alloy.
+  - name: NGINX monitoring
+    path: nginx-monitoring
+    description: Monitor NGINX access and error logs plus `stub_status` metrics with Alloy.
+  - name: SNMP monitoring
+    path: snmp
+    description: Monitor devices with the Alloy SNMP exporter for Simple Network Management Protocol.
+  - name: Windows monitoring
+    path: windows
+    description: Monitor Windows system metrics and Event Logs.
+- slug: databases-and-caches
+  title: Databases and caches
+  intro: |
+    These scenarios monitor databases and in-memory caches.
+  scenarios:
+  - name: Elasticsearch monitoring
+    path: elasticsearch-monitoring
+    description: Monitor Elasticsearch cluster health, node status, and performance metrics.
+  - name: Memcached monitoring
+    path: memcached-monitoring
+    description: Monitor Memcached instance metrics, including connections, memory usage, and command performance.
+  - name: Microsoft SQL Server monitoring
+    path: mssql-monitoring
+    description: Monitor SQL Server file sizes, batch requests, and connections with `prometheus.exporter.mssql`, plus app-specific metrics from a custom `query_config`.
+  - name: MongoDB monitoring
+    path: mongodb-monitoring
+    description: Monitor MongoDB op-counters, connection pool, and replica-set replication metrics with `prometheus.exporter.mongodb`. Runs a single-node replica set with an insert load generator.
+  - name: MySQL monitoring
+    path: mysql-monitoring
+    description: Monitor MySQL database server metrics and performance indicators.
+  - name: PostgreSQL monitoring
+    path: postgres-monitoring
+    description: Monitor PostgreSQL transaction statistics, connections, and server configuration.
+  - name: RabbitMQ monitoring
+    path: rabbitmq-monitoring
+    description: Monitor RabbitMQ queue, connection, and channel metrics plus broker container logs.
+  - name: Redis monitoring
+    path: redis-monitoring
+    description: Monitor Redis instance metrics, including connections, memory usage, and command throughput.
+- slug: opentelemetry-engine
+  title: OpenTelemetry Engine
+  intro: |
+    Alloy v1.14 and later include an experimental **OpenTelemetry Engine** that runs standard OpenTelemetry Collector YAML configurations directly.
+    These scenarios use OpenTelemetry YAML syntax for the OpenTelemetry Engine and a minimal Alloy configuration to enable the Alloy UI.
+    Refer to the [OpenTelemetry examples README](otel-examples/) for details.
+  scenarios:
+  - name: Cost control
+    path: otel-examples/cost-control
+    description: Drop health checks, filter debug logs, and apply probabilistic sampling to cut telemetry volume.
+  - name: Count connector
+    path: otel-examples/count-connector
+    description: Derive request rate and error rate metrics from traces and logs with the `count` connector.
+  - name: File log processing
+    path: otel-examples/filelog-processing
+    description: Collect and parse mixed-format log files with the OTel `filelog` receiver and operator chains.
+  - name: Host metrics
+    path: otel-examples/host-metrics
+    description: Collect CPU, memory, disk, and network metrics with the `hostmetrics` receiver.
+  - name: Kafka buffer
+    path: otel-examples/kafka-buffer
+    description: Buffer traces through Kafka for durability and `backpressure` control.
+  - name: Multi-pipeline fan-out
+    path: otel-examples/multi-pipeline-fanout
+    description: Send traces to two backends. Each destination runs its own process path.
+  - name: Multi-tenant routing
+    path: otel-examples/routing-multi-tenant
+    description: Route logs to different Loki tenants based on resource attributes with fan-out and filter.
+  - name: OTTL transform cookbook
+    path: otel-examples/ottl-transform
+    description: A cookbook of OpenTelemetry Transformation Language patterns for JSON parsing, severity mapping, attribute promotion, and truncation.
+  - name: PII redaction
+    path: otel-examples/pii-redaction
+    description: Scrub personally identifiable information, credit cards, emails, and IP addresses from traces and logs with OpenTelemetry Transformation Language `replace_pattern`.
+  - name: Resource enrichment
+    path: otel-examples/resource-enrichment
+    description: Attach host, OS, and Docker metadata to all signals with `resourcedetection`.

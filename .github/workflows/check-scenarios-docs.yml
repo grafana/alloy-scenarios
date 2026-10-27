@@ -1,0 +1,32 @@
+name: check-scenarios-docs
+
+# Validates scenarios.yml and fails when README.md or docs/alloy/ is out of
+# date with it. The Grafana Alloy documentation copies docs/alloy/ verbatim.
+#
+# No paths filter: renaming or deleting a scenario directory listed in
+# scenarios.yml must fail here, and the check takes seconds.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check scenario tables
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet -r .github/scripts/requirements.txt
+
+      - name: Check scenario tables
+        run: '"$RUNNER_TEMP/venv/bin/python" .github/scripts/generate_scenarios_docs.py --check'
