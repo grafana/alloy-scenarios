@@ -8,7 +8,7 @@ COPY src ./src
 RUN mvn -B -q package
 
 # ---- run stage: slim JRE with just the fat jar ----
-FROM eclipse-temurin:25.0.3_9-jre@sha256:681c543d6f36c50f45e9b5226930a46203dcfa351d3670e9d0bdf0dabae53539
+FROM eclipse-temurin:25.0.5_8-jre@sha256:ecdc0adb37bde1a281c4d245a3cd535004b1fc8322d560f5b09463b248c81df0
 WORKDIR /app
 COPY --from=build /app/target/app.jar app.jar
 # Prometheus /metrics is served on 9100 for Alloy to scrape.
