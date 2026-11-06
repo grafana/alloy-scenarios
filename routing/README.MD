@@ -2,15 +2,15 @@
 
 This scenario routes logs from a single intake to different Loki tenants based on log content and origin.
 It models an OpenShift cluster log forwarder that sends application and audit logs from test and production clusters to one Alloy instance.
-Alloy sets the Loki tenant from the `hostname` field and the nested `message.logger` field, then pushes to a multi-tenant Loki backend backed by MinIO.
+Alloy sets the Loki tenant from the `hostname` field and the nested `message.logger` field, then pushes to a multi-tenant Loki backend backed by Silo, an S3-compatible object store.
 
 ## Before you begin
 
 Ensure you have the following:
 
 - [Docker][docker] and [Docker Compose][docker-compose].
-- Ports 3000 for Grafana, 3005 for the Alloy UI, 3015 for the Alloy log push API, 3100 for Loki, and 9000 and 9001 for MinIO free on the host.
-- A `.customData` directory in the scenario folder. Create it before you start the stack if MinIO fails on first boot: `mkdir -p .customData`
+- Ports 3000 for Grafana, 3005 for the Alloy UI, 3015 for the Alloy log push API, 3100 for Loki, and 9000 and 9001 for Silo free on the host.
+- A `.customData` directory in the scenario folder. Create it before you start the stack if Silo fails on first boot: `mkdir -p .customData`
 
 [docker]: https://docs.docker.com/get-docker/
 [docker-compose]: https://docs.docker.com/compose/install/
@@ -23,15 +23,15 @@ Ensure you have the following:
 | OCP sim  |         |       |                |      |         |         |
 +----------+         +-------+                +---+--+         +---------+
                                                   |
-                                              +-------+
-                                              | MinIO |
-                                              +-------+
+                                              +------+
+                                              | Silo |
+                                              +------+
 ```
 
 Promtail simulates an OpenShift log forwarder.
 It tails a local file and pushes logs to Alloy over HTTP.
 Alloy receives logs on `loki.source.api`, adds a static `source=grafana-alloy` label, and routes by tenant before writing to Loki.
-Loki stores data in MinIO with multi-tenant isolation through `X-Scope-OrgID`.
+Loki stores data in Silo with multi-tenant isolation through `X-Scope-OrgID`.
 Grafana provisions one data source per tenant so you can query each tenant separately.
 
 Tenant routing in `config.alloy`:
@@ -63,14 +63,14 @@ Tenant routing in `config.alloy`:
 
 3. From the `routing` directory, check that all containers are up: `docker compose ps`
 
-   Expect `minio`, `loki`, `grafana`, `alloy`, and `promtail`.
+   Expect `silo`, `loki`, `grafana`, `alloy`, and `promtail`.
 
 ## Explore the services
 
 - **Grafana** at http://localhost:3000: Log in with `admin` / `admin`, then open **Explore**. Five Loki data sources are provisioned for different tenants.
 - **Alloy UI** at http://localhost:3005: Component graph for `loki.source.api`, `loki.process`, and `loki.write`.
 - **Loki** at http://localhost:3100: Multi-tenant log storage with `auth_enabled: true`.
-- **MinIO** at http://localhost:9001: Object storage console for the Loki bucket. Credentials are `myuser` / `mypass`.
+- **Silo** at http://localhost:9001: Object storage console for the Loki bucket. Credentials are `myuser` / `mypassword`.
 - **Promtail** at http://localhost:9080: Tails `support/promtail/myCustomLog.txt` and pushes to Alloy at `http://alloy:3005/loki/api/v1/push`.
 
 ## Understand the Alloy pipeline
@@ -129,14 +129,9 @@ This section covers startup failures, missing logs, and port conflicts.
 
 Run `docker compose ps` to check the status of each container.
 If any container has exited, run `docker compose logs <SERVICE_NAME>` to read the failure reason.
-Replace `<SERVICE_NAME>` with the name of the service that exited, such as `minio`, `loki`, or `alloy`.
+Replace `<SERVICE_NAME>` with the name of the service that exited, such as `silo`, `loki`, or `alloy`.
 
-If MinIO fails on first boot, create the data directory: `mkdir -p .customData`
-
-### Loki fails to load configuration
-
-`docker-compose.yaml` mounts `./support/loki/server.yml`, but the file on disk is `support/loki/server.yaml`.
-Rename the file or update the volume mount so Loki can read its configuration.
+If Silo fails on first boot, create the data directory: `mkdir -p .customData`
 
 ### No logs in the expected tenant
 
