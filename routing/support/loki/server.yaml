@@ -11,11 +11,11 @@ common:
   path_prefix: "/loki/data"
   storage:
     s3:
-      endpoint: "minio:9000"
+      endpoint: "silo:9000"
       insecure: true
       bucketnames: "loki"
       access_key_id: "myuser"
-      secret_access_key: "mypass"
+      secret_access_key: "mypassword"
       s3forcepathstyle: true
 
 memberlist:
@@ -96,6 +96,7 @@ querier:
 compactor:
   working_directory: "/tmp/compactor"
   retention_enabled: true
+  delete_request_store: s3
   compaction_interval: 30m
   retention_delete_delay: 1h
   retention_delete_worker_count: 150
