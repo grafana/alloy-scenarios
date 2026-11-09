@@ -71,7 +71,7 @@ services:
 
   # ── Trace storage ──
   tempo:
-    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.7}
+    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.10}
     command: ["-config.file=/etc/tempo.yaml"]
     ports:
       - 3200:3200
