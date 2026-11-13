@@ -47,6 +47,9 @@ SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 PATH_SEGMENT_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]*$")
 CATEGORY_KEYS = ("slug", "title", "intro", "scenarios")
 SCENARIO_KEYS = ("name", "path", "description")
+SCENARIO_FILES = ("docker-compose.y*ml", "config.alloy", "*values.y*ml")
+# Scenario directories deliberately left out of the README and the Alloy docs.
+UNLISTED = ()
 
 
 def label_key(label):
@@ -84,6 +87,20 @@ def check_path(where, path, errors):
         errors.append(f"{where}: directory {path!r} doesn't exist")
 
 
+def check_unlisted(paths, errors):
+    """Report directories with scenario files that no path in scenarios.yml covers."""
+    found = set()
+    for pattern in SCENARIO_FILES:
+        for file in ROOT.rglob(pattern):
+            parent = file.parent.relative_to(ROOT)
+            if not any(part.startswith(".") for part in parent.parts):
+                found.add(parent.as_posix())
+    covered = [*paths, *UNLISTED]
+    for directory in sorted(found):
+        if not any(directory == p or directory.startswith(p + "/") for p in covered):
+            errors.append(f"directory {directory!r} has scenario files but isn't listed in scenarios.yml")
+
+
 def load(path):
     """Load and validate scenarios.yml. Reports every problem, not just the first."""
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -96,6 +113,7 @@ def load(path):
         raise SystemExit("scenarios.yml: 'categories' must be a non-empty list")
 
     slugs = {}
+    paths = []
     for i, category in enumerate(categories):
         where = f"categories[{i}]"
         if not check_keys(where, category, CATEGORY_KEYS, errors):
@@ -127,6 +145,8 @@ def load(path):
             check_text(f"{item}: name", name, errors, hugo=True)
             check_text(f"{item}: description", scenario["description"], errors, hugo=True)
             check_path(item, scenario["path"], errors)
+            if isinstance(scenario["path"], str):
+                paths.append(scenario["path"])
             if isinstance(name, str):
                 if any(c in name for c in "[]|"):
                     errors.append(f"{item}: name {name!r} can't contain '[', ']', or '|'")
@@ -137,6 +157,7 @@ def load(path):
             if isinstance(scenario["description"], str) and "|" in scenario["description"]:
                 errors.append(f"{item}: description can't contain '|'")
 
+    check_unlisted(paths, errors)
     if errors:
         raise SystemExit("scenarios.yml is invalid:\n  " + "\n  ".join(errors))
     return categories
