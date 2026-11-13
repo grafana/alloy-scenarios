@@ -49,7 +49,7 @@ categories:
     description: Parse logs from popular logging frameworks across 7 programming languages.
   - name: Promtail to Alloy migration
     path: promtail-to-alloy-migration
-    description: Run Promtail (EOL March 2026) and its `alloy convert` equivalent side by side against one log file and verify identical results in Loki.
+    description: Run Promtail and its `alloy convert` equivalent side by side against one log file and verify identical results in Loki.
   - name: Structured log parsing
     path: mail-house
     description: Parse structured logs into labels and structured metadata.
