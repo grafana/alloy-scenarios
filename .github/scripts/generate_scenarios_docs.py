@@ -67,13 +67,13 @@ def check_keys(where, item, keys, errors):
     return all(key in item for key in keys)
 
 
-def check_text(where, value, errors, multiline=False):
+def check_text(where, value, errors, multiline=False, hugo=False):
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{where}: expected a non-empty string")
         return
     if not multiline and "\n" in value.strip():
         errors.append(f"{where}: must be a single line")
-    if "{{" in value or "{%" in value:
+    if hugo and "{{" in value:
         errors.append(f"{where}: contains a Hugo shortcode delimiter")
 
 
@@ -124,8 +124,8 @@ def load(path):
             if not check_keys(item, scenario, SCENARIO_KEYS, errors):
                 continue
             name = scenario["name"]
-            check_text(f"{item}: name", name, errors)
-            check_text(f"{item}: description", scenario["description"], errors)
+            check_text(f"{item}: name", name, errors, hugo=True)
+            check_text(f"{item}: description", scenario["description"], errors, hugo=True)
             check_path(item, scenario["path"], errors)
             if isinstance(name, str):
                 if any(c in name for c in "[]|"):
