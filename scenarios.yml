@@ -28,7 +28,7 @@ categories:
     description: Consume and process logs from Apache Kafka topics.
   - name: Log API gateway
     path: log-api-gateway
-    description: Use Alloy as a centralized log gateway that accepts logs via a Loki-compatible push API endpoint.
+    description: Use Alloy as a centralized log gateway that accepts logs through a Loki-compatible push API endpoint.
   - name: Log routing
     path: routing
     description: Route logs from multiple sources to different Loki tenants based on log content and origin.
