@@ -58,7 +58,7 @@ Checklist for a new scenario:
 2. Include `docker-compose.yml`, `config.alloy`, backend configs, and `README.md`
 3. Use `${VAR:-default}` for image versions matching `image-versions.env` keys
 4. Grafana service should auto-provision datasources via entrypoint script (see template)
-5. Add the scenario to the main `README.md` table
+5. Add the scenario to `scenarios.yml`, then run `python3 .github/scripts/generate_scenarios_docs.py` to regenerate the `README.md` tables and `docs/alloy/`. Don't edit those tables by hand
 6. Alloy UI is available at `http://localhost:12345` for debugging pipelines
 
 ## Key Conventions

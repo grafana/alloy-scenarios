@@ -42,7 +42,7 @@ Refer to the scenario README for additional endpoints.
 Browse scenarios by telemetry type.
 Each row links to a directory with a README and all the configuration files required to deploy and run the scenario.
 
-<!-- alloy-docs: slug=logs -->
+<!-- BEGIN GENERATED SCENARIO TABLES: edit scenarios.yml, then run python3 .github/scripts/generate_scenarios_docs.py -->
 
 ### Logs
 
@@ -55,20 +55,18 @@ These scenarios focus on log collection, log parsing, log routing, and log redac
 | [Faro frontend observability](faro-frontend-observability/) | Collect frontend web telemetry, including logs, errors, and web vitals, from browser applications with the Faro Web SDK. |
 | [GELF log ingestion](gelf-log-ingestion/) | Ingest Graylog Extended Log Format logs over `UDP`. |
 | [Kafka logs](kafka/) | Consume and process logs from Apache Kafka topics. |
-| [Log API gateway](log-api-gateway/) | Use Alloy as a centralized log gateway that accepts logs via a Loki-compatible push API endpoint. |
+| [Log API gateway](log-api-gateway/) | Use Alloy as a centralized log gateway that accepts logs through a Loki-compatible push API endpoint. |
 | [Log routing](routing/) | Route logs from multiple sources to different Loki tenants based on log content and origin. |
 | [Log secret filtering](log-secret-filtering/) | Redact sensitive credentials and secrets from logs with pattern rules before storage. |
 | [Log-to-metrics](log-to-metrics/) | Extract a request counter and latency histogram from application logs while forwarding the raw logs to Loki. |
 | [Logs from file](logs-file/) | Tail log files with Alloy. |
 | [Logs over TCP](logs-tcp/) | Receive and process TCP logs in JSON format. |
 | [Popular logging frameworks](app-instrumentation/logging/popular-logging-frameworks/) | Parse logs from popular logging frameworks across 7 programming languages. |
-| [Promtail to Alloy migration](promtail-to-alloy-migration/) | Run Promtail (EOL March 2026) and its `alloy convert` equivalent side by side against one log file and verify identical results in Loki. |
+| [Promtail to Alloy migration](promtail-to-alloy-migration/) | Run Promtail and its `alloy convert` equivalent side by side against one log file and verify identical results in Loki. |
 | [Structured log parsing](mail-house/) | Parse structured logs into labels and structured metadata. |
 | [Syslog monitoring](syslog/) | Monitor non-RFC5424 compliant syslog messages with `rsyslog` and Alloy. |
 | [systemd journal](systemd-journal/) | Forward systemd journal entries to Loki with filters and labels tuned for fast queries. |
 | [Windows security events](windows-events/) | Forward Windows Security event logs to Loki with filters and field extraction for security operations center workflows. |
-
-<!-- alloy-docs: slug=traces -->
 
 ### Traces
 
@@ -89,8 +87,6 @@ These scenarios show distributed tracing with OpenTelemetry and Tempo.
 | [OpenTelemetry tail sampling](otel-tail-sampling/) | Apply tail sampling policies to OpenTelemetry traces with Alloy and Tempo. |
 | [Trace correlation with exemplars](trace-log-correlation-exemplars/) | Jump from a latency histogram to the exact trace behind it with OpenMetrics exemplars flowing through Alloy into Prometheus and Tempo. |
 
-<!-- alloy-docs: slug=metrics -->
-
 ### Metrics
 
 These scenarios collect and forward metrics with Alloy.
@@ -108,8 +104,6 @@ These scenarios collect and forward metrics with Alloy.
 | [OTel metrics pipeline](otel-metrics-pipeline/) | Forward OpenTelemetry metrics from applications through Alloy. Alloy batches and transforms samples before it sends them to Prometheus. |
 | [StatsD metrics](statsd-metrics/) | Receive legacy StatsD counter, gauge, and timer packets in Alloy and remote-write mapped Prometheus metrics. |
 
-<!-- alloy-docs: slug=profiles -->
-
 ### Profiles
 
 These scenarios collect continuous profiles from applications.
@@ -117,10 +111,8 @@ These scenarios collect continuous profiles from applications.
 | Scenario | Description |
 | -------- | ----------- |
 | [Continuous profiling](continuous-profiling/) | Collect and visualize CPU, memory, and goroutine profiles from Go applications with Grafana Pyroscope. |
-| [eBPF host profiling](ebpf-host-profiling/) | Profile every process on a Linux host with `pyroscope.ebpf` -- no language agents, no application code changes. Uses Docker container discovery to attribute samples per workload. |
+| [eBPF host profiling](ebpf-host-profiling/) | Profile every process on a Linux host with `pyroscope.ebpf`. No language agents, no application code changes. Uses Docker container discovery to attribute samples per workload. |
 | [Java profiling](java-profiling/) | Attach async-profiler to a running JVM with `pyroscope.java` -- CPU and allocation flame graphs with no agent jar and no code changes. |
-
-<!-- alloy-docs: slug=alloy-operations -->
 
 ### Alloy operations
 
@@ -131,8 +123,6 @@ These scenarios run, scale, and monitor Alloy itself.
 | [Alloy clustering](alloy-clustering/) | Run a three-node Alloy cluster that consistent-hashes `prometheus.scrape` targets across nodes. Stop a node and its targets redistribute to the survivors within seconds. |
 | [Self-monitoring](self-monitoring/) | Configure Alloy to monitor itself and collect its own metrics and logs. |
 | [Vault secrets](vault-secrets/) | Pull `prometheus.remote_write` `basic_auth` credentials from HashiCorp Vault at runtime with `remote.vault`. Credentials reload on rotation. |
-
-<!-- alloy-docs: slug=infrastructure-and-platforms -->
 
 ### Infrastructure and platforms
 
@@ -148,8 +138,6 @@ These scenarios monitor hosts, containers, network devices, cloud providers, and
 | [SNMP monitoring](snmp/) | Monitor devices with the Alloy SNMP exporter for Simple Network Management Protocol. |
 | [Windows monitoring](windows/) | Monitor Windows system metrics and Event Logs. |
 
-<!-- alloy-docs: slug=databases-and-caches -->
-
 ### Databases and caches
 
 These scenarios monitor databases and in-memory caches.
@@ -164,8 +152,6 @@ These scenarios monitor databases and in-memory caches.
 | [PostgreSQL monitoring](postgres-monitoring/) | Monitor PostgreSQL transaction statistics, connections, and server configuration. |
 | [RabbitMQ monitoring](rabbitmq-monitoring/) | Monitor RabbitMQ queue, connection, and channel metrics plus broker container logs. |
 | [Redis monitoring](redis-monitoring/) | Monitor Redis instance metrics, including connections, memory usage, and command throughput. |
-
-<!-- alloy-docs: slug=opentelemetry-engine -->
 
 ### OpenTelemetry Engine
 
@@ -185,6 +171,8 @@ Refer to the [OpenTelemetry examples README](otel-examples/) for details.
 | [OTTL transform cookbook](otel-examples/ottl-transform/) | A cookbook of OpenTelemetry Transformation Language patterns for JSON parsing, severity mapping, attribute promotion, and truncation. |
 | [PII redaction](otel-examples/pii-redaction/) | Scrub personally identifiable information, credit cards, emails, and IP addresses from traces and logs with OpenTelemetry Transformation Language `replace_pattern`. |
 | [Resource enrichment](otel-examples/resource-enrichment/) | Attach host, OS, and Docker metadata to all signals with `resourcedetection`. |
+
+<!-- END GENERATED SCENARIO TABLES -->
 
 ## Contribute
 
@@ -240,7 +228,7 @@ Confirm the following items before you submit your scenario:
   - Step-by-step instructions to run the demo
   - Expected output and what to look for
   - Explanation of key configuration elements
-- Add the scenario to the table in this `README.md`
+- Add the scenario to `scenarios.yml`, then run `python3 .github/scripts/generate_scenarios_docs.py` to update the tables in this `README.md` and the Grafana Alloy documentation
 - Ensure the scenario works with the centralized image management system
 - Verify all components start correctly with `docker compose up -d`
 
