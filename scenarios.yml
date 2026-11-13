@@ -148,7 +148,7 @@ categories:
     description: Collect and visualize CPU, memory, and goroutine profiles from Go applications with Grafana Pyroscope.
   - name: eBPF host profiling
     path: ebpf-host-profiling
-    description: Profile every process on a Linux host with `pyroscope.ebpf` -- no language agents, no application code changes. Uses Docker container discovery to attribute samples per workload.
+    description: Profile every process on a Linux host with `pyroscope.ebpf`. No language agents, no application code changes. Uses Docker container discovery to attribute samples per workload.
   - name: Java profiling
     path: java-profiling
     description: Attach async-profiler to a running JVM with `pyroscope.java` -- CPU and allocation flame graphs with no agent jar and no code changes.
