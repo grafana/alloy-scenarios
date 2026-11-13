@@ -55,14 +55,14 @@ These scenarios focus on log collection, log parsing, log routing, and log redac
 | [Faro frontend observability](faro-frontend-observability/) | Collect frontend web telemetry, including logs, errors, and web vitals, from browser applications with the Faro Web SDK. |
 | [GELF log ingestion](gelf-log-ingestion/) | Ingest Graylog Extended Log Format logs over `UDP`. |
 | [Kafka logs](kafka/) | Consume and process logs from Apache Kafka topics. |
-| [Log API gateway](log-api-gateway/) | Use Alloy as a centralized log gateway that accepts logs via a Loki-compatible push API endpoint. |
+| [Log API gateway](log-api-gateway/) | Use Alloy as a centralized log gateway that accepts logs through a Loki-compatible push API endpoint. |
 | [Log routing](routing/) | Route logs from multiple sources to different Loki tenants based on log content and origin. |
 | [Log secret filtering](log-secret-filtering/) | Redact sensitive credentials and secrets from logs with pattern rules before storage. |
 | [Log-to-metrics](log-to-metrics/) | Extract a request counter and latency histogram from application logs while forwarding the raw logs to Loki. |
 | [Logs from file](logs-file/) | Tail log files with Alloy. |
 | [Logs over TCP](logs-tcp/) | Receive and process TCP logs in JSON format. |
 | [Popular logging frameworks](app-instrumentation/logging/popular-logging-frameworks/) | Parse logs from popular logging frameworks across 7 programming languages. |
-| [Promtail to Alloy migration](promtail-to-alloy-migration/) | Run Promtail (EOL March 2026) and its `alloy convert` equivalent side by side against one log file and verify identical results in Loki. |
+| [Promtail to Alloy migration](promtail-to-alloy-migration/) | Run Promtail and its `alloy convert` equivalent side by side against one log file and verify identical results in Loki. |
 | [Structured log parsing](mail-house/) | Parse structured logs into labels and structured metadata. |
 | [Syslog monitoring](syslog/) | Monitor non-RFC5424 compliant syslog messages with `rsyslog` and Alloy. |
 | [systemd journal](systemd-journal/) | Forward systemd journal entries to Loki with filters and labels tuned for fast queries. |
@@ -111,7 +111,7 @@ These scenarios collect continuous profiles from applications.
 | Scenario | Description |
 | -------- | ----------- |
 | [Continuous profiling](continuous-profiling/) | Collect and visualize CPU, memory, and goroutine profiles from Go applications with Grafana Pyroscope. |
-| [eBPF host profiling](ebpf-host-profiling/) | Profile every process on a Linux host with `pyroscope.ebpf` -- no language agents, no application code changes. Uses Docker container discovery to attribute samples per workload. |
+| [eBPF host profiling](ebpf-host-profiling/) | Profile every process on a Linux host with `pyroscope.ebpf`. No language agents, no application code changes. Uses Docker container discovery to attribute samples per workload. |
 | [Java profiling](java-profiling/) | Attach async-profiler to a running JVM with `pyroscope.java` -- CPU and allocation flame graphs with no agent jar and no code changes. |
 
 ### Alloy operations

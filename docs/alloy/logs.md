@@ -17,14 +17,14 @@ in grafana/alloy copies the change into the Alloy documentation.
 | [Faro frontend observability][] | Collect frontend web telemetry, including logs, errors, and web vitals, from browser applications with the Faro Web SDK. |
 | [GELF log ingestion][] | Ingest Graylog Extended Log Format logs over `UDP`. |
 | [Kafka logs][] | Consume and process logs from Apache Kafka topics. |
-| [Log API gateway][] | Use Alloy as a centralized log gateway that accepts logs via a Loki-compatible push API endpoint. |
+| [Log API gateway][] | Use Alloy as a centralized log gateway that accepts logs through a Loki-compatible push API endpoint. |
 | [Log routing][] | Route logs from multiple sources to different Loki tenants based on log content and origin. |
 | [Log secret filtering][] | Redact sensitive credentials and secrets from logs with pattern rules before storage. |
 | [Log-to-metrics][] | Extract a request counter and latency histogram from application logs while forwarding the raw logs to Loki. |
 | [Logs from file][] | Tail log files with Alloy. |
 | [Logs over TCP][] | Receive and process TCP logs in JSON format. |
 | [Popular logging frameworks][] | Parse logs from popular logging frameworks across 7 programming languages. |
-| [Promtail to Alloy migration][] | Run Promtail (EOL March 2026) and its `alloy convert` equivalent side by side against one log file and verify identical results in Loki. |
+| [Promtail to Alloy migration][] | Run Promtail and its `alloy convert` equivalent side by side against one log file and verify identical results in Loki. |
 | [Structured log parsing][] | Parse structured logs into labels and structured metadata. |
 | [Syslog monitoring][] | Monitor non-RFC5424 compliant syslog messages with `rsyslog` and Alloy. |
 | [systemd journal][] | Forward systemd journal entries to Loki with filters and labels tuned for fast queries. |
