@@ -489,4 +489,4 @@ To create your own example:
 2. Copy the template files from this template
 3. Customize the files for your specific use case
 4. Update the README.md with specific instructions for your example
-5. Add your example to the main README.md table with a link and description
+5. Add the scenario to `scenarios.yml`, then run `python3 .github/scripts/generate_scenarios_docs.py` to regenerate the `README.md` tables and `docs/alloy/`. Don't edit those tables by hand
