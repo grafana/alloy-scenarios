@@ -32,7 +32,8 @@ fi
 
 # Run docker-compose in the example directory with the environment variables
 echo "Starting example: $EXAMPLE_DIR"
-(cd "$EXAMPLE_DIR" && docker compose --env-file ../image-versions.env up -d)
+IMAGE_VERSIONS_FILE="$(pwd)/image-versions.env"
+(cd "$EXAMPLE_DIR" && docker compose --env-file "$IMAGE_VERSIONS_FILE" up -d)
 
 echo "Example started successfully."
 echo "Access Grafana at http://localhost:3000"
