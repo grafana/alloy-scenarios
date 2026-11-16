@@ -101,6 +101,7 @@ These scenarios collect and forward metrics with Alloy.
 | [Datadog receiver migration](datadog-receiver-migration/) | Ingest Datadog Agent metrics and traces with `otelcol.receiver.datadog` and forward them to Prometheus and Tempo. |
 | [DNS service discovery](dns-service-discovery/) | Discover and scrape two Prometheus targets from DNS SRV records with `discovery.dns`. |
 | [Prometheus Operator Probes](k8s/prometheus-operator-probes/) | Scrape Prometheus Operator `Probe` resources with Alloy as the blackbox prober (`/probe` path). |
+| [Kubernetes trace enrichment](k8s/trace-enrichment/) | Tag OTLP traces with pod, namespace, node, and deployment names using `otelcol.processor.k8sattributes` and send them to Tempo. |
 | [Metric cardinality control](metric-cardinality-control/) | Compare original Prometheus metrics with a cardinality-controlled `prometheus.relabel` path that drops noisy series and volatile labels and normalizes dynamic routes. |
 | [OpenTelemetry SDK metrics across languages](app-instrumentation/metrics/opentelemetry-sdk/) | Instrument five languages with the OpenTelemetry metrics SDK and push them through Alloy to Prometheus. |
 | [Prometheus client metrics across languages](app-instrumentation/metrics/prometheus-client/) | Expose `/metrics` with native Prometheus client libraries in five languages and scrape them with Alloy. The pull-model counterpart to the OpenTelemetry SDK scenario. |
