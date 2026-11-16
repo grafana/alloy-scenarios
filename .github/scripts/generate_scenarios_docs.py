@@ -3,7 +3,7 @@
 
 Writes the tables between the generated-content markers in README.md, and one
 file per category in docs/alloy/ that the Grafana Alloy documentation copies
-into its shared content.
+into its shared content. Also generates .github/scenario-list.txt for smoke tests.
 
 Run without arguments to update the files. Run with --check to fail when they
 are out of date, without writing anything.
@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "scenarios.yml"
 README = ROOT / "README.md"
 DOCS_DIR = ROOT / "docs" / "alloy"
+CI_LIST = ROOT / ".github" / "scenario-list.txt"
 
 REPO_URL = "https://github.com/grafana/alloy-scenarios"
 TREE_URL = REPO_URL + "/tree/main/"
@@ -46,7 +47,7 @@ in grafana/alloy copies the change into the Alloy documentation.
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 PATH_SEGMENT_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]*$")
 CATEGORY_KEYS = ("slug", "title", "intro", "scenarios")
-SCENARIO_KEYS = ("name", "path", "description")
+SCENARIO_KEYS = ("name", "path", "description", "ci")
 SCENARIO_FILES = ("docker-compose.y*ml", "config.alloy", "*values.y*ml")
 # Scenario directories deliberately left out of the README and the Alloy docs.
 UNLISTED = ()
@@ -141,11 +142,24 @@ def load(path):
             item = f"{where}: scenarios[{j}]"
             if not check_keys(item, scenario, SCENARIO_KEYS, errors):
                 continue
+            ci = scenario["ci"]
+            if ci != "smoke":
+                if not isinstance(ci, dict) or set(ci) != {"skip"}:
+                    errors.append(f"{item}: ci must be 'smoke' or a mapping with a 'skip' reason")
+                else:
+                    check_text(f"{item}: ci.skip", ci["skip"], errors)
+            elif isinstance(scenario["path"], str) and not any(
+                (ROOT / scenario["path"] / f"docker-compose.{ext}").is_file()
+                for ext in ("yml", "yaml")
+            ):
+                errors.append(f"{item}: ci: smoke requires a docker-compose.yml or docker-compose.yaml")
             name = scenario["name"]
             check_text(f"{item}: name", name, errors, hugo=True)
             check_text(f"{item}: description", scenario["description"], errors, hugo=True)
             check_path(item, scenario["path"], errors)
             if isinstance(scenario["path"], str):
+                if scenario["path"] in paths:
+                    errors.append(f"{item}: duplicate path {scenario['path']!r}")
                 paths.append(scenario["path"])
             if isinstance(name, str):
                 if any(c in name for c in "[]|"):
@@ -194,6 +208,12 @@ def render_docs(category):
     return "\n".join([header, *TABLE_HEADER, *rows, "", footer, "", *links, ""])
 
 
+def render_ci_list(categories):
+    return "".join(path + "\n" for path in sorted(
+        s["path"] for c in categories for s in c["scenarios"] if s["ci"] == "smoke"
+    ))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--check", action="store_true", help="fail if any generated file is out of date")
@@ -201,7 +221,8 @@ def main():
 
     categories = load(SOURCE)
 
-    want = {README: render_readme(README.read_text(encoding="utf-8"), categories)}
+    want = {README: render_readme(README.read_text(encoding="utf-8"), categories),
+            CI_LIST: render_ci_list(categories)}
     for category in categories:
         want[DOCS_DIR / f"{category['slug']}.md"] = render_docs(category)
     stale = [p for p in DOCS_DIR.glob("*.md") if p not in want] if DOCS_DIR.is_dir() else []
