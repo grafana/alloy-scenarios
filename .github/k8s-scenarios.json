@@ -28,5 +28,10 @@
     { "release": "prometheus",         "chart": "prometheus-community/prometheus",         "values": "prometheus-values.yml" },
     { "release": "grafana",            "chart": "grafana/grafana",                         "values": "grafana-values.yml" },
     { "release": "alloy",              "chart": "grafana/alloy",                           "values": "alloy-values.yml" }
+  ],
+  "trace-enrichment": [
+    { "release": "tempo",      "chart": "grafana/tempo",                   "values": "tempo-values.yml" },
+    { "release": "grafana",    "chart": "grafana/grafana",                 "values": "grafana-values.yml" },
+    { "release": "alloy",      "chart": "grafana/alloy",                   "values": "alloy-values.yml" }
   ]
 }

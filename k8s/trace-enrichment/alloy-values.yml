@@ -1,0 +1,98 @@
+# Values for the grafana/alloy Helm chart.
+#
+# This scenario uses the plain Alloy chart rather than k8s-monitoring so the
+# k8sattributes step is visible in config.alloy instead of being generated.
+# The chart's default RBAC already lets Alloy read pods, namespaces,
+# replicasets and nodes, which is all otelcol.processor.k8sattributes needs.
+controller:
+  # A single gateway Deployment. Apps send OTLP straight to its Service, so
+  # the connection's source IP is the sending pod's IP.
+  type: deployment
+  replicas: 1
+
+alloy:
+  extraPorts:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP
+
+  configMap:
+    content: |
+      // Enable live debugging so you can watch spans before and after
+      // enrichment in the Alloy UI.
+      livedebugging {
+        enabled = true
+      }
+
+      otelcol.receiver.otlp "default" {
+        grpc {
+          endpoint = "0.0.0.0:4317"
+        }
+        http {
+          endpoint = "0.0.0.0:4318"
+        }
+
+        output {
+          traces = [otelcol.processor.k8sattributes.default.input]
+        }
+      }
+
+      // Look up the pod that sent each batch of spans and add its
+      // Kubernetes metadata as resource attributes.
+      otelcol.processor.k8sattributes "default" {
+        extract {
+          metadata = [
+            "k8s.namespace.name",
+            "k8s.pod.name",
+            "k8s.pod.uid",
+            "k8s.node.name",
+            "k8s.deployment.name",
+          ]
+
+          // Copy the pod's app.kubernetes.io/name label to an "app"
+          // resource attribute.
+          label {
+            from     = "pod"
+            key      = "app.kubernetes.io/name"
+            tag_name = "app"
+          }
+        }
+
+        // Match on k8s.pod.ip if the SDK already set it, otherwise on the
+        // source IP of the incoming connection.
+        pod_association {
+          source {
+            from = "resource_attribute"
+            name = "k8s.pod.ip"
+          }
+        }
+        pod_association {
+          source {
+            from = "connection"
+          }
+        }
+
+        output {
+          traces = [otelcol.processor.batch.default.input]
+        }
+      }
+
+      otelcol.processor.batch "default" {
+        output {
+          traces = [otelcol.exporter.otlp.tempo.input]
+        }
+      }
+
+      otelcol.exporter.otlp "tempo" {
+        client {
+          endpoint = "tempo.meta.svc.cluster.local:4317"
+          tls {
+            insecure = true
+          }
+        }
+      }
