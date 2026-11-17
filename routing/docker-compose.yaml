@@ -1,16 +1,16 @@
 services:
-  minio:
-    image: "minio/minio:RELEASE.2024-10-29T16-01-48Z@sha256:ebd2af76d40ff25ccc630533615f7ccd55fbe83d629a4b7c7a1b6311c1af3d6c"
+  silo:
+    image: "pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46"
     restart: "unless-stopped"
     entrypoint:
       - "sh"
       - "-euc"
-      - "mkdir -p /data/loki && /usr/bin/docker-entrypoint.sh minio server --quiet --address 0.0.0.0:9000 --console-address ':9001' /data"
+      - "mkdir -p /data/loki && exec /usr/bin/silo server --quiet --address 0.0.0.0:9000 --console-address ':9001' /data"
     volumes:
       - "./.customData/minio:/data"
     environment:
       - "MINIO_ROOT_USER=myuser"
-      - "MINIO_ROOT_PASSWORD=mypass"
+      - "MINIO_ROOT_PASSWORD=mypassword"
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -20,12 +20,12 @@ services:
     restart: "unless-stopped"
     command: "-config.file=/etc/loki/server.yml"
     volumes:
-      - "./support/loki/server.yml:/etc/loki/server.yml"
+      - "./support/loki/server.yaml:/etc/loki/server.yml"
     ports:
       - "3100:3100"
       - "7946"
     depends_on:
-      - "minio"
+      - "silo"
 
   grafana:
     image: "grafana/grafana:latest@sha256:3fd54ae1214669f8355f065ec9f6445d5279a3d77095ab048ca045685272429b"

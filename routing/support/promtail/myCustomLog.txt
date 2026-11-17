@@ -3,3 +3,7 @@
 ############################################################################
 ############################################################################
 2025-10-15 - MY APP - Started logging by custom means...
+{"hostname": "tos-worker-1", "message": "{\"logger\": \"app\", \"msg\": \"Order service started\"}"}
+{"hostname": "tos-worker-1", "message": "{\"logger\": \"audit\", \"msg\": \"User admin logged in\"}"}
+{"hostname": "prod-worker-1", "message": "{\"logger\": \"app\", \"msg\": \"Order service started\"}"}
+{"hostname": "prod-worker-1", "message": "{\"logger\": \"audit\", \"msg\": \"User admin logged in\"}"}
