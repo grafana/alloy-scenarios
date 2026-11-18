@@ -35,6 +35,9 @@ categories:
   - name: Log secret filtering
     path: log-secret-filtering
     description: Redact sensitive credentials and secrets from logs with pattern rules before storage.
+  - name: Log sampling and rate limiting
+    path: log-sampling-rate-limiting
+    description: Keep WARN/ERROR logs, sample DEBUG/INFO, and cap low-severity throughput per stream with `loki.process`.
   - name: Log-to-metrics
     path: log-to-metrics
     description: Extract a request counter and latency histogram from application logs while forwarding the raw logs to Loki.

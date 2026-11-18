@@ -1,0 +1,58 @@
+livedebugging {
+  enabled = true
+}
+
+local.file_match "app_logs" {
+  path_targets = [{
+    "__path__" = "/var/log/demo/app.log",
+    job       = "log-sampling",
+    stream    = "checkout",
+  }]
+  sync_period = "2s"
+}
+
+loki.source.file "app_logs" {
+  targets       = local.file_match.app_logs.targets
+  forward_to    = [loki.process.sampling.receiver]
+  tail_from_end = true
+}
+
+loki.process "sampling" {
+  forward_to = [loki.write.local.receiver]
+
+  stage.json {
+    expressions = {
+      level = "level",
+    }
+  }
+
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+
+  // Keep WARN and ERROR at full rate. Sample DEBUG and INFO, then cap the
+  // remaining low-severity lines independently for each stream.
+  stage.match {
+    selector = "{level=~\"DEBUG|INFO\"}"
+
+    stage.sampling {
+      rate                = 0.10
+      drop_counter_reason = "info_debug_sampling"
+    }
+
+    stage.limit {
+      rate          = 10
+      burst         = 20
+      drop          = true
+      by_label_name = "stream"
+    }
+  }
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

@@ -11,6 +11,7 @@ java-profiling
 kafka
 linux
 log-api-gateway
+log-sampling-rate-limiting
 log-secret-filtering
 log-to-metrics
 logs-file

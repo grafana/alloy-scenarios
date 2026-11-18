@@ -20,6 +20,7 @@ in grafana/alloy copies the change into the Alloy documentation.
 | [Log API gateway][] | Use Alloy as a centralized log gateway that accepts logs through a Loki-compatible push API endpoint. |
 | [Log routing][] | Route logs from multiple sources to different Loki tenants based on log content and origin. |
 | [Log secret filtering][] | Redact sensitive credentials and secrets from logs with pattern rules before storage. |
+| [Log sampling and rate limiting][] | Keep WARN/ERROR logs, sample DEBUG/INFO, and cap low-severity throughput per stream with `loki.process`. |
 | [Log-to-metrics][] | Extract a request counter and latency histogram from application logs while forwarding the raw logs to Loki. |
 | [Logs from file][] | Tail log files with Alloy. |
 | [Logs over TCP][] | Receive and process TCP logs in JSON format. |
@@ -40,6 +41,7 @@ Refer to the [alloy-scenarios][] repository for the full list of scenarios.
 [Log API gateway]: https://github.com/grafana/alloy-scenarios/tree/main/log-api-gateway
 [Log routing]: https://github.com/grafana/alloy-scenarios/tree/main/routing
 [Log secret filtering]: https://github.com/grafana/alloy-scenarios/tree/main/log-secret-filtering
+[Log sampling and rate limiting]: https://github.com/grafana/alloy-scenarios/tree/main/log-sampling-rate-limiting
 [Log-to-metrics]: https://github.com/grafana/alloy-scenarios/tree/main/log-to-metrics
 [Logs from file]: https://github.com/grafana/alloy-scenarios/tree/main/logs-file
 [Logs over TCP]: https://github.com/grafana/alloy-scenarios/tree/main/logs-tcp

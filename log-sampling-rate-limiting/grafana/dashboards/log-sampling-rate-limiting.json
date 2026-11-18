@@ -1,0 +1,119 @@
+{
+  "uid": "log-sampling-rate-limiting",
+  "title": "Log sampling and rate limiting",
+  "schemaVersion": 39,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Stored log rate by level",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 16,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (level) (rate({job=\"log-sampling\"}[1m]))",
+          "legendFormat": "{{level}}",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Stored lines in range by level",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (level) (count_over_time({job=\"log-sampling\"}[$__range]))",
+          "legendFormat": "{{level}}",
+          "queryType": "instant"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "text",
+      "title": "Expected shape",
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 9
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "The generator emits about 200 lines/s: 80% INFO/DEBUG, 10% WARN, and 10% ERROR.\\n\\n- **INFO/DEBUG:** sampled to 10%, then capped at 10 lines/s per stream.\\n- **WARN and ERROR:** bypass sampling and the low-severity limit.\\n- Rates are approximate; `stage.sampling` is probabilistic and `stage.limit` is a token bucket."
+      }
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "Stored logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 16,
+        "x": 0,
+        "y": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{job=\"log-sampling\"}",
+          "queryType": "range"
+        }
+      ]
+    }
+  ]
+}
