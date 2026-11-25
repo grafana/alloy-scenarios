@@ -34,9 +34,9 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Wait for the dashboard and Loki
         run: |
-          curl --fail --silent --retry 40 --retry-delay 2 --retry-all-errors http://localhost:3000/api/dashboards/uid/missing-key --output /dev/null
+          curl --fail --silent --retry 40 --retry-delay 2 --retry-all-errors http://localhost:3000/api/dashboards/uid/crawlcast-audience --output /dev/null
           curl --fail --silent --retry 40 --retry-delay 2 --retry-all-errors http://localhost:3100/ready
-      - name: Play desktop and touch journeys
+      - name: Watch desktop and touch journeys
         working-directory: dungeon-crawl-live/app
         run: npm run test:e2e
       - name: Show container logs on failure

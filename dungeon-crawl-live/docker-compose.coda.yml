@@ -10,7 +10,7 @@ services:
       GRAFANA_URL: ${GRAFANA_URL:-}
       GRAFANA_PORT: ${GRAFANA_PORT:-3000}
     volumes:
-      - grants:/data
+      - watchlists:/data
 volumes:
-  grants:
-    name: ${DUNGEON_VOLUME:-dungeon-crawl-live-grants}
+  watchlists:
+    name: ${DUNGEON_VOLUME:-dungeon-crawl-live-watchlists}

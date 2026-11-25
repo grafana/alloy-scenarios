@@ -1,6 +1,6 @@
 faro.receiver "crawl" {
   log_format = "json"
-  extra_log_labels = { service_name = "crawler-hud" }
+  extra_log_labels = { service_name = "borant-broadcast" }
 
   server {
     listen_address       = "0.0.0.0"
@@ -13,7 +13,7 @@ faro.receiver "crawl" {
   }
 }
 
-// Faro batches records. Use the time of play to order them with the service receipt.
+// Use browser timestamps to order viewer actions within each Faro session.
 loki.process "browser" {
   stage.json {
     expressions = { occurred = "timestamp" }
@@ -21,30 +21,6 @@ loki.process "browser" {
   stage.timestamp {
     source = "occurred"
     format = "2006-01-02 15:04:05.999999999 -0700 MST"
-  }
-  forward_to = [loki.write.local.receiver]
-}
-
-local.file_match "grants" {
-  path_targets = [{ __path__ = "/data/receipts/*.jsonl", service_name = "reward-service" }]
-  sync_period  = "1s"
-}
-
-loki.source.file "grants" {
-  targets    = local.file_match.grants.targets
-  forward_to = [loki.process.receipts.receiver]
-}
-
-loki.process "receipts" {
-  stage.json {
-    expressions = { occurred = "timestamp" }
-  }
-  stage.timestamp {
-    source = "occurred"
-    format = "RFC3339Nano"
-  }
-  stage.label_drop {
-    values = ["filename"]
   }
   forward_to = [loki.write.local.receiver]
 }

@@ -7,7 +7,6 @@ services:
       - ${FARO_PORT:-12347}:12347
     volumes:
       - ./config.alloy:/etc/alloy/config.alloy:ro
-      - grants:/data:ro
       - positions:/var/lib/alloy/data
     depends_on: [loki]
   loki:
@@ -24,7 +23,7 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
       GF_AUTH_BASIC_ENABLED: "false"
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/dungeon/duty.json
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/dungeon/audience.json
     ports:
       - ${GRAFANA_PORT:-3000}:3000
     volumes:
@@ -32,7 +31,5 @@ services:
       - ./grafana/dashboards:/var/lib/dungeon:ro
     depends_on: [loki]
 volumes:
-  grants:
-    name: ${DUNGEON_VOLUME:-dungeon-crawl-live-grants}
   positions:
   storage:

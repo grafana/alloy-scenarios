@@ -1,60 +1,60 @@
-# The Missing Key
+# Crawlcast · World Dungeon broadcast
 
-Play Carl and Princess Donut on the first floor of an intergalactic reality show. A goblin toll clerk stands between the party and the stairs. Later, the Dungeon AI congratulates Carl on receiving a brass key. His inventory slot is empty. Take the Borant duty desk and use real browser telemetry to find out what happened.
+You’re watching Borant’s coverage of the first floor. Two signals on the map belong to Carl and Princess Donut. Tune in to either crawler, follow their camera through four highlights, and favourite them so you can find their feed again. Then switch website versions and investigate what changes for the audience.
 
-![Carl and Princess Donut facing the goblin toll clerk in the service passage](media/encounter.webp)
+![Crawlcast viewer map and first-floor camera](media/broadcast.webp)
 
-[Watch the short gameplay and Grafana preview](media/preview.mp4)
+[Watch the short broadcast and Grafana preview](media/preview.mp4)
 
-## Start the broadcast
+## Open the broadcast
 
-Allow about ten minutes. You need Docker with Compose and free host ports 8088 (game), 3000 (Grafana), 3100 (Loki), 12345 (Alloy UI), and 12347 (Faro receiver). From the repository root, run:
+From the repository root, start the website and monitoring stack:
 
 ```sh
 cd dungeon-crawl-live
 docker compose --env-file ../image-versions.env -f docker-compose.yml -f docker-compose.coda.yml up --build -d
 ```
 
-Open [the game](http://localhost:8088). Move with Left/Right or A/D. Press E for the first dispatch action, or use Tab and Enter to choose either action. On touch screens, tap a destination on the map and choose an action in the dispatch panel.
+Open [Crawlcast](http://localhost:8088). The map runs on its own. Click or tap a crawler’s coloured signal, or use Tab and Enter to select it. Each camera has two commentary beats before the director cuts to the next room. Use the pause and next controls or choose a shot in **Broadcast rundown**.
 
-For a split installation, run `./run-example.sh dungeon-crawl-live` and `./coda start dungeon-crawl-live` from the repository root. Set `GRAFANA_URL` to the browser-visible Grafana origin when using a hosted lab. The game forwards Faro requests to Alloy on the Docker host. Override `FARO_COLLECTOR_URL` when the game needs a different internal route to Alloy.
+The edit loops from the goblins’ murder dozer to the Scatterer roaches, the Hoarder’s boss chamber and Mordecai’s Tutorial Guild. It presents a highlights reel inspired by Book One. The first boss is the Hoarder, a transformed woman and Level 7 neighbourhood boss. Her shell-armoured appearance is an original interpretation for this broadcast. [Chapter 11 character reference](https://www.dccdatabase.com/wiki/hoarder/) · [Book One publisher excerpt](https://cdn.penguin.co.uk/dam-assets/books/9780241816264/9780241816264-sample.pdf)
 
-## Play one shift
+## Investigate the favourite journey
 
-1. Approach the toll booth and challenge the clerk. Try Donut’s Magic Missile and see how the clerk responds. Carl can distract him to give Donut a clean shot. Winning earns a crawler box.
-2. Take the unopened box to Mordecai in the Tutorial Guildhall. Open it, equip the key, unlock the grille and descend. The floor clock keeps running inside the safe zone.
-3. Choose **Replay with HUD 1.1**. The training replay begins at the guildhall with the same box already earned. Open it, walk to the grille and try to unlock it.
-4. Select **Investigate this run**. In Grafana, compare keys issued, usable slots and descents by HUD release. The duty log follows the selected attempt in chronological order. Expand an error row to inspect its stack. Grafana refreshes every five seconds.
-5. Decide whether the reward service issued the key, which step failed in the browser, and which release you would restore. Use **Return to operator checkpoint** on the dashboard, select **Roll back inventory display**, then replay the checkpoint and verify recovery in Grafana.
+1. On **website v1**, select Carl’s signal and choose **Favourite Carl**. Open **Favourites** in the navigation to see his saved camera.
+2. Turn **Website v2** on, select Princess Donut’s signal and try the same quick save. Retry it. Look at the favourite count and the feedback under the button.
+3. Open Donut’s **full profile** and choose **Save favourite**. Refresh the page and check the saved list. Each viewer has their own persistent watchlist. To repeat the comparison with either crawler, select **Favourited** to remove them first.
+4. Open **Broadcast control**. The overview compares v1 and v2 across the last 30 minutes. Look at completion, affected journeys, time to save and the routes viewers took. The timeline focuses on the Faro session that opened the dashboard. Clear the session field to see the wider audience.
+5. Try abandoning a failed save by switching back to v1. Repeat the quick save. Use the timeline to distinguish a viewer who recovered through their full profile from a viewer who gave up on v2.
 
 <details>
-<summary>Operator’s answer</summary>
+<summary>What happened?</summary>
 
-Both releases receive the same brass key. HUD 1.1 reads the alt text of an optional thumbnail that this item lacks. The inventory renderer throws after the service commits the reward. Faro captures that exception and its stack. Reopening the box returns the existing grant. The working HUD renders the item, enables equipping it and records descent when both crawlers pass the grille.
+The v2 quick card sends the public crawler slug to a watchlist API that expects a numeric crawler ID. The service responds with HTTP 422 and the favourite count stays unchanged. The full profile still has the correct identifier. Its save succeeds on both versions.
 
-For a single complete shift, expect three grants, two usable slots and two descents. Both successes belong to HUD 1.0. The release comparison includes other runs within the dashboard’s time window. The selected-attempt filter applies to the duty log.
+Retries share a journey ID until a save succeeds or the viewer switches crawler or version. A recovered journey can count as both affected and completed. The time-to-favourite panel measures elapsed time from the original click, including the trip through the full profile. Closing the page before a save leaves the journey incomplete. With one quick v1 save and one recovered v2 save, both versions can show 100% completion while v2 still shows a failed quick path.
 
 </details>
 
-## Follow the telemetry
+## Follow the data
 
-The browser sends Faro events, exceptions and timing measurements through the game’s same-origin `/collect` endpoint to Alloy’s `faro.receiver`. Separately, the reward service commits one JSON receipt per attempt on a shared Docker volume. Alloy tails those receipts, drops the filename label, and sends both streams to Loki. Grafana counts distinct run IDs by HUD release. The service and browser use event timestamps to reconstruct the order of play.
+The bundled Faro Web SDK captures browser events, save timings and the actual save error with its stack. The website forwards same-origin requests to Alloy’s Faro receiver, which sends JSON records to Loki. Grafana groups actions by site version and distinct favourite journey. Session and journey IDs stay in the log body. The dashboard starts empty and fills as people use the site.
 
-Open [Grafana Explore](http://localhost:3000/explore), select **Dungeon telemetry**, and compare:
+In [Grafana Explore](http://localhost:3000/explore), choose **Dungeon telemetry** and try:
 
 ```logql
-{service_name="crawler-hud"} | json | kind="exception"
+{service_name="borant-broadcast"} | json | event_name="favourite_saved"
 ```
 
 ```logql
-{service_name="reward-service"} | json | event_name="key_granted"
+{service_name="borant-broadcast"} | json | type="FavouriteSaveError"
 ```
 
-The `page_attr_run_id` field on browser records matches `run_id` on the receipt. Faro also records a browser session ID shared by attempts in the same session. [Alloy receiver reference](https://grafana.com/docs/alloy/latest/reference/components/faro/faro.receiver/)
+## Run and test
 
-## Repeat the end-to-end check
+The default ports are 8088 for the website, 3000 for Grafana, 3100 for Loki, 12345 for Alloy and 12347 for the Faro receiver. For a split installation, use `./run-example.sh dungeon-crawl-live` and `./coda start dungeon-crawl-live` from the repository root. Set `GRAFANA_URL` to the viewer-accessible Grafana origin in a hosted lab. Set `FARO_COLLECTOR_URL` if Alloy is reached from the website container at a different internal address.
 
-With the stack running, install Node.js 24 or later, then run:
+With the stack running and Node.js 24 installed, run from the scenario directory:
 
 ```sh
 cd app
@@ -63,16 +63,8 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-The desktop keyboard and emulated phone touch journeys each fight the mob, open Grafana, inspect the failed attempt, restore the working HUD and verify the emitted records in Loki. Set `GAME_URL` and `LOKI_URL` for custom host ports.
+The tests watch an entire automatic rotation and exercise keyboard and emulated phone touch journeys against the real website, watchlist service, Grafana and Loki. Use `GAME_URL` and `LOKI_URL` when testing custom ports.
 
-To stop a combined deployment, run this from the scenario directory:
+Stop the combined stack from the scenario directory with `docker compose -f docker-compose.yml -f docker-compose.coda.yml down`. For a split installation, run `./coda stop dungeon-crawl-live` from the repository root and `docker compose down` from the scenario directory.
 
-```sh
-docker compose -f docker-compose.yml -f docker-compose.coda.yml down
-```
-
-For a split installation, use `./coda stop dungeon-crawl-live` from the repository root and run `docker compose down` in the scenario directory.
-
-## Credits
-
-An unofficial fan scenario based on Matt Dinniman’s *Dungeon Crawler Carl*. Carl, Princess Donut, Mordecai and the dungeon setting belong to the series. The toll clerk, passage and software incident were created for this exercise. The scenery and character illustrations are original AI-generated game assets. [Book One publisher excerpt](https://cdn.penguin.co.uk/dam-assets/books/9780241816264/9780241816264-sample.pdf)
+Unofficial fan scenario based on Matt Dinniman’s *Dungeon Crawler Carl*. The camera commentary, illustrated map and AI-generated broadcast artwork were created for this scenario.
