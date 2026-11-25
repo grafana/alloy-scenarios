@@ -1,0 +1,386 @@
+{
+  "uid": "missing-key",
+  "title": "Borant duty desk",
+  "description": "Earth broadcast \u00b7 The Missing Key",
+  "tags": [
+    "faro",
+    "dungeon"
+  ],
+  "schemaVersion": 39,
+  "version": 2,
+  "editable": false,
+  "timezone": "browser",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "refresh": "5s",
+  "templating": {
+    "list": [
+      {
+        "type": "textbox",
+        "name": "run",
+        "label": "Attempt",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "options": []
+      },
+      {
+        "type": "textbox",
+        "name": "game",
+        "hide": 2,
+        "query": "http://localhost:8088",
+        "current": {
+          "text": "http://localhost:8088",
+          "value": "http://localhost:8088"
+        },
+        "options": []
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Return to operator checkpoint",
+      "type": "link",
+      "url": "${game:raw}/?operator=${run:percentencode}",
+      "icon": "external link",
+      "targetBlank": false
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Keys issued",
+      "type": "stat",
+      "description": "Distinct attempts with a committed reward-service receipt.",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "dungeon-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count by (release) (sum by (release, attempt) (count_over_time({service_name=\"reward-service\"} | json attempt=\"run_id\", release=\"release\", event=\"event_name\" | event=\"key_granted\" | attempt!=\"\" [$__range])))",
+          "queryType": "instant",
+          "legendFormat": "HUD {{release}}"
+        }
+      ],
+      "options": {
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "yellow"
+          },
+          "displayName": "HUD ${__field.name}"
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "rowsToFields",
+          "options": {
+            "mappings": [
+              {
+                "fieldName": "release",
+                "handlerKey": "field.name"
+              },
+              {
+                "fieldName": "Value #A",
+                "handlerKey": "field.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Usable inventory slots",
+      "type": "stat",
+      "description": "Distinct attempts where the browser rendered the granted key.",
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "dungeon-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(count by (release) (sum by (release, attempt) (count_over_time({service_name=\"crawler-hud\"} | json attempt=\"page_attr_run_id\", release=\"page_attr_release\", event=\"event_name\", kind=\"kind\", duration=\"value_duration_ms\" | event=\"key_usable\" | attempt!=\"\" [$__range]))) ) or (count by (release) (sum by (release, attempt) (count_over_time({service_name=\"reward-service\"} | json attempt=\"run_id\", release=\"release\", event=\"event_name\" | event=\"key_granted\" | attempt!=\"\" [$__range]))) * 0)",
+          "queryType": "instant",
+          "legendFormat": "HUD {{release}}"
+        }
+      ],
+      "options": {
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "displayName": "HUD ${__field.name}"
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "rowsToFields",
+          "options": {
+            "mappings": [
+              {
+                "fieldName": "release",
+                "handlerKey": "field.name"
+              },
+              {
+                "fieldName": "Value #A",
+                "handlerKey": "field.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Successful descents",
+      "type": "stat",
+      "description": "Distinct attempts where both crawlers reached the stairs.",
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "dungeon-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(count by (release) (sum by (release, attempt) (count_over_time({service_name=\"crawler-hud\"} | json attempt=\"page_attr_run_id\", release=\"page_attr_release\", event=\"event_name\", kind=\"kind\", duration=\"value_duration_ms\" | event=\"floor_descended\" | attempt!=\"\" [$__range]))) ) or (count by (release) (sum by (release, attempt) (count_over_time({service_name=\"reward-service\"} | json attempt=\"run_id\", release=\"release\", event=\"event_name\" | event=\"key_granted\" | attempt!=\"\" [$__range]))) * 0)",
+          "queryType": "instant",
+          "legendFormat": "HUD {{release}}"
+        }
+      ],
+      "options": {
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "light-blue"
+          },
+          "displayName": "HUD ${__field.name}"
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "rowsToFields",
+          "options": {
+            "mappings": [
+              {
+                "fieldName": "release",
+                "handlerKey": "field.name"
+              },
+              {
+                "fieldName": "Value #A",
+                "handlerKey": "field.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Selected attempt \u00b7 duty log",
+      "type": "logs",
+      "description": "Read from the first event down. Expand a HUD error for the actual browser stack.",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "dungeon-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=~\"reward-service|crawler-hud\"} | json | label_format selected=`{{if .run_id}}{{.run_id}}{{else}}{{.page_attr_run_id}}{{end}}` | selected=\"$run\" | event_domain=\"dungeon\" or event_name=\"key_granted\" or kind=\"exception\" | line_format `{{if eq .service_name \"reward-service\"}}REWARD SERVICE  \u00b7  Brass key issued{{else if eq .kind \"exception\"}}HUD ERROR  \u00b7  {{.value}}{{else}}CRAWLER HUD  \u00b7  {{.event_name}} {{.event_data_action}}{{end}}`",
+          "queryType": "range",
+          "maxLines": 250
+        }
+      ],
+      "options": {
+        "sortOrder": "Ascending",
+        "showTime": true,
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "showLogContextToggle": false
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Inventory exceptions by HUD",
+      "datasource": {
+        "type": "loki",
+        "uid": "dungeon-loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "instant",
+          "expr": "(count by (release) (sum by (release, attempt) (count_over_time({service_name=\"crawler-hud\"} | json attempt=\"page_attr_run_id\", release=\"page_attr_release\", event=\"event_name\", kind=\"kind\", duration=\"value_duration_ms\" | kind=\"exception\" | json component=\"context_component\" | component=\"inventory\" | attempt!=\"\" [$__range])))) or (count by (release) (sum by (release, attempt) (count_over_time({service_name=\"reward-service\"} | json attempt=\"run_id\", release=\"release\", event=\"event_name\" | event=\"key_granted\" | attempt!=\"\" [$__range]))) * 0)",
+          "legendFormat": "HUD {{release}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "HUD ${__field.name}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "textMode": "value_and_name",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal"
+      },
+      "transformations": [
+        {
+          "id": "rowsToFields",
+          "options": {
+            "mappings": [
+              {
+                "fieldName": "release",
+                "handlerKey": "field.name"
+              },
+              {
+                "fieldName": "Value #A",
+                "handlerKey": "field.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Average time until key is usable",
+      "datasource": {
+        "type": "loki",
+        "uid": "dungeon-loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "instant",
+          "expr": "avg_over_time({service_name=\"crawler-hud\"} | json release=\"page_attr_release\", name=\"type\", ms=\"value_duration_ms\" | name=\"inventory_render\" | unwrap ms | __error__=\"\" [$__range]) by (release)",
+          "legendFormat": "HUD {{release}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "displayName": "HUD ${__field.name}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "textMode": "value_and_name",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal"
+      },
+      "transformations": [
+        {
+          "id": "rowsToFields",
+          "options": {
+            "mappings": [
+              {
+                "fieldName": "release",
+                "handlerKey": "field.name"
+              },
+              {
+                "fieldName": "Value #A",
+                "handlerKey": "field.value"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

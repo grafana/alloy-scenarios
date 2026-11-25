@@ -1,0 +1,16 @@
+services:
+  game:
+    build: ./app
+    ports:
+      - ${GAME_PORT:-8088}:8088
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    environment:
+      FARO_COLLECTOR_URL: ${FARO_COLLECTOR_URL:-http://host.docker.internal:${FARO_PORT:-12347}/collect}
+      GRAFANA_URL: ${GRAFANA_URL:-}
+      GRAFANA_PORT: ${GRAFANA_PORT:-3000}
+    volumes:
+      - grants:/data
+volumes:
+  grants:
+    name: ${DUNGEON_VOLUME:-dungeon-crawl-live-grants}

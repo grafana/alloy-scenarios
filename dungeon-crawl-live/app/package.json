@@ -1,0 +1,14 @@
+{
+  "name": "dungeon-crawl-live",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@grafana/faro-web-sdk": "2.15.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1"
+  },
+  "scripts": {
+    "test:e2e": "playwright test --workers=1"
+  }
+}

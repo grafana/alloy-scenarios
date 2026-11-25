@@ -3,6 +3,7 @@ blackbox-probing
 continuous-profiling
 dns-service-discovery
 docker-monitoring
+dungeon-crawl-live
 elasticsearch-monitoring
 faro-frontend-observability
 game-of-tracing

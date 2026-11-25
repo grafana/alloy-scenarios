@@ -17,6 +17,9 @@ categories:
   - name: Azure Event Hubs logs
     path: azure-event-hubs-logs
     description: Ingest Azure Event Hubs messages with `loki.source.azure_event_hubs`. Uses a self-managed broker speaking the same wire protocol. No Azure subscription required.
+  - name: Dungeon Crawler Carl frontend monitoring
+    path: dungeon-crawl-live
+    description: Fight a dungeon mob, investigate a missing reward with Faro browser telemetry and service receipts, and verify recovery in Grafana.
   - name: Faro frontend observability
     path: faro-frontend-observability
     description: Collect frontend web telemetry, including logs, errors, and web vitals, from browser applications with the Faro Web SDK.

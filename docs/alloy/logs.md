@@ -14,6 +14,7 @@ in grafana/alloy copies the change into the Alloy documentation.
 | -------- | ----------- |
 | [Amazon Data Firehose logs][] | Ingest Amazon Data Firehose deliveries with `loki.source.awsfirehose`. Uses a local sender. No AWS account required. |
 | [Azure Event Hubs logs][] | Ingest Azure Event Hubs messages with `loki.source.azure_event_hubs`. Uses a self-managed broker speaking the same wire protocol. No Azure subscription required. |
+| [Dungeon Crawler Carl frontend monitoring][] | Fight a dungeon mob, investigate a missing reward with Faro browser telemetry and service receipts, and verify recovery in Grafana. |
 | [Faro frontend observability][] | Collect frontend web telemetry, including logs, errors, and web vitals, from browser applications with the Faro Web SDK. |
 | [GELF log ingestion][] | Ingest Graylog Extended Log Format logs over `UDP`. |
 | [Kafka logs][] | Consume and process logs from Apache Kafka topics. |
@@ -34,6 +35,7 @@ Refer to the [alloy-scenarios][] repository for the full list of scenarios.
 
 [Amazon Data Firehose logs]: https://github.com/grafana/alloy-scenarios/tree/main/aws-firehose-logs
 [Azure Event Hubs logs]: https://github.com/grafana/alloy-scenarios/tree/main/azure-event-hubs-logs
+[Dungeon Crawler Carl frontend monitoring]: https://github.com/grafana/alloy-scenarios/tree/main/dungeon-crawl-live
 [Faro frontend observability]: https://github.com/grafana/alloy-scenarios/tree/main/faro-frontend-observability
 [GELF log ingestion]: https://github.com/grafana/alloy-scenarios/tree/main/gelf-log-ingestion
 [Kafka logs]: https://github.com/grafana/alloy-scenarios/tree/main/kafka

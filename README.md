@@ -52,6 +52,7 @@ These scenarios focus on log collection, log parsing, log routing, and log redac
 | -------- | ----------- |
 | [Amazon Data Firehose logs](aws-firehose-logs/) | Ingest Amazon Data Firehose deliveries with `loki.source.awsfirehose`. Uses a local sender. No AWS account required. |
 | [Azure Event Hubs logs](azure-event-hubs-logs/) | Ingest Azure Event Hubs messages with `loki.source.azure_event_hubs`. Uses a self-managed broker speaking the same wire protocol. No Azure subscription required. |
+| [Dungeon Crawler Carl frontend monitoring](dungeon-crawl-live/) | Fight a dungeon mob, investigate a missing reward with Faro browser telemetry and service receipts, and verify recovery in Grafana. |
 | [Faro frontend observability](faro-frontend-observability/) | Collect frontend web telemetry, including logs, errors, and web vitals, from browser applications with the Faro Web SDK. |
 | [GELF log ingestion](gelf-log-ingestion/) | Ingest Graylog Extended Log Format logs over `UDP`. |
 | [Kafka logs](kafka/) | Consume and process logs from Apache Kafka topics. |

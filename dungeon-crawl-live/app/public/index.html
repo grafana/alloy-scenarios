@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#121513" />
+    <title>The Missing Key · Dungeon Crawler World</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/style.css" />
+    <script defer src="/faro.js"></script>
+    <script type="module" src="/game.js"></script>
+  </head>
+  <body>
+    <header class="network">
+      <div>
+        <span class="sigil" aria-hidden="true">◉</span> BORANT
+        <span class="network-type">BROADCAST NETWORK</span>
+      </div>
+      <span class="transmission"><i></i> EARTH FEED</span>
+    </header>
+    <main>
+      <div class="edition">
+        <span>DUNGEON CRAWLER WORLD</span
+        ><span>EARTH SEASON &nbsp;/&nbsp; FLOOR 01</span>
+      </div>
+      <div class="mast">
+        <h1>The Missing Key<span>.</span></h1>
+        <div class="floor-clock">
+          <small>FLOOR COLLAPSE IN</small><time id="clock">04d 17h 32m</time>
+        </div>
+      </div>
+      <div class="layout">
+        <section class="monitor" aria-label="Playable service passage">
+          <div class="monitor-bar">
+            <span><i></i> CRAWLER CAM</span
+            ><span id="location">Service passage</span>
+          </div>
+          <div
+            class="scene"
+            id="scene"
+            aria-label="Dungeon tile map. Use arrow keys or tap a destination."
+          >
+            <img
+              class="scenery"
+              src="/art/floor.webp"
+              alt="Torchlit guildhall on the left, stone passage in the middle and a blue-lit iron grille on the right."
+            />
+            <div class="gate-well" aria-hidden="true">
+              <div class="gate-bars"></div>
+            </div>
+            <img class="actor guide" src="/art/mordecai.webp" alt="Mordecai" />
+            <img
+              class="actor mob"
+              id="mob"
+              src="/art/goblin.webp"
+              alt="Goblin toll clerk"
+            />
+            <img
+              class="actor crawler"
+              id="carl"
+              src="/art/carl.webp"
+              alt="Carl"
+            />
+            <img
+              class="actor cat"
+              id="donut"
+              src="/art/donut.webp"
+              alt="Princess Donut"
+            />
+            <div class="spell" id="spell" aria-hidden="true">✦</div>
+            <div class="award" id="award" hidden>
+              <small>DUNGEON AI · AWARD</small><strong>Brass key issued</strong>
+            </div>
+            <div id="spots" class="spots">
+              <button data-tile="1">Guildhall</button
+              ><button data-tile="6">Toll booth</button
+              ><button data-tile="9">Grille</button>
+            </div>
+          </div>
+          <div class="party">
+            <div class="party-member">
+              <img src="/art/carl.webp" alt="" /><span
+                ><small>CRAWLER 4,122</small><strong>Carl</strong></span
+              >
+            </div>
+            <div class="party-member">
+              <img src="/art/donut.webp" alt="" /><span
+                ><small>PARTY LEADER</small
+                ><strong>Princess Donut</strong></span
+              >
+            </div>
+            <span class="input-hint"
+              ><kbd>←</kbd> <kbd>→</kbd> Move<br /><kbd>E</kbd> Interact</span
+            >
+          </div>
+        </section>
+        <aside aria-label="Field dispatch">
+          <div class="desk-head">
+            <span>FIELD DISPATCH</span><span id="chapter">01 / 03</span>
+          </div>
+          <div class="dispatch">
+            <small id="speaker">BORANT OPERATIONS</small>
+            <h2 id="headline">On the air</h2>
+            <p id="message" aria-live="polite">
+              The stairwell is behind an iron grille. A goblin in a dented cap
+              is charging admission.
+            </p>
+            <div id="combat" hidden>
+              <span id="health"></span
+              ><progress
+                id="hp"
+                max="3"
+                value="3"
+                aria-label="Goblin health"
+              ></progress>
+            </div>
+            <div id="controls">
+              <button id="primary" disabled>Enter the floor</button
+              ><button id="secondary" hidden></button>
+            </div>
+          </div>
+          <div class="inventory">
+            <span class="slot" id="slot" aria-hidden="true">◇</span
+            ><span
+              ><small>INVENTORY</small
+              ><strong id="item">Empty slot</strong></span
+            >
+          </div>
+        </aside>
+      </div>
+      <footer>
+        <span
+          >Unofficial fan scenario · Based on Matt Dinniman’s
+          <em>Dungeon Crawler Carl</em></span
+        ><span>Grafana Faro × Alloy</span>
+      </footer>
+    </main>
+  </body>
+</html>
