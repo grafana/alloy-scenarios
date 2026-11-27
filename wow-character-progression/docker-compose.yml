@@ -1,6 +1,6 @@
 services:
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.19.2}
     command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
     ports:
       - "127.0.0.1:${ALLOY_PORT:-12345}:12345"
@@ -8,7 +8,7 @@ services:
       - ./config.alloy:/etc/alloy/config.alloy:ro
 
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.0}
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.1}
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --web.enable-otlp-receiver
@@ -18,7 +18,7 @@ services:
       - metrics:/prometheus
 
   loki:
-    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.7.3}
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.7.8}
     command:
       - -config.file=/etc/loki/scenario.yaml
       - -ingester.wal-disk-full-threshold=${LOKI_WAL_DISK_THRESHOLD:-0.90}
@@ -34,7 +34,7 @@ services:
       - traces:/var/tempo
 
   pyroscope:
-    image: grafana/pyroscope:${GRAFANA_PYROSCOPE_VERSION:-2.1.0}
+    image: grafana/pyroscope:${GRAFANA_PYROSCOPE_VERSION:-2.1.1}
     volumes:
       - profiles:/data
       - profile_metadata:/data-metastore
