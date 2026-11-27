@@ -7,7 +7,7 @@ services:
       - datadog-agent
 
   datadog-agent:
-    image: datadog/agent:${DATADOG_AGENT_VERSION:-7.82.2}
+    image: datadog/agent:${DATADOG_AGENT_VERSION:-7.86.0}
     environment:
       - DD_API_KEY=dummy
       - DD_SITE=datadoghq.com
