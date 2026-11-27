@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Azeroth Chronicle
 ## Notes: Record your character's equipment, armor, level, stats, position, combat, NPC and quest interactions for Grafana.
-## Version: 2.4.0
+## Version: 2.4.1
 ## AllowLoadGameType: camelot
-## SavedVariablesPerCharacter: AlloyRouteRecording, AlloyRoutePanelPosition, AlloyRouteAutoRecord
+## SavedVariablesPerCharacter: AlloyRouteRecording, AlloyRoutePanelPosition, AlloyRouteAutoRecord, AlloyRouteExportedBytes
 AlloyRoute.lua

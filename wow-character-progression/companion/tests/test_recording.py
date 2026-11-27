@@ -323,6 +323,7 @@ class SafetyTests(Workspace):
         saved, messages = self.run_scenario("""
 H.slash("start")
 H.advance(20, function() S.x = S.x + 0.001 end)
+assert(H.click())
 H.reload()
 H.slash("clear")
 H.slash("start")
@@ -334,6 +335,49 @@ H.logout()
         sessions, _ = read_recording.read_file(self.tmp / "AlloyRoute.lua")
         self.assertEqual(len(sessions), 2, "the earlier session survives a new start")
         self.assertIn("type /chronicle clear confirm", messages)
+
+    def test_unexported_save_blocks_button_confirmation_and_commands(self):
+        self.run_scenario("""
+            H.slash("start")
+            H.reload() -- ordinary reload writes a save without authorizing Clear
+            local prior = AlloyRouteRecording
+            assert(prior and not H.click("Clear…"))
+            H.slash("clear confirm")
+            StaticPopupDialogs.ALLOYROUTE_CLEAR.OnAccept()
+            assert(AlloyRouteRecording == prior)
+            C_UI.Reload = function() error("reload unavailable") end
+            assert(H.click("Save & Reload"))
+            assert(not H.click("Clear…")) -- the click alone does not unlock it
+            H.slash("clear confirm")
+            assert(AlloyRouteRecording == prior)
+            H.reload() -- player follows the /reload fallback
+            assert(H.click("Clear…"))
+            H.popup = nil
+            H.advance(10)
+            H.reload() -- includes another session without an export click
+            assert(not H.click("Clear…"))
+            local newer = AlloyRouteRecording
+            H.slash("clear confirm")
+            assert(newer and AlloyRouteRecording == newer and newer ~= prior)
+            H.logout()
+        """)
+
+    def test_existing_paused_save_can_be_exported_without_recording(self):
+        self.run_scenario("""
+            H.slash("start")
+            H.slash("stop")
+            H.reload()
+            local prior = AlloyRouteRecording
+            assert(prior and AlloyRouteExportedBytes == nil)
+            assert(not H.click("Clear…"))
+            assert(H.click("Save & Reload"))
+            H.reload()
+            assert(AlloyRouteRecording == prior and H.click("Clear…"))
+            H.popup.OnAccept()
+            assert(AlloyRouteExportedBytes == nil and not H.click("Clear…"))
+            assert(H.click("Start recording"))
+            H.logout()
+        """)
 
     def test_panel_position_survives_reload(self):
         self.run_scenario("""
@@ -360,6 +404,7 @@ H.logout()
             H.slash("start")
             H.advance(5)
             assert(not H.click("Clear…"))
+            assert(H.click("Save & Reload"))
             H.reload()
             local prior = AlloyRouteRecording
             assert(H.click("Clear…") and H.popup and AlloyRouteRecording == prior)
@@ -400,6 +445,7 @@ H.logout()
 H.slash("start")
 H.advance(20)
 H.slash("stop")
+assert(H.click("Save & Reload"))
 H.reload()
 H.slash("clear confirm")
 H.logout()

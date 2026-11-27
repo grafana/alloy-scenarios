@@ -11,7 +11,7 @@ local pendingBytes = 0 -- bytes those rows add to the saved string, separators i
 local savedBytes, savedRows = 0, 0
 local loadedRows = 0 -- rows already written to disk before this UI session
 local segment          -- the active recording segment, or nil
-local timer, lastZone, lastBody, reminder, reloadHint = nil, nil, nil, 0, false
+local timer, lastZone, lastBody, reminder, exportRequested = nil, nil, nil, 0, false
 local full = false -- the last segment stopped because the next row did not fit
 local openNpc, lastNpcKey, lastNpcAt = nil, nil, 0
 local quests, recent = {}, {}
@@ -86,7 +86,23 @@ local clear = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 clear:SetSize(88, 22)
 clear:SetPoint("BOTTOMRIGHT", -5, 3)
 clear:SetText("Clear…")
+-- A paused older save needs both normal start and explicit export actions.
+local resume = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+resume:SetSize(92, 22)
+resume:SetPoint("LEFT", save, "RIGHT", 2, 0)
+resume:SetText("Start recording")
+resume:Hide()
+resume:SetEnabled(false)
 panel:Hide()
+
+-- Only the saved buffer covered by an explicit Save & Reload is eligible.
+local function canClearSaved()
+    return savedBytes > 0 and AlloyRouteExportedBytes == savedBytes
+end
+
+local function needsExport()
+    return segment or #pending > 0 or (savedBytes > 0 and not canClearSaved())
+end
 
 local function refreshPanel()
     local rows, bytes = usedRows(), usedBytes()
@@ -115,11 +131,20 @@ local function refreshPanel()
     local percent = math.min(100, math.floor(fraction * 100))
     local unit = rows == 1 and "row" or "rows"
     local usage = string.format("%d %s  ·  %.1f KiB  ·  %d%% full", rows, unit, bytes / 1024, percent)
-    if reloadHint then usage = "If still here, type /reload to save." end
+    if exportRequested then usage = "If still here, type /reload to save." end
     details:SetText(usage)
     if stage >= 2 then details:SetTextColor(1, 0.72, 0.25) else details:SetTextColor(1, 1, 1) end
-    save:SetText((segment or #pending > 0) and "Save & Reload" or "Start recording")
-    clear:SetEnabled(savedBytes > 0)
+    save:SetText(needsExport() and "Save & Reload" or "Start recording")
+    local pausedWithUnexportedSave = not segment and #pending == 0 and savedBytes > 0 and not canClearSaved()
+    if pausedWithUnexportedSave then
+        panel:SetWidth(309)
+        resume:Show()
+    else
+        panel:SetWidth(237)
+        resume:Hide()
+    end
+    resume:SetEnabled(pausedWithUnexportedSave)
+    clear:SetEnabled(canClearSaved())
     panel:Show()
 end
 
@@ -469,7 +494,7 @@ local function start()
     AlloyRouteAutoRecord = true
     append(header, false)
     segment = { id = id, seq = 0, count = 0, gear = GetInventoryItemID and gear, retryGear = {}, observations = {} }
-    lastZone, lastBody, reminder, reloadHint, full = nil, nil, 0, false, false
+    lastZone, lastBody, reminder, exportRequested, full = nil, nil, 0, false, false
     for slot, body in ipairs(baseline) do
         if not gear[slot] then segment.retryGear[slot] = false end
         record("b", body)
@@ -498,10 +523,11 @@ local function start()
     end
 end
 
+resume:SetScript("OnClick", start)
 save:SetScript("OnClick", function()
-    if not segment and #pending == 0 then start(); return end
+    if not needsExport() then start(); return end
     snapshot(true)
-    reloadHint = true
+    exportRequested = true
     refreshPanel()
     -- PLAYER_LOGOUT finalizes the segment when the client actually reloads.
     -- A denied click leaves an active recording running.
@@ -559,10 +585,12 @@ local function quest(kind, id, xpReward, moneyReward)
 end
 
 local function clearRecording()
-    if savedBytes == 0 then return end
-    AlloyRouteRecording, savedBytes = nil, 0
+    if not canClearSaved() then
+        return say(savedBytes > 0 and "Click Save & Reload before clearing these recordings." or "Nothing to clear.")
+    end
+    AlloyRouteRecording, AlloyRouteExportedBytes, savedBytes = nil, nil, 0
     savedRows = savedRows - loadedRows
-    loadedRows, reminder, reloadHint, full = 0, 0, false, false
+    loadedRows, reminder, exportRequested, full = 0, 0, false, false
     say("Cleared the previously saved sessions for this character.")
     if AlloyRouteAutoRecord and not segment and #pending == 0 then start() end
     refreshPanel()
@@ -574,7 +602,7 @@ StaticPopupDialogs.ALLOYROUTE_CLEAR = {
     OnAccept = clearRecording, timeout = 0, whileDead = true, hideOnEscape = true,
 }
 clear:SetScript("OnClick", function()
-    if savedBytes > 0 then StaticPopup_Show("ALLOYROUTE_CLEAR") end
+    if canClearSaved() then StaticPopup_Show("ALLOYROUTE_CLEAR") end
 end)
 
 SLASH_ALLOYROUTE1 = "/chronicle"
@@ -589,8 +617,10 @@ SlashCmdList.ALLOYROUTE = function(input)
         refreshPanel()
         say("Stopped. Click Save & Reload or log out to write your recording to disk.")
     elseif cmd == "clear" then
-        if savedBytes > 0 then
-            say("This deletes the saved recording. Export it first, then type /chronicle clear confirm.")
+        if canClearSaved() then
+            say("Check delivery in the companion, then type /chronicle clear confirm.")
+        elseif savedBytes > 0 then
+            say("Click Save & Reload before clearing these recordings.")
         else
             say("Nothing to clear.")
         end
@@ -642,8 +672,8 @@ events:SetScript("OnEvent", function(_, event, ...)
         if savedBytes > 0 then
             reminder = 3 -- capacity warnings are for the session being recorded
             refreshPanel()
-            say(string.format("%d previously saved rows. Clear them after checking Grafana.",
-                savedRows))
+            local hint = canClearSaved() and "Check delivery in the companion before clearing." or "Click Save & Reload to unlock Clear."
+            say(string.format("%d previously saved rows. %s", savedRows, hint))
         end
         return
     elseif event == "PLAYER_ENTERING_WORLD" and not segment then
@@ -655,7 +685,11 @@ events:SetScript("OnEvent", function(_, event, ...)
             snapshot(false)
             finish()
         end
+        if #pending > 0 then AlloyRouteExportedBytes = nil end
         commit()
+        if exportRequested and AlloyRouteRecording then
+            AlloyRouteExportedBytes = #AlloyRouteRecording
+        end
         return
     end
     if not segment then return end

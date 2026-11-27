@@ -81,7 +81,7 @@ e|ended|rows
 
 The whole string holds at most 4,096 data rows and 1,000,000 bytes. Before appending a row the addon checks that the row and a 32-byte footer reserve still fit, so a full recording always ends with a valid footer. The panel reminds you once at 500 rows or 100 kB, warns at 80% and stops recording when full. A three-hour session with constant movement is about 1,080 rows and 92 kB.
 
-`/chronicle start` on a character that already has a saved recording appends a new session; it never overwrites one. After the first start, recording resumes on reload and login until you use `/chronicle stop`. **Clear…** requires confirmation and removes only the sessions already saved before this UI session. It preserves pending rows. The slash equivalent is `/chronicle clear confirm`. The character’s recording preference and panel position are separate SavedVariables.
+`/chronicle start` on a character that already has a saved recording appends a new session; it never overwrites one. After the first start, recording resumes on reload and login until you use `/chronicle stop`. **Clear…** unlocks after you click **Save & Reload** and WoW writes that character’s buffer. An ordinary logout or reload that adds a session locks Clear again. The same rule applies to the slash command. Clearing requires confirmation and removes only the sessions already saved before this UI session. It preserves pending rows. The slash equivalent is `/chronicle clear confirm`. The character’s recording preference and panel position are separate SavedVariables.
 
 ## Reader output
 
