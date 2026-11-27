@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a logs, metrics and traces write policy and token for Alloy Route, then write cloud/.env.
+"""Create a logs, metrics and traces write policy and token for Azeroth Chronicle, then write cloud/.env.
 
     GCOM_TOKEN=... python3 cloud/create_access_policy.py --stack wow
 
@@ -73,7 +73,7 @@ def main():
             raise SystemExit("Existing policy has a different stack or scope. Choose another --policy name.")
     else:
         policy = call(api, f"/v1/accesspolicies?region={region}", token, {
-            "name": args.policy, "displayName": "Alloy Route telemetry (write)",
+            "name": args.policy, "displayName": "Azeroth Chronicle telemetry (write)",
             "scopes": scopes, "realms": realms,
         })
     print(f"Access policy {args.policy}: {policy['id']} (telemetry write on stack {args.stack})")
@@ -81,7 +81,7 @@ def main():
     host = "".join(c for c in socket.gethostname().split(".")[0].lower() if c.isalnum() or c == "-")[:40]
     created = call(api, f"/v1/tokens?region={region}", token, {
         "name": f"alloyroute-{host or 'alloy'}-{stamp}",
-        "displayName": f"Alloy Route ({host or 'alloy'})",
+        "displayName": f"Azeroth Chronicle ({host or 'alloy'})",
         "accessPolicyId": policy["id"],
     })
 

@@ -1,0 +1,463 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "wow-chronicle-progression"
+  },
+  "spec": {
+    "title": "Azeroth Chronicle · Progression",
+    "description": "Character growth across saves, with skill and faction observations at gameplay time.",
+    "schemaVersion": 41,
+    "timezone": "browser",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "tags": [
+      "wow",
+      "alloy-route"
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "logs",
+          "label": "Logs data source",
+          "type": "datasource",
+          "query": "loki",
+          "current": {
+            "text": "grafanacloud-logs",
+            "value": "grafanacloud-logs"
+          },
+          "refresh": 1
+        },
+        {
+          "name": "metrics",
+          "label": "Metrics data source",
+          "type": "datasource",
+          "query": "prometheus",
+          "current": {
+            "text": "grafanacloud-prom",
+            "value": "grafanacloud-prom"
+          },
+          "refresh": 1,
+          "hide": 2
+        },
+        {
+          "name": "traces",
+          "label": "Trace data source",
+          "type": "datasource",
+          "query": "tempo",
+          "current": {
+            "text": "grafanacloud-traces",
+            "value": "grafanacloud-traces"
+          },
+          "refresh": 1,
+          "hide": 2
+        },
+        {
+          "type": "query",
+          "name": "region",
+          "label": "Region",
+          "datasource": {
+            "type": "loki",
+            "uid": "${logs}"
+          },
+          "refresh": 1,
+          "sort": 1,
+          "query": {
+            "type": 1,
+            "label": "region",
+            "stream": "{service_name=\"wow-alloyroute\"}"
+          },
+          "definition": "label_values({service_name=\"wow-alloyroute\"}, region)",
+          "current": {}
+        },
+        {
+          "type": "query",
+          "name": "realm",
+          "label": "Realm",
+          "datasource": {
+            "type": "loki",
+            "uid": "${logs}"
+          },
+          "refresh": 1,
+          "sort": 1,
+          "query": {
+            "type": 1,
+            "label": "realm",
+            "stream": "{service_name=\"wow-alloyroute\",region=\"${region}\"}"
+          },
+          "definition": "label_values({service_name=\"wow-alloyroute\",region=\"${region}\"}, realm)",
+          "current": {}
+        },
+        {
+          "type": "query",
+          "name": "character",
+          "label": "Character",
+          "datasource": {
+            "type": "loki",
+            "uid": "${logs}"
+          },
+          "refresh": 1,
+          "sort": 1,
+          "query": {
+            "type": 1,
+            "label": "character",
+            "stream": "{service_name=\"wow-alloyroute\",region=\"${region}\",realm=\"${realm}\"}"
+          },
+          "definition": "label_values({service_name=\"wow-alloyroute\",region=\"${region}\",realm=\"${realm}\"}, character)",
+          "current": {}
+        },
+        {
+          "name": "session",
+          "label": "Session ID (.* for all)",
+          "type": "textbox",
+          "query": ".*",
+          "current": {
+            "text": ".*",
+            "value": ".*"
+          }
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "type": "timeseries",
+        "title": "Experience gained",
+        "description": "One sample per export for the selected character. Include the export time in the selected range.",
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 24,
+          "h": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${metrics}"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 0,
+            "custom": {
+              "drawStyle": "points",
+              "showPoints": "always",
+              "pointSize": 6
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${metrics}"
+            },
+            "expr": "wow_addon_session_xp_gain{region=\"$region\", realm=\"$realm\", character=\"$character\"}",
+            "legendFormat": "XP",
+            "range": true,
+            "editorMode": "code"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "type": "timeseries",
+        "title": "Experience per hour",
+        "description": "One sample per export for the selected character. Include the export time in the selected range.",
+        "gridPos": {
+          "x": 0,
+          "y": 8,
+          "w": 24,
+          "h": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${metrics}"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 0,
+            "custom": {
+              "drawStyle": "points",
+              "showPoints": "always",
+              "pointSize": 6
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${metrics}"
+            },
+            "expr": "wow_addon_session_xp_per_hour{region=\"$region\", realm=\"$realm\", character=\"$character\"}",
+            "legendFormat": "XP/hour",
+            "range": true,
+            "editorMode": "code"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "type": "timeseries",
+        "title": "Net copper",
+        "description": "One sample per export for the selected character. Include the export time in the selected range.",
+        "gridPos": {
+          "x": 0,
+          "y": 16,
+          "w": 24,
+          "h": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${metrics}"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 0,
+            "custom": {
+              "drawStyle": "points",
+              "showPoints": "always",
+              "pointSize": 6
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${metrics}"
+            },
+            "expr": "wow_addon_session_net_copper{region=\"$region\", realm=\"$realm\", character=\"$character\"}",
+            "legendFormat": "Copper",
+            "range": true,
+            "editorMode": "code"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Profession and character skill ranks",
+        "description": "Recorded observations at gameplay time. Blank cells indicate unavailable or inapplicable fields.",
+        "type": "table",
+        "gridPos": {
+          "x": 0,
+          "y": 24,
+          "w": 24,
+          "h": 8
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${logs}"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "noValue": "—",
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "Not Found": {
+                    "text": "—"
+                  }
+                }
+              }
+            ]
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "loki",
+              "uid": "${logs}"
+            },
+            "expr": "{service_name=\"wow-alloyroute\",region=\"${region}\",realm=\"${realm}\",character=\"${character}\"} | type=~\"skill_rank\" | session_id=~\"${session:raw}\"",
+            "queryType": "range",
+            "direction": "forward",
+            "maxLines": 5000
+          }
+        ],
+        "transformations": [
+          {
+            "id": "extractFields",
+            "options": {
+              "source": "body",
+              "format": "json",
+              "replace": true,
+              "keepTime": false,
+              "jsonPaths": [
+                {
+                  "path": "time",
+                  "alias": "Time"
+                },
+                {
+                  "path": "type",
+                  "alias": "Event"
+                },
+                {
+                  "path": "category",
+                  "alias": "Category"
+                },
+                {
+                  "path": "skill_name",
+                  "alias": "Skill"
+                },
+                {
+                  "path": "rank",
+                  "alias": "Rank"
+                },
+                {
+                  "path": "max_rank",
+                  "alias": "Maximum"
+                },
+                {
+                  "path": "observation",
+                  "alias": "Reading"
+                }
+              ]
+            }
+          },
+          {
+            "id": "convertFieldType",
+            "options": {
+              "conversions": [
+                {
+                  "targetField": "Time",
+                  "destinationType": "time"
+                }
+              ]
+            }
+          }
+        ],
+        "options": {
+          "showHeader": true
+        }
+      },
+      {
+        "id": 5,
+        "title": "Faction reputation",
+        "description": "Recorded observations at gameplay time. Blank cells indicate unavailable or inapplicable fields.",
+        "type": "table",
+        "gridPos": {
+          "x": 0,
+          "y": 32,
+          "w": 24,
+          "h": 8
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${logs}"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "noValue": "—",
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "Not Found": {
+                    "text": "—"
+                  }
+                }
+              }
+            ]
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "loki",
+              "uid": "${logs}"
+            },
+            "expr": "{service_name=\"wow-alloyroute\",region=\"${region}\",realm=\"${realm}\",character=\"${character}\"} | type=~\"reputation\" | session_id=~\"${session:raw}\"",
+            "queryType": "range",
+            "direction": "forward",
+            "maxLines": 5000
+          }
+        ],
+        "transformations": [
+          {
+            "id": "extractFields",
+            "options": {
+              "source": "body",
+              "format": "json",
+              "replace": true,
+              "keepTime": false,
+              "jsonPaths": [
+                {
+                  "path": "time",
+                  "alias": "Time"
+                },
+                {
+                  "path": "type",
+                  "alias": "Event"
+                },
+                {
+                  "path": "faction_name",
+                  "alias": "Faction"
+                },
+                {
+                  "path": "standing",
+                  "alias": "Standing"
+                },
+                {
+                  "path": "reaction",
+                  "alias": "Reaction"
+                },
+                {
+                  "path": "observation",
+                  "alias": "Reading"
+                }
+              ]
+            }
+          },
+          {
+            "id": "convertFieldType",
+            "options": {
+              "conversions": [
+                {
+                  "targetField": "Time",
+                  "destinationType": "time"
+                }
+              ]
+            }
+          }
+        ],
+        "options": {
+          "showHeader": true
+        }
+      }
+    ]
+  }
+}

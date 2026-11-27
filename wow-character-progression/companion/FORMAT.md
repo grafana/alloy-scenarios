@@ -1,4 +1,4 @@
-# Alloy Route v2 recording format
+# Azeroth Chronicle v2 recording format
 
 The addon saves one string per character in `AlloyRouteRecording`, in the client's per-character SavedVariables file:
 
@@ -44,6 +44,20 @@ Every data row starts with `type|time|seq`. `time` is `GetServerTime()` in Unix 
 | `n` interaction | `interaction\|npc_unit_type\|npc_id\|npc_name` | Once per NPC window. `interaction` is the `Enum.PlayerInteractionType` name, such as `Gossip`, `QuestGiver`, `Merchant` or `Trainer` |
 | `q` quest | `action\|quest_id\|quest_title\|reward_xp\|reward_copper\|npc_unit_type\|npc_id\|npc_name` | `action` is `accepted` or `turned_in`. Rewards come from `QUEST_TURNED_IN` and stay separate from measured XP and money |
 
+Version 2.4 adds the following rows. Each has the same timestamp and sequence prefix. `observation` is `baseline` on the first reading in a segment and `change` on a subsequent difference.
+
+| Row | Fields after sequence |
+| --- | --- |
+| `o` quest objective | observation, quest ID, objective index, text, fulfilled, required, finished (0/1) |
+| `i` personal loot | item ID, name, quantity from a localized self-receipt |
+| `u` subzone | observation, subzone name |
+| `d` life | observation, alive/dead |
+| `t` NPC target | observation, unit type, NPC ID, name |
+| `k` skill rank | observation, skill/profession category, ID, name, rank, maximum rank |
+| `r` reputation | observation, faction ID, name, standing, reaction |
+
+A missing field means that the client did not expose a readable value. Objective baselines after reload carry the same quest ID and objective index. Loot receipts carry no implied kill or NPC source.
+
 Addon 2.1 adds the gear and armour row types to v2. Item ID 0 means Empty. An unreadable slot is marked Unavailable with no ID. A readable ID without a cached name appears as `Item #<id>`. A restricted armour value produces no armour row. A change in buffs can affect armour without a gear swap.
 
 Snapshot units:
@@ -61,13 +75,13 @@ Snapshot units:
 e|ended|rows
 ```
 
-`rows` counts the session's data rows. The footer is written by `PLAYER_LOGOUT`, which fires on Save & Reload, `/reload` and a normal logout, and by `/alloyroute stop`. The client writes SavedVariables only after `PLAYER_LOGOUT`. A crash or force-quit leaves the previous save unchanged.
+`rows` counts the session's data rows. The footer is written by `PLAYER_LOGOUT`, which fires on Save & Reload, `/reload` and a normal logout, and by `/chronicle stop`. The client writes SavedVariables only after `PLAYER_LOGOUT`. A crash or force-quit leaves the previous save unchanged.
 
 ## Limits
 
 The whole string holds at most 4,096 data rows and 1,000,000 bytes. Before appending a row the addon checks that the row and a 32-byte footer reserve still fit, so a full recording always ends with a valid footer. The panel reminds you once at 500 rows or 100 kB, warns at 80% and stops recording when full. A three-hour session with constant movement is about 1,080 rows and 92 kB.
 
-`/alloyroute start` on a character that already has a saved recording appends a new session; it never overwrites one. After the first start, recording resumes on reload and login until you use `/alloyroute stop`. **Clear…** requires confirmation and removes only the sessions already saved before this UI session. It preserves pending rows. The slash equivalent is `/alloyroute clear confirm`. The character’s recording preference and panel position are separate SavedVariables.
+`/chronicle start` on a character that already has a saved recording appends a new session; it never overwrites one. After the first start, recording resumes on reload and login until you use `/chronicle stop`. **Clear…** requires confirmation and removes only the sessions already saved before this UI session. It preserves pending rows. The slash equivalent is `/chronicle clear confirm`. The character’s recording preference and panel position are separate SavedVariables.
 
 ## Reader output
 

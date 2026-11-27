@@ -1,4 +1,4 @@
--- Alloy Route v2: records the logged-in character's session for later export.
+-- Azeroth Chronicle v2: records the logged-in character's session for later export.
 -- The saved string uses ASCII delimiters and percent-encoded UTF-8 text, so
 -- readers never need to evaluate Lua. companion/FORMAT.md documents every row.
 local MAX_ROWS, MAX_BYTES = 4096, 1000000
@@ -18,7 +18,7 @@ local quests, recent = {}, {}
 local interactionNames = {}
 
 local function say(message)
-    print("|cffe7c58bAlloy Route|r " .. message)
+    print("|cffe7c58bAzeroth Chronicle|r " .. message)
 end
 
 -- Restricted values are secret on this client; never compare or concatenate them.
@@ -28,6 +28,14 @@ end
 
 local function text(value)
     if not readable(value) or type(value) ~= "string" or value == "" then return "" end
+    if #value > 200 then
+        local boundary = 201
+        while value:byte(boundary) and value:byte(boundary) >= 128 and value:byte(boundary) < 192 do
+            boundary = boundary - 1
+        end
+        value = value:sub(1, boundary - 1)
+    end
+    value = value:gsub("[%c]", " ")
     return (value:gsub("([^A-Za-z0-9_.%-])", function(byte)
         return string.format("%%%02X", string.byte(byte))
     end))
@@ -48,7 +56,7 @@ end
 
 -- Visible while this character has a recording to save or export.
 local panel = CreateFrame("Frame", nil, UIParent)
-panel:SetSize(218, 66)
+panel:SetSize(237, 68)
 panel:SetPoint("LEFT", UIParent, "LEFT", 12, 0)
 panel:SetClampedToScreen(true)
 panel:SetMovable(true)
@@ -61,7 +69,12 @@ panel:SetScript("OnDragStop", function(self)
 end)
 local background = panel:CreateTexture(nil, "BACKGROUND")
 background:SetAllPoints()
-background:SetColorTexture(0.07, 0.09, 0.08, 0.80)
+background:SetColorTexture(0.13, 0.095, 0.06, 0.92)
+local brass = panel:CreateTexture(nil, "BORDER")
+brass:SetPoint("TOPLEFT")
+brass:SetPoint("TOPRIGHT")
+brass:SetHeight(2)
+brass:SetColorTexture(0.76, 0.59, 0.31, 1)
 local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 title:SetPoint("TOPLEFT", 8, -5)
 local details = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -98,7 +111,7 @@ local function refreshPanel()
     end
     local state = segment and "Recording" or (#pending > 0 and "Ready to save" or "Paused")
     if stage == 3 then state = "Full" end
-    title:SetText("Alloy Route - " .. state)
+    title:SetText("Azeroth Chronicle - " .. state)
     local percent = math.min(100, math.floor(fraction * 100))
     local unit = rows == 1 and "row" or "rows"
     local usage = string.format("%d %s  ·  %.1f KiB  ·  %d%% full", rows, unit, bytes / 1024, percent)
@@ -275,11 +288,150 @@ local function combat(active, initial)
     record("f", state, int(map), text(zone), int(x), int(y))
 end
 
+-- Record readable observations once per change. Every new segment starts with baselines.
+local function observe(kind, key, ...)
+    if not segment then return end
+    local body = table.concat({...}, "|")
+    local previous = segment.observations[key]
+    if body == previous then return end
+    segment.observations[key] = body
+    record(kind, previous and "change" or "baseline", body)
+end
+
+local function questObjectives(index, id)
+    if C_QuestLog and C_QuestLog.GetQuestObjectives then
+        local items = C_QuestLog.GetQuestObjectives(id)
+        if readable(items) then return items end
+    end
+    if not (GetNumQuestLeaderBoards and GetQuestLogLeaderBoard) then return end
+    local count = GetNumQuestLeaderBoards(index)
+    if not readable(count) then return end
+    local items = {}
+    for j = 1, count do
+        local label, _, done = GetQuestLogLeaderBoard(j, index)
+        if readable(label) then
+            local have, need = label:match("(%d+)%s*/%s*(%d+)")
+            items[j] = {text=label, finished=done, numFulfilled=tonumber(have), numRequired=tonumber(need)}
+        end
+    end
+    return items
+end
+
+local function objectives()
+    local modern = C_QuestLog and C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetInfo
+    if not modern and not (GetNumQuestLogEntries and GetQuestLogTitle) then return end
+    local count
+    if modern then count = C_QuestLog.GetNumQuestLogEntries() else count = GetNumQuestLogEntries() end
+    if not readable(count) then return end
+    local present = {}
+    for i = 1, count do
+        local id
+        if modern then
+            local info = C_QuestLog.GetInfo(i)
+            if readable(info) then id = info.questID end
+        else
+            id = select(8, GetQuestLogTitle(i))
+        end
+        if readable(id) and id > 0 then
+            local items = questObjectives(i, id)
+            if readable(items) then
+                for index, obj in ipairs(items) do
+                    if readable(obj) then
+                        local key = "q/" .. id .. "/" .. index
+                        present[key] = true
+                        local done = readable(obj.finished) and (obj.finished and "1" or "0") or ""
+                        if done ~= "" or int(obj.numFulfilled) ~= "" then
+                            observe("o", key, int(id), int(index), text(obj.text), int(obj.numFulfilled),
+                                int(obj.numRequired), done)
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if segment then
+        for key in pairs(segment.observations) do
+            if key:sub(1,2) == "q/" and not present[key] then segment.observations[key] = nil end
+        end
+    end
+end
+
+local function ranks()
+    if C_SkillInfo and C_SkillInfo.GetNumSkillLines and C_SkillInfo.GetSkillLineInfo then
+        local count = C_SkillInfo.GetNumSkillLines()
+        for i = 1, readable(count) and count or 0 do
+            local r = C_SkillInfo.GetSkillLineInfo(i)
+            if readable(r) and readable(r.isHeader) and not r.isHeader and readable(r.skillID)
+                    and readable(r.rank) then
+                local category = readable(r.skillLineCategoryID) and r.skillLineCategoryID
+                -- SkillLineCategory 9 and 11 are primary and secondary professions.
+                local kind = (category == 9 or category == 11) and "profession" or "skill"
+                observe("k", "s/" .. r.skillID, kind, int(r.skillID), text(r.name), int(r.rank), int(r.maxRank))
+            end
+        end
+    end
+end
+
+local function reputation()
+    if not (C_Reputation and C_Reputation.GetNumFactions and C_Reputation.GetFactionDataByIndex) then return end
+    local count = C_Reputation.GetNumFactions()
+    for i = 1, readable(count) and count or 0 do
+        local r = C_Reputation.GetFactionDataByIndex(i)
+        if readable(r) and readable(r.factionID) and r.factionID > 0 and readable(r.currentStanding)
+                and readable(r.isHeader) and (not r.isHeader or (readable(r.isHeaderWithRep) and r.isHeaderWithRep)) then
+            observe("r", "r/" .. r.factionID, int(r.factionID), text(r.name), int(r.currentStanding), int(r.reaction))
+        end
+    end
+end
+
+local function subzone()
+    if not segment then return end
+    local name = GetSubZoneText and GetSubZoneText()
+    if readable(name) then observe("u", "subzone", text(name)) end
+end
+
+local function target()
+    if not segment then return end
+    if not UnitExists("target") then segment.observations.target = nil; return end
+    local guid = UnitGUID("target")
+    if not readable(guid) then return end
+    local kind, _, _, _, _, id = strsplit("-", guid)
+    if kind == "Creature" or kind == "Vehicle" then
+        observe("t", "target", text(kind), int(tonumber(id)), text(UnitName("target")))
+    else
+        segment.observations.target = nil
+    end
+end
+
+local function life()
+    local dead = UnitIsDeadOrGhost and UnitIsDeadOrGhost("player")
+    if readable(dead) then observe("d", "life", dead and "dead" or "alive") end
+end
+
+-- Localised self-loot messages confirm receipt. Other players' chat never enters the save.
+local function loot(message, lineID)
+    if not readable(message) then return end
+    local id, name = message:match("|Hitem:(%d+)[^|]*|h%[(.-)%]|h")
+    if not id then return end
+    for _, template in ipairs({LOOT_ITEM_SELF_MULTIPLE or "", LOOT_ITEM_SELF or ""}) do
+        local pattern = template:gsub("([^%w])", "%%%1")
+        pattern = pattern:gsub("%%%%s", ".-"):gsub("%%%%d", "(%%d+)")
+        local match = message:match("^" .. pattern .. "$")
+        if match then
+            local line = int(lineID)
+            if line ~= "" and segment.lootLine == line then return end
+            segment.lootLine = line
+            record("i", id, text(name), int(tonumber(match) or 1))
+            return
+        end
+    end
+end
+
 local function start()
     if segment then return say("Already recording.") end
     local saved = AlloyRouteRecording
     if saved and saved ~= "" and saved:sub(1, 3) ~= "v2|" then
-        return say("This character has an older v1 route. Import it, then use /alloyroute clear.")
+        return say("This character has an older v1 route. Import it, then use /chronicle clear.")
     end
     local name = UnitName("player")
     local region = regions[GetCurrentRegion()]
@@ -312,11 +464,11 @@ local function start()
     if usedRows() + #baseline + 3 > MAX_ROWS or usedBytes() + requiredBytes > MAX_BYTES then
         full = true
         refreshPanel()
-        return say("This character's recording is full. Export it, then use /alloyroute clear.")
+        return say("This character's recording is full. Export it, then use /chronicle clear.")
     end
     AlloyRouteAutoRecord = true
     append(header, false)
-    segment = { id = id, seq = 0, count = 0, gear = GetInventoryItemID and gear, retryGear = {} }
+    segment = { id = id, seq = 0, count = 0, gear = GetInventoryItemID and gear, retryGear = {}, observations = {} }
     lastZone, lastBody, reminder, reloadHint, full = nil, nil, 0, false, false
     for slot, body in ipairs(baseline) do
         if not gear[slot] then segment.retryGear[slot] = false end
@@ -327,6 +479,8 @@ local function start()
         local active = UnitAffectingCombat("player")
         if readable(active) then combat(active, true) end
     end
+    if not segment then return end
+    objectives(); ranks(); reputation(); subzone(); life(); target()
     if not segment then return end
     timer = C_Timer.NewTicker(TICK_SECONDS, function()
         if not segment then return end
@@ -365,9 +519,10 @@ local function npcIdentity()
     if readable(guid) then
         local kind, _, _, _, _, id = strsplit("-", guid)
         if kind == "Player" then return "Player", "", "" end
+        if kind ~= "Creature" and kind ~= "Vehicle" then return "", "", "" end
         unitType, npcId = text(kind), int(tonumber(id))
     end
-    return unitType, npcId, text(name)
+    return unitType, npcId, unitType ~= "" and text(name) or ""
 end
 
 -- Several UI events describe the same NPC window; keep the first for each opening.
@@ -422,7 +577,8 @@ clear:SetScript("OnClick", function()
     if savedBytes > 0 then StaticPopup_Show("ALLOYROUTE_CLEAR") end
 end)
 
-SLASH_ALLOYROUTE1 = "/alloyroute"
+SLASH_ALLOYROUTE1 = "/chronicle"
+SLASH_ALLOYROUTE2 = "/alloyroute"
 SlashCmdList.ALLOYROUTE = function(input)
     local cmd = strtrim(input):lower()
     if cmd == "start" then
@@ -434,7 +590,7 @@ SlashCmdList.ALLOYROUTE = function(input)
         say("Stopped. Click Save & Reload or log out to write your recording to disk.")
     elseif cmd == "clear" then
         if savedBytes > 0 then
-            say("This deletes the saved recording. Export it first, then type /alloyroute clear confirm.")
+            say("This deletes the saved recording. Export it first, then type /chronicle clear confirm.")
         else
             say("Nothing to clear.")
         end
@@ -444,7 +600,7 @@ SlashCmdList.ALLOYROUTE = function(input)
         say(string.format("%s. %d rows, %.1f KiB of %d KiB.", segment and "Recording" or "Stopped",
             usedRows(), usedBytes() / 1024, MAX_BYTES / 1024))
     else
-        say((segment and "Recording. " or "") .. "Commands: /alloyroute start, stop, status, clear.")
+        say((segment and "Recording. " or "") .. "Commands: /chronicle start, stop, status, clear.")
     end
 end
 
@@ -453,6 +609,8 @@ for _, name in ipairs({
     "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_EQUIPMENT_CHANGED", "UNIT_RESISTANCES", "UNIT_STATS",
     "ADDON_LOADED", "PLAYER_LOGOUT", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA",
     "PLAYER_LEVEL_UP", "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", "PLAYER_INTERACTION_MANAGER_FRAME_HIDE",
+    "QUEST_LOG_UPDATE", "SKILL_LINES_CHANGED", "UPDATE_FACTION", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS",
+    "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_TARGET_CHANGED", "CHAT_MSG_LOOT",
     "GOSSIP_SHOW", "GOSSIP_CLOSED", "QUEST_GREETING", "QUEST_DETAIL", "QUEST_PROGRESS",
     "QUEST_COMPLETE", "QUEST_FINISHED", "QUEST_ACCEPTED", "QUEST_TURNED_IN",
 }) do
@@ -501,7 +659,14 @@ events:SetScript("OnEvent", function(_, event, ...)
         return
     end
     if not segment then return end
-    if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
+    if event == "QUEST_LOG_UPDATE" then objectives()
+    elseif event == "SKILL_LINES_CHANGED" then ranks()
+    elseif event == "UPDATE_FACTION" then reputation()
+    elseif event == "ZONE_CHANGED" or event == "ZONE_CHANGED_INDOORS" then subzone()
+    elseif event == "PLAYER_DEAD" or event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then life()
+    elseif event == "PLAYER_TARGET_CHANGED" then target()
+    elseif event == "CHAT_MSG_LOOT" then loot((...), select(11, ...))
+    elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
         combat(event == "PLAYER_REGEN_DISABLED", false)
     elseif event == "PLAYER_EQUIPMENT_CHANGED" then
         gearChange(...)
@@ -510,6 +675,7 @@ events:SetScript("OnEvent", function(_, event, ...)
         if ... == "player" then armor(false) end
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         snapshot(false)
+        subzone()
     elseif event == "PLAYER_LEVEL_UP" then
         local level = ...
         record("l", int(level))

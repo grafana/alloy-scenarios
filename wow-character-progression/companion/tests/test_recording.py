@@ -333,7 +333,7 @@ H.logout()
 """)
         sessions, _ = read_recording.read_file(self.tmp / "AlloyRoute.lua")
         self.assertEqual(len(sessions), 2, "the earlier session survives a new start")
-        self.assertIn("type /alloyroute clear confirm", messages)
+        self.assertIn("type /chronicle clear confirm", messages)
 
     def test_panel_position_survives_reload(self):
         self.run_scenario("""

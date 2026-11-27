@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Decode an Alloy Route v2 SavedVariables file into JSON Lines.
+"""Decode an Azeroth Chronicle v2 SavedVariables file into JSON Lines.
 
     python3 read_recording.py "/path/to/SavedVariables/AlloyRoute.lua" [-o out.jsonl]
 
@@ -138,13 +138,20 @@ def saved_variables(text):
     return _Parser(text.lstrip("﻿")).assignments()
 
 
-# --- Alloy Route v2 ---------------------------------------------------------
+# --- Azeroth Chronicle v2 ---------------------------------------------------------
 
 HEADER = ("format", "session_id", "started", "client_build", "region", "realm", "character",
           "player_guid", "race", "race_id", "class", "class_id", "faction")
 ROWS = {
     "s": ("snapshot", ("level", "xp", "xp_max", "health", "health_max", "power_type_id", "power_type",
                        "power", "power_max", "money_copper", "map_id", "zone", "x", "y")),
+    "o": ("quest_objective", ("observation", "quest_id", "objective_index", "objective", "fulfilled", "required", "finished")),
+    "i": ("loot_received", ("item_id", "item_name", "quantity")),
+    "u": ("subzone", ("observation", "subzone")),
+    "d": ("life", ("observation", "state")),
+    "t": ("target", ("observation", "npc_unit_type", "npc_id", "npc_name")),
+    "k": ("skill_rank", ("observation", "category", "skill_id", "skill_name", "rank", "max_rank")),
+    "r": ("reputation", ("observation", "faction_id", "faction_name", "standing", "reaction")),
     "b": ("gear_start", ("slot", "item_id", "item_name")),
     "c": ("gear_swap", ("slot", "previous_item_id", "previous_item_name", "item_id", "item_name")),
     "f": ("combat", ("state", "map_id", "zone", "x", "y")),
@@ -155,7 +162,7 @@ ROWS = {
     "q": ("quest", ("action", "quest_id", "quest_title", "reward_xp", "reward_copper",
                     "npc_unit_type", "npc_id", "npc_name")),
 }
-TEXT = {"client_build", "realm", "character", "player_guid", "race", "class", "faction", "power_type",
+TEXT = {"observation", "objective", "subzone", "category", "skill_name", "faction_name", "client_build", "realm", "character", "player_guid", "race", "class", "faction", "power_type",
         "zone", "interaction", "npc_unit_type", "npc_name", "quest_title", "action", "session_id", "region",
         "state", "format", "type", "slot", "item_name", "previous_item_name"}
 QUEST_ACTIONS = {"accepted", "turned_in"}
@@ -311,6 +318,7 @@ def write_sessions(folder, sessions, events):
     """Publish complete, immutable files so Alloy can retain its tail offsets."""
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
+    published = set()
     offset = 0
     for session in sessions:
         end = offset + session["rows"]
@@ -327,11 +335,13 @@ def write_sessions(folder, sessions, events):
                 # link publishes without replacing a file another reader has already created.
                 try:
                     os.link(tmp.name, dest)
+                    published.add(key)
                 except FileExistsError:
                     if dest.read_bytes() != body:
                         raise RecordingError(f"Conflicting contents for session {session['session_id']}.")
             finally:
                 os.unlink(tmp.name)
+    return published
 
 
 def main(argv=None):

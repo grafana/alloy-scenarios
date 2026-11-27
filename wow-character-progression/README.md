@@ -1,10 +1,10 @@
-# WoW Forever character progression
+# Azeroth Chronicle for WoW Forever
 
-Record a character’s route, combat, quests, gear and armour as you play. The local **Alloy Route companion** reads the addon’s completed save and sends gameplay logs, session traces and summary metrics to your Grafana Cloud stack. Its simulator runs the same addon with sample game events. [Architecture and example payloads](ARCHITECTURE.md)
+Record a character’s route, combat, quests, gear and armour as you play. The local **Azeroth Chronicle companion** reads the addon’s completed save and sends gameplay logs, session traces and summary metrics to your Grafana Cloud stack. Its simulator runs the same addon with sample game events. [Architecture and example payloads](ARCHITECTURE.md)
 
 ## Personal use and privacy
 
-Alloy Route is an independent community project. Blizzard has not endorsed it or confirmed that using it is exempt from account action. The addon uses the in-game Lua API and WoW writes its per-character SavedVariables on reload or logout. The companion reads its own addon's save and exports character names, realm, character GUID, positions, equipment, combat boundaries and quest interactions to the destination you configure. Use your own recordings and a stack whose access you control. Anyone who can query the relevant data sources may see this history. Simulated mode lets you try the pipeline with a fictional character. [Blizzard’s add-on policy](https://eu.forums.blizzard.com/en/wow/t/wow-user-interface-add-on-development-policy/1642/1) · [Blizzard EULA](https://www.blizzard.com/en-gb/legal/08b946df-660a-40e4-a072-1fbde65173b1/blizzard-end-user-license-agreement)
+Azeroth Chronicle is an independent community project. Blizzard has not endorsed it or confirmed that using it is exempt from account action. The addon uses the in-game Lua API and WoW writes its per-character SavedVariables on reload or logout. The companion reads its own addon's save and exports character names, realm, character GUID, positions, equipment, combat boundaries quest objectives, loot receipts, NPC names, skill ranks and reputation to the destination you configure. Use your own recordings and a stack whose access you control. Anyone who can query the relevant data sources may see this history. Simulated mode lets you try the pipeline with a fictional character. [Blizzard’s add-on policy](https://eu.forums.blizzard.com/en/wow/t/wow-user-interface-add-on-development-policy/1642/1) · [Blizzard EULA](https://www.blizzard.com/en-gb/legal/08b946df-660a-40e4-a072-1fbde65173b1/blizzard-end-user-license-agreement)
 
 ## Run the companion
 
@@ -17,10 +17,11 @@ python3 companion/watch_recordings.py
 1. In **Settings**, choose your WoW client folder and how often to look for new saves. For Cloud delivery, start Docker and enter your stack URL, Loki push URL and instance ID, OpenTelemetry endpoint and instance ID, and their write tokens. Find the connection details on your stack’s Loki and OpenTelemetry tiles. The Loki token needs `logs:write`. The OpenTelemetry token needs `metrics:write` and `traces:write`. One stack-scoped token can cover all three.
 2. Save the Cloud settings to start the collector. If you already have `cloud/.env`, choose **Start configured collector**. Alternatively, with a Cloud access-policy management token in `GCOM_TOKEN`, run `python3 cloud/create_access_policy.py --stack <stack-slug> --domain <stack-domain>` and then start the collector. Settings are stored locally. The UI keeps saved tokens out of its responses.
 3. Choose **Real character** or **Simulated**. Both publish each completed recording into `exports/` and use the same collector. Files remain available locally when the collector is offline. Queued recordings go to the configured destination.
-4. Install the **WoW character gear** dashboard once on your stack. In the companion, select a character in **Recent sessions** to open its dashboard at the recorded time, or choose **Open trace** for its gameplay timeline.
+4. Install the **Journey** and **Progression** dashboards once on your stack. In the companion, expand a session in **Recent sessions** to open its dashboard at the recorded time, or choose **Open trace** for its gameplay timeline.
 
 ```sh
 gcx dashboards create --context <your-context> --api-version dashboard.grafana.app/v1beta1 -f cloud/gear-dashboard.json
+gcx dashboards create --context <your-context> --api-version dashboard.grafana.app/v1beta1 -f cloud/progression-dashboard.json
 ```
 
 ### Record your character
@@ -31,9 +32,9 @@ Install the addon, substituting the path to your Forever client.
 companion/install_addon.sh "/Volumes/T7/Blizzard/World of Warcraft/_forever_"
 ```
 
-Enable **Alloy Route** on the character selection screen. Click **Start recording** or type `/alloyroute start` once per character. Drag the panel by its title to move it from the left edge. The addon records starting gear, equipment changes, effective armour, map position, level, XP, health, power and copper when available. It also records combat entry and exit, NPC windows, quest accepts and quest turn-ins. The quest record can include its title, ID, NPC and reported rewards. Combat tracking measures time your character was in combat during recording. Damage, healing, individual hits, kills and quest objective counters are outside this recording format.
+Enable **Azeroth Chronicle** on the character selection screen. Click **Start recording** or type `/chronicle start` once per character. Drag the panel by its title to move it from the left edge. The addon records starting gear, equipment changes, effective armour, map position, level, XP, health, power and copper when available. It also records combat entry and exit, NPC windows, quest accepts and quest turn-ins. The quest record can include its title, ID, NPC and reported rewards. Combat tracking measures time your character was in combat during recording. The journal also records readable quest objectives, self-loot receipts, subzones, death and recovery, NPC targets, profession and skill ranks, and faction standing. Each reload starts a new baseline. The original `/alloyroute` command also works.
 
-Click **Save & Reload**, type `/reload`, or log out normally to write the save. The companion can then export everything recorded since the last save, with the original event times. Recording resumes automatically after reload and at your next login. Characters with existing v2 recordings resume on upgrade. Use `/alloyroute stop` to pause across reloads and logins. The addon warns at 80% and stops at 4,096 data rows or 1,000,000 bytes. After checking delivery, choose **Clear…** and confirm to free the space used by previously saved sessions. The current session keeps recording. WoW persists the clear on the next reload or logout. [Save format and offline reader](companion/FORMAT.md)
+Click **Save & Reload**, type `/reload`, or log out normally to write the save. The companion can then export everything recorded since the last save, with the original event times. Recording resumes automatically after reload and at your next login. Characters with existing v2 recordings resume on upgrade. Use `/chronicle stop` to pause across reloads and logins. The addon warns at 80% and stops at 4,096 data rows or 1,000,000 bytes. After checking delivery, choose **Clear…** and confirm to free the space used by previously saved sessions. The current session keeps recording. WoW persists the clear on the next reload or logout. [Save format and offline reader](companion/FORMAT.md)
 
 ### Try a simulated session
 
@@ -47,7 +48,7 @@ Install Lua 5.1 or LuaJIT, choose **Simulated**, select **Equipment changes** or
 | Tempo | One trace per recording. Each zone visit, observed combat interval and accepted quest has a duration. Coordinates, gear changes and NPC interactions appear as timestamped events. |
 | Cloud Metrics | One summary per export, including final character stats, starting/minimum/maximum armour, quest counts, entries into combat and observed combat seconds. This also works when a save contains hours of gameplay. |
 
-Sessions made before version 2.1 lack gear history. Combat boundaries begin with 2.2. The UI reports local export and collector acknowledgements. Open the dashboard to verify arrival in Cloud. Export soon after playing so game timestamps fall within the destination’s ingestion and retention windows.
+Sessions made before version 2.1 lack gear history. Combat boundaries begin with 2.2. Version 2.4 adds objective, loot, exploration and progression readings. The latest-read card shows new and already-known sessions. Expand a session for its stats and delivery receipts. “Read by Alloy” means its file offset reached the end. Metrics and traces show when the local OTLP receiver acknowledged them. Open the dashboard to verify arrival in Cloud. Export soon after playing so game timestamps fall within the destination’s ingestion and retention windows.
 
 ## Optional local profile tracker
 

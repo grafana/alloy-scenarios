@@ -4,26 +4,31 @@ import argparse
 import sys
 from pathlib import Path
 
+from journal import note_read
 from read_recording import read_file, write_sessions
 
 
 def scan(root, output, seen):
+    errors = []
     paths = set(root.glob("WTF/Account/*/*/*/SavedVariables/AlloyRoute.lua"))
-    for path in paths:
+    for path in sorted(paths, key=lambda p: p.stat().st_mtime_ns):
         try:
             stat = path.stat()
             signature = (stat.st_ino, stat.st_size, stat.st_mtime_ns)
             if seen.get(path) == signature:
                 continue
             sessions, events = read_file(path, allow_empty=True)
-            write_sessions(output, sessions, events)
+            published = write_sessions(output, sessions, events)
+            note_read(output, sessions, events, published, "real")
             seen[path] = signature
             if sessions:
-                print(f"Exported {len(sessions)} saved sessions for {sessions[0]['character']}.", flush=True)
+                print(f"Exported {len(published)} new saved sessions for {sessions[0]['character']}.", flush=True)
         except (ValueError, OSError, OverflowError) as exc:
+            errors.append("Waiting for a complete character save (" + type(exc).__name__ + ").")
             print(f"Waiting for a complete checkpoint: {exc}", file=sys.stderr, flush=True)
     for missing in seen.keys() - paths:
         del seen[missing]
+    return " ".join(dict.fromkeys(errors))
 
 
 def main():

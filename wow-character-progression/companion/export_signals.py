@@ -1,11 +1,12 @@
-"""Send native metrics and session traces from completed Alloy Route JSONL files."""
+"""Send native metrics and session traces from completed Azeroth Chronicle JSONL files."""
 import hashlib
 import json
 import logging
-import os
+import re
 from pathlib import Path
 import sqlite3
 import time
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from read_recording import session_key
@@ -36,18 +37,18 @@ def envelope(kind, data, header):
             "scope" + kind: [{"scope": {"name": SERVICE}, kind.lower(): data}]}]}
 
 
-def metrics(header, rows, timestamp):
-    # Saves can contain several hours of gameplay. Mimir enforces a historical
-    # ingestion window, so export complete session measurements at checkpoint time.
-    labels = attributes({k: header[k] for k in ("region", "realm", "character")})
-    latest = {}
+def session_summary(header, rows):
     armor = []
     counts = {"gear_swaps": 0, "quest_accepts": 0, "quest_turn_ins": 0, "npc_interactions": 0, "positions": 0}
     count_types = {"gear_swap": "gear_swaps", "quest_accepted": "quest_accepts", "quest_turned_in": "quest_turn_ins", "interaction": "npc_interactions"}
     combat_start = None
     combat_seconds = combat_entries = 0
     combat_observed = False
+    zone = level = first_money = last_money = previous_xp = None
+    xp_gain, xp_valid, xp_observations = 0, True, 0
     for row in rows:
+        if "zone" in row:
+            zone = row["zone"]
         kind = row["type"]
         if kind in count_types:
             counts[count_types[kind]] += 1
@@ -62,11 +63,48 @@ def metrics(header, rows, timestamp):
         if kind == "armor":
             armor.append(row["armor"])
         if kind == "snapshot":
+            level = row.get("level", level)
+            if "money_copper" in row:
+                last_money = row["money_copper"]
+                if first_money is None:
+                    first_money = last_money
+            if {"xp", "level"} <= row.keys():
+                xp_observations += 1
+                if previous_xp:
+                    jump = row["level"] - previous_xp["level"]
+                    delta = row["xp"] - previous_xp["xp"]
+                    if jump == 1 and previous_xp.get("xp_max", 0) > 0:
+                        delta += previous_xp["xp_max"]
+                    elif jump != 0:
+                        xp_valid = False
+                    xp_gain += delta
+                    xp_valid &= delta >= 0
+                previous_xp = row
             counts["positions"] += int("x" in row and "y" in row)
-            # Keep units unambiguous when the player's active power type changes.
-            latest = {k: row[k] for k in GAUGES if k in row and k != "armor"}
-            if "power_type" in row:
-                latest["power_type"] = row["power_type"]
+    stats = dict(counts, duration_seconds=header["duration_seconds"])
+    if armor:
+        stats.update(armor_start=armor[0], armor_final=armor[-1], armor_min=min(armor), armor_max=max(armor))
+    if combat_observed:
+        if combat_start is not None:
+            combat_seconds += header["ts"] + header["duration_seconds"] - combat_start
+        stats.update(combat_entries=combat_entries, combat_seconds=combat_seconds)
+    if level is not None:
+        stats["level"] = level
+    if zone:
+        stats["zone"] = zone
+    if first_money is not None and sum("money_copper" in r for r in rows) >= 2:
+        stats["net_copper"] = last_money - first_money
+    if xp_valid and xp_observations >= 2:
+        stats["xp_gain"] = xp_gain
+        if header["duration_seconds"]:
+            stats["xp_per_hour"] = xp_gain * 3600 / header["duration_seconds"]
+    return stats
+
+
+def metrics(header, rows, timestamp):
+    labels = attributes({k: header[k] for k in ("region", "realm", "character")})
+    stats = session_summary(header, rows)
+    latest = next((r for r in reversed(rows) if r["type"] == "snapshot"), {})
     measures = []
     def gauge(name, value, tags=labels):
         point = {"attributes": tags, "timeUnixNano": str(timestamp)}
@@ -81,23 +119,18 @@ def metrics(header, rows, timestamp):
             if k in ("power", "power_max") and "power_type" in latest:
                 tags = labels + attributes({"power_type": latest["power_type"]})
             gauge("checkpoint_" + GAUGES[k], latest[k] / 100 if k in ("x", "y") else latest[k], tags)
-    if armor:
-        gauge("checkpoint_armor", armor[-1])
-        for name, value in (("start", armor[0]), ("min", min(armor)), ("max", max(armor))):
-            gauge("session_armor_" + name, value)
-    if combat_observed:
-        if combat_start is not None:
-            combat_seconds += header["ts"] + header["duration_seconds"] - combat_start
-        gauge("session_combat_entries", combat_entries)
-        gauge("session_combat_seconds", combat_seconds)
-    for k, v in counts.items():
-        gauge("session_" + k, v)
-    gauge("session_duration_seconds", header["duration_seconds"])
+    if "armor_final" in stats:
+        gauge("checkpoint_armor", stats["armor_final"])
+    for name, value in stats.items():
+        if name not in ("zone", "level", "armor_final"):
+            gauge("session_" + name, value)
     gauge("session_started_timestamp_seconds", header["ts"])
     gauge("session_ended_timestamp_seconds", header["ts"] + header["duration_seconds"])
     yield envelope("Metrics", measures, header)
 
 
+GROWTH_SIGNAL = "progression_metrics"
+GROWTH_NAMES = {"wow_addon_session_" + k for k in ("xp_gain", "xp_per_hour", "net_copper")}
 TRACE_SIGNAL = "activity_traces_v2"
 
 
@@ -136,6 +169,7 @@ def traces(header, rows):
                 recorded_rows=len(rows), trace_schema=2)
     visit = fight = fight_visit = location = None
     quests = {}
+    recovery = None
     for row in rows:
         stamp, seq, kind = int(row["ts_ns"]), str(row["seq"]), row["type"]
         if "zone" in row or "map_id" in row:
@@ -162,6 +196,21 @@ def traces(header, rows):
                     if fight_visit is visit and visit and int(fight["startTimeUnixNano"]) >= int(visit["startTimeUnixNano"]):
                         fight["parentSpanId"] = visit["spanId"]
                     fight = None
+        elif kind == "life":
+            if row.get("state") == "dead" and recovery is None:
+                recovery = span("Recovery", "recovery/" + seq, stamp, end, root, activity="recovery",
+                                entry=row.get("observation", "change"))
+            if recovery:
+                owner = recovery
+                if row.get("state") == "alive":
+                    recovery["endTimeUnixNano"] = str(stamp)
+                    recovery = None
+        elif kind == "quest_objective" and "quest_id" in row:
+            qid = row["quest_id"]
+            if qid not in quests:
+                quests[qid] = span(f"Quest · #{qid}", "quest/" + seq, stamp, end, root,
+                                   activity="quest", quest_id=qid, quest_start="first_observed_objective")
+            owner = quests[qid]
         elif kind in ("quest_accepted", "quest_turned_in") and "quest_id" in row:
             qid = row["quest_id"]
             if kind == "quest_accepted":
@@ -179,6 +228,8 @@ def traces(header, rows):
                 owner["attributes"] += attributes({"wow.quest_end": "turned_in"})
         owner.setdefault("events", []).append(trace_event(row))
 
+    if recovery:
+        recovery["attributes"] += attributes({"wow.recovery_end": "session_end"})
     for quest in quests.values():
         quest["attributes"] += attributes({"wow.quest_end": "session_end"})
     if fight:
@@ -222,7 +273,7 @@ def deliver(db, path, signal, endpoint):
     start = checkpoint[0] if checkpoint else 0
     if start == -1:
         return
-    if signal == "checkpoint_metrics":
+    if signal in ("checkpoint_metrics", GROWTH_SIGNAL):
         with db:
             prior = db.execute("SELECT stamp FROM checkpoint WHERE session=?", (key,)).fetchone()
             now = time.time_ns() // 1_000_000 * 1_000_000
@@ -234,23 +285,57 @@ def deliver(db, path, signal, endpoint):
             else:
                 stamp = prior[0]
         batches = metrics(header, rows, stamp)
+        if signal == GROWTH_SIGNAL:
+            batch, = batches
+            scope = batch["resourceMetrics"][0]["scopeMetrics"][0]
+            scope["metrics"] = [m for m in scope["metrics"] if m["name"] in GROWTH_NAMES]
+            batches = [batch] if scope["metrics"] else []
     else:
         batches = traces(header, rows)
     for i, payload in enumerate(batches):
         if i < start:
             continue
-        post(endpoint, "metrics" if signal == "checkpoint_metrics" else "traces", payload)
+        post(endpoint, "traces" if signal == TRACE_SIGNAL else "metrics", payload)
         with db:
             db.execute("INSERT OR REPLACE INTO delivery VALUES (?, ?, ?)", (key, signal, i + 1))
     with db:
         db.execute("INSERT OR REPLACE INTO delivery VALUES (?, ?, -1)", (key, signal))
+        if signal == "checkpoint_metrics":
+            db.execute("INSERT OR REPLACE INTO delivery VALUES (?, ?, -1)", (key, GROWTH_SIGNAL))
+
+
+def delivery_tables(db):
+    db.execute("CREATE TABLE IF NOT EXISTS attempt (session TEXT, signal TEXT, at REAL, ack REAL, error TEXT,"
+               " PRIMARY KEY(session, signal))")
+    db.execute("CREATE TABLE IF NOT EXISTS tail (session TEXT PRIMARY KEY, bytes INTEGER)")
+    db.execute("CREATE TABLE IF NOT EXISTS health (id INTEGER PRIMARY KEY, at REAL, ready INTEGER)")
+
+
+def observe_collector(db, positions, endpoint):
+    try:
+        with urlopen(endpoint, timeout=2) as response:
+            ready = response.status == 200
+    except OSError:
+        ready = False
+    try:
+        data = positions.read_text()
+    except OSError:
+        data = ""
+    # Alloy file tailer persists YAML complex keys with exact path, label set and byte offset.
+    offsets = re.findall(r'^  \? path: /exports/([0-9a-f]{64})\.jsonl\n    labels: [^\n]+\n  : "(\d+)"$', data, re.M)
+    with db:
+        db.executemany("INSERT OR REPLACE INTO tail VALUES (?,?)", offsets)
+        db.execute("INSERT OR REPLACE INTO health VALUES (1,?,?)", (time.time(), ready))
 
 
 def scan(db, folder, endpoint):
+    delivery_tables(db)
     done = set(db.execute("SELECT session, signal FROM delivery WHERE next_batch=-1"))
     pending = []
     for path in folder.glob("*.jsonl"):
         signals = [s for s in ("checkpoint_metrics", TRACE_SIGNAL) if (path.stem, s) not in done]
+        if (path.stem, "checkpoint_metrics") in done and (path.stem, GROWTH_SIGNAL) not in done:
+            signals.append(GROWTH_SIGNAL)
         if not signals:
             continue
         try:
@@ -260,10 +345,18 @@ def scan(db, folder, endpoint):
             logging.warning("Cannot read %s: %s", path.name, exc)
     for _, path, signals in sorted(pending):
         for signal in signals:
+            started = time.time()
             try:
                 deliver(db, path, signal, endpoint)
+                with db:
+                    db.execute("INSERT OR REPLACE INTO attempt VALUES (?,?,?,?,?)",
+                               (path.stem, signal, started, time.time(), None))
                 logging.info("Sent %s for %s", signal, path.name)
             except (OSError, ValueError, KeyError, StopIteration) as exc:
+                reason = f"HTTP {exc.code}" if isinstance(exc, HTTPError) else type(exc).__name__
+                with db:
+                    db.execute("INSERT OR REPLACE INTO attempt VALUES (?,?,?,?,?)",
+                               (path.stem, signal, started, None, reason))
                 logging.warning("Retrying %s for %s: %s", signal, path.name, exc)
 
 
@@ -273,6 +366,8 @@ if __name__ == "__main__":
     db.execute("CREATE TABLE IF NOT EXISTS delivery (session TEXT, signal TEXT, next_batch INTEGER,"
                " PRIMARY KEY(session, signal))")
     db.execute("CREATE TABLE IF NOT EXISTS checkpoint (session TEXT PRIMARY KEY, stamp INTEGER)")
+    delivery_tables(db)
     while True:
+        observe_collector(db, Path("/alloy-data/loki.source.file.recordings/positions.yml"), "http://alloy:12345/-/ready")
         scan(db, Path("/exports"), "http://alloy:4318")
         time.sleep(10)

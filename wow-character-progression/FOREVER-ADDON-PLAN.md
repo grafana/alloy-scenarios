@@ -33,7 +33,7 @@ On build 71139, the first `QUEST_ACCEPTED` argument is the quest ID. `QUEST_TURN
 
 **Offline checks.** Use two fixtures with different races, classes, realms and starting maps. Include a shared character name across realms, a non-mana resource, a missing map position, a legitimate zero and an XP change while stationary. Verify the reader preserves these differences. Simulate three hours of ten-second ticks in the addon harness and check the output size, warning and footer. Report fixture results as offline evidence.
 
-**First-login check.** During implementation, install the addon files directly under `/Volumes/T7/Blizzard/World of Warcraft/_forever_/Interface/AddOns/AlloyRoute/`. The player can create or select any character, enable the addon and enter `/alloyroute start`. Walk far enough for two distinct samples, note the displayed level, and speak to an NPC if one is nearby. Click **Save & Reload** or log out normally. Find the new save with:
+**First-login check.** During implementation, install the addon files directly under `/Volumes/T7/Blizzard/World of Warcraft/_forever_/Interface/AddOns/AlloyRoute/`. The player can create or select any character, enable the addon and enter `/chronicle start`. Walk far enough for two distinct samples, note the displayed level, and speak to an NPC if one is nearby. Click **Save & Reload** or log out normally. Find the new save with:
 
 ```sh
 find '/Volumes/T7/Blizzard/World of Warcraft/_forever_/WTF/Account' \

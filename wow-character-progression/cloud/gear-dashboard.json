@@ -5,8 +5,8 @@
     "name": "wow-character-gear"
   },
   "spec": {
-    "title": "WoW character gear",
-    "description": "Equipment and effective armour recorded by Alloy Route from the logged-in character.",
+    "title": "Azeroth Chronicle · Journey",
+    "description": "Explore routes, fights, quests, loot and equipment in recorded character sessions.",
     "schemaVersion": 41,
     "timezone": "browser",
     "time": {
@@ -602,6 +602,226 @@
                 {
                   "path": "zone",
                   "alias": "Zone"
+                }
+              ]
+            }
+          },
+          {
+            "id": "convertFieldType",
+            "options": {
+              "conversions": [
+                {
+                  "targetField": "Time",
+                  "destinationType": "time"
+                }
+              ]
+            }
+          }
+        ],
+        "options": {
+          "showHeader": true
+        }
+      },
+      {
+        "id": 7,
+        "title": "Quest objectives and loot",
+        "description": "Recorded observations at gameplay time. Blank cells indicate unavailable or inapplicable fields.",
+        "type": "table",
+        "gridPos": {
+          "x": 0,
+          "y": 49,
+          "w": 24,
+          "h": 8
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${logs}"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "noValue": "—",
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "Not Found": {
+                    "text": "—"
+                  }
+                }
+              }
+            ]
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "loki",
+              "uid": "${logs}"
+            },
+            "expr": "{service_name=\"wow-alloyroute\",region=\"${region}\",realm=\"${realm}\",character=\"${character}\"} | type=~\"quest_objective|loot_received\" | session_id=~\"${session:raw}\"",
+            "queryType": "range",
+            "direction": "forward",
+            "maxLines": 5000
+          }
+        ],
+        "transformations": [
+          {
+            "id": "extractFields",
+            "options": {
+              "source": "body",
+              "format": "json",
+              "replace": true,
+              "keepTime": false,
+              "jsonPaths": [
+                {
+                  "path": "time",
+                  "alias": "Time"
+                },
+                {
+                  "path": "type",
+                  "alias": "Event"
+                },
+                {
+                  "path": "quest_id",
+                  "alias": "Quest ID"
+                },
+                {
+                  "path": "objective",
+                  "alias": "Objective"
+                },
+                {
+                  "path": "observation",
+                  "alias": "Reading"
+                },
+                {
+                  "path": "fulfilled",
+                  "alias": "Progress"
+                },
+                {
+                  "path": "required",
+                  "alias": "Required"
+                },
+                {
+                  "path": "finished",
+                  "alias": "Complete"
+                },
+                {
+                  "path": "item_name",
+                  "alias": "Item"
+                },
+                {
+                  "path": "quantity",
+                  "alias": "Quantity"
+                }
+              ]
+            }
+          },
+          {
+            "id": "convertFieldType",
+            "options": {
+              "conversions": [
+                {
+                  "targetField": "Time",
+                  "destinationType": "time"
+                }
+              ]
+            }
+          }
+        ],
+        "options": {
+          "showHeader": true
+        }
+      },
+      {
+        "id": 8,
+        "title": "Route and encounters",
+        "description": "Recorded observations at gameplay time. Blank cells indicate unavailable or inapplicable fields.",
+        "type": "table",
+        "gridPos": {
+          "x": 0,
+          "y": 57,
+          "w": 24,
+          "h": 8
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${logs}"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "noValue": "—",
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "Not Found": {
+                    "text": "—"
+                  }
+                }
+              }
+            ]
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "loki",
+              "uid": "${logs}"
+            },
+            "expr": "{service_name=\"wow-alloyroute\",region=\"${region}\",realm=\"${realm}\",character=\"${character}\"} | type=~\"snapshot|subzone|target|life\" | session_id=~\"${session:raw}\"",
+            "queryType": "range",
+            "direction": "forward",
+            "maxLines": 5000
+          }
+        ],
+        "transformations": [
+          {
+            "id": "extractFields",
+            "options": {
+              "source": "body",
+              "format": "json",
+              "replace": true,
+              "keepTime": false,
+              "jsonPaths": [
+                {
+                  "path": "time",
+                  "alias": "Time"
+                },
+                {
+                  "path": "type",
+                  "alias": "Event"
+                },
+                {
+                  "path": "zone",
+                  "alias": "Zone"
+                },
+                {
+                  "path": "subzone",
+                  "alias": "Subzone"
+                },
+                {
+                  "path": "map_id",
+                  "alias": "Map"
+                },
+                {
+                  "path": "x",
+                  "alias": "Map X (×0.01%)"
+                },
+                {
+                  "path": "y",
+                  "alias": "Map Y (×0.01%)"
+                },
+                {
+                  "path": "npc_name",
+                  "alias": "Target"
+                },
+                {
+                  "path": "state",
+                  "alias": "Life state"
                 }
               ]
             }

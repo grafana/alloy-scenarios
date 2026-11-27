@@ -1,4 +1,4 @@
-"""Import an Alloy Route SavedVariables file and forward dated zone visits over OTLP."""
+"""Import an Azeroth Chronicle SavedVariables file and forward dated zone visits over OTLP."""
 
 import hashlib
 import io
@@ -42,7 +42,7 @@ def parse_route(raw):
     text = raw.decode("utf-8-sig")
     match = re.fullmatch(r'\s*AlloyRouteRecording\s*=\s*"([^"\\]*)"\s*', text)
     if match and match[1].startswith("v2|"):
-        raise ValueError("This is an Alloy Route v2 recording. Read it with companion/read_recording.py.")
+        raise ValueError("This is an Azeroth Chronicle v2 recording. Read it with companion/read_recording.py.")
     if not match:
         raise ValueError("Choose the AlloyRoute.lua saved by WoW after recording a route.")
     rows = match[1].split(";")

@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import time
 
+from journal import note_read
 from read_recording import read_file, session_key, write_sessions
 from simulation.journey import CHAPTERS, SAMPLES
 
@@ -45,7 +46,8 @@ def simulate(example, output):
         if proc.returncode:
             raise ValueError("The simulated addon stopped: " + proc.stderr.decode(errors="replace")[:240])
         sessions, events = read_file(save)
-        write_sessions(output, sessions, events)
+        new = write_sessions(output, sessions, events)
+        note_read(output, sessions, events, new, "simulated")
     if example == "journey":
         # Optional local atlas projection. The companion is its only source of runs.
         target = output / ".journey"

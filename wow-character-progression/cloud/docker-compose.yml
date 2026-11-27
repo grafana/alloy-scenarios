@@ -25,6 +25,7 @@ services:
     volumes:
       - ${ALLOYROUTE_EXPORT_DIR:-../exports}:/exports:ro
       - ${ALLOYROUTE_EXPORT_DIR:-../exports}/.delivery:/state
+      - alloy-data:/alloy-data:ro
     depends_on:
       - alloy
 

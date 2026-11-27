@@ -6,9 +6,12 @@ from pathlib import Path
 import sqlite3
 import subprocess
 import threading
+import time
+from contextlib import closing
+from journal import history
 from urllib.parse import urlsplit
 
-from export_signals import TRACE_SIGNAL, activity_trace_id
+from export_signals import GROWTH_SIGNAL, TRACE_SIGNAL, activity_trace_id
 from settings import configure_cloud, load_settings, public_cloud, save_private, start_collector
 from simulate import simulate
 
@@ -35,8 +38,7 @@ class Companion:
                 self.wakeup.clear()
                 if self.config["mode"] == "real":
                     try:
-                        self.scan(Path(self.config["client"]), self.folder, self.seen)
-                        self.error = ""
+                        self.error = self.scan(Path(self.config["client"]), self.folder, self.seen) or ""
                     except OSError as exc:
                         self.error = str(exc)
                 interval = self.config["interval"]
@@ -54,37 +56,44 @@ class Companion:
             self.config = config
             self.wakeup.set()
 
-    def sessions(self):
-        state = self.folder / ".delivery" / "delivery.sqlite"
-        sent, checkpoints = set(), {}
-        if state.is_file():
-            try:
-                db = sqlite3.connect(state.as_uri() + "?mode=ro", uri=True, timeout=1)
-                try:
-                    sent.update(db.execute("SELECT session, signal FROM delivery WHERE next_batch=-1"))
-                    checkpoints.update(db.execute("SELECT session, stamp/1000000 FROM checkpoint"))
-                finally:
-                    db.close()
-            except sqlite3.OperationalError:
-                pass
-        sessions = []
-        for path in self.folder.glob("*.jsonl"):
-            try:
-                with path.open(encoding="utf-8") as stream:
-                    header = json.loads(next(stream))
-                sessions.append({"key": path.stem, **{k: header[k] for k in
-                    ("ts", "ended", "duration_seconds", "character", "realm", "region", "rows", "session_id")},
-                    "checkpoint_ms": checkpoints.get(path.stem), "trace_id": activity_trace_id(path.stem),
-                    "metrics": (path.stem, "checkpoint_metrics") in sent, "traces": (path.stem, TRACE_SIGNAL) in sent})
-            except (OSError, KeyError, ValueError, StopIteration):
-                continue
-        return sorted(sessions, key=lambda s: s["ts"], reverse=True)[:40]
-
     def status(self):
         with self.lock:
-            config = self.config.copy()
-            return {"config": config, "client_present": Path(config["client"]).is_dir(),
-                    "cloud": public_cloud(), "sessions": self.sessions(), "error": self.error}
+            sessions, latest = history(self.folder, self.config["mode"])
+            state = self.folder / ".delivery" / "delivery.sqlite"
+            sent, checks, attempts, offsets, health = set(), {}, {}, {}, None
+            if state.is_file():
+                with closing(sqlite3.connect(state.as_uri() + "?mode=ro", uri=True, timeout=1)) as db:
+                    tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                    if "delivery" in tables:
+                        sent.update(db.execute("SELECT session,signal FROM delivery WHERE next_batch=-1"))
+                    if "checkpoint" in tables:
+                        checks.update(db.execute("SELECT session,stamp/1000000 FROM checkpoint"))
+                    if "attempt" in tables:
+                        for key, signal, at, ack, error in db.execute("SELECT * FROM attempt"):
+                            attempts[key, signal] = dict(at=at, ack=ack, error=error)
+                    if "tail" in tables:
+                        offsets.update(db.execute("SELECT session,bytes FROM tail"))
+                    if "health" in tables:
+                        health = db.execute("SELECT at,ready FROM health WHERE id=1").fetchone()
+            for item in sessions:
+                key = item["key"]
+                path = self.folder / (key + ".jsonl")
+                item["logs_read"] = path.is_file() and offsets.get(key, -1) >= path.stat().st_size
+                item.update(checkpoint_ms=checks.get(key), trace_id=activity_trace_id(key))
+                for name, signal in (("metrics", "checkpoint_metrics"), ("traces", TRACE_SIGNAL)):
+                    item[name] = (key, signal) in sent
+                    item[name + "_attempt"] = attempts.get((key, signal), {})
+                if item["metrics"] and (key, GROWTH_SIGNAL) not in sent:
+                    item["metrics"] = False
+                if (key, GROWTH_SIGNAL) in attempts:
+                    item["metrics_attempt"] = attempts[key, GROWTH_SIGNAL]
+            if not health or time.time() - health[0] > 90:
+                collector = "No recent collector check"
+            else:
+                collector = "Alloy ready" if health[1] else "Alloy offline"
+            return {"config": self.config.copy(), "client_present": Path(self.config["client"]).is_dir(),
+                    "cloud": public_cloud(), "sessions": sessions, "latest": latest,
+                    "collector": collector, "error": self.error}
 
     def action(self, route, data):
         if route == "/settings":
@@ -155,5 +164,5 @@ def serve(app, port):
     # Bind first, so a second instance cannot start watching or writing.
     with ThreadingHTTPServer(("127.0.0.1", port), Handler) as server:
         threading.Thread(target=app.watch, daemon=True).start()
-        print(f"Alloy Route companion: http://127.0.0.1:{port}", flush=True)
+        print(f"Azeroth Chronicle companion: http://127.0.0.1:{port}", flush=True)
         server.serve_forever()
