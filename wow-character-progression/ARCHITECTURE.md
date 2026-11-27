@@ -1,13 +1,12 @@
 # From a gear swap to Grafana
 
-Alloy Route records the character you are playing. A swap happens in game, WoW saves it at the next reload or logout, and Grafana shows it at **the time you equipped the item**. You can swap the same slot several times between saves. The optional Battle.net profile tracker and the simulated local journey run separately from this path.
+Alloy Route records the character you are playing. A swap happens in game, WoW saves it at the next reload or logout, and Grafana shows it at **the time you equipped the item**. You can swap the same slot several times between saves. For a gear test, a Lua harness supplies synthetic equipment and armour readings to the very same addon. The game and harness each write the same save format. From that file onward both use the same reader, Alloy configuration, Cloud Loki data source and dashboard. The optional Battle.net profile tracker and standalone Forsaken journey demo have their own inputs.
 
 ```mermaid
 flowchart LR
-    subgraph Game["WoW Forever"]
-      A["Start recording"] --> B["Addon records starting gear, swaps and armour in memory"]
-      B -->|Save & Reload or logout| C["WoW writes the character's AlloyRoute.lua"]
-    end
+    W["Real session: WoW supplies equipment, stats and events"] --> A["AlloyRoute.lua records gear and armour"]
+    X["Gear test: Lua harness supplies the same APIs and events"] --> A
+    A --> C["Per-character SavedVariables file written by WoW or the test harness"]
     subgraph Computer["Your computer"]
       C --> D["Python reader checks completed saves"]
       D --> E["One JSON Lines file per session"]
@@ -92,18 +91,18 @@ For example, this Explore query retrieves the vest swaps from the test character
 
 ## Where metrics, logs and traces come from
 
-The private Cloud pipeline stores addon events in Loki. Grafana can turn a numeric field in those logs into a time series at query time. The local demonstration also shows how an application produces native OpenTelemetry metrics, logs and traces from a single observation.
+Both real gear sessions and the synthetic gear test use the Cloud pipeline. Grafana can turn a numeric field in either recording into a time series at query time. The standalone Forsaken replay is a separate example: it builds native OpenTelemetry messages directly from a generated timeline. It does not run the addon or produce a SavedVariables file.
 
 ```mermaid
 flowchart LR
-    subgraph Personal["Your character • Grafana Cloud"]
-      P["Completed addon session"] --> R["Reader: one JSON object per event"]
+    subgraph Personal["Shared gear pipeline • Grafana Cloud"]
+      P["Real or synthetic addon save"] --> R["Reader: one JSON object per event"]
       R --> L["Alloy → Cloud Loki"]
       L -->|Filter gear_start or gear_swap| T["Gear tables"]
       L -->|Extract armour and game time| C["Armour chart"]
       L -->|LogQL unwrap| M["Metric calculated on demand"]
     end
-    subgraph Demo["Simulated journey • local Docker stack"]
+    subgraph Demo["Standalone Forsaken replay • local Docker stack"]
       S["One sample every 30 seconds"] --> G["12 timestamped OTLP gauges"]
       S --> E["OTLP log with chapter trace ID"]
       S --> V["Chapter span with position events and quest child spans"]
