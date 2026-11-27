@@ -1,6 +1,6 @@
 services:
   kafka:
-    image: apache/kafka:4.3.1@sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837
+    image: apache/kafka:4.4.0@sha256:833b867a9585a141da455dc2b57431c65cbccb27f11c91f694444cca9f777e0f
     ports:
       - "9092:9092"
     volumes:
@@ -24,7 +24,7 @@ services:
       retries: 5
 
   kafka-producer:
-    image: apache/kafka:4.3.1@sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837
+    image: apache/kafka:4.4.0@sha256:833b867a9585a141da455dc2b57431c65cbccb27f11c91f694444cca9f777e0f
     volumes:
       - ./gen_log.sh:/bin/gen_log.sh
     entrypoint: ["sh", "-c", "/bin/gen_log.sh"]
