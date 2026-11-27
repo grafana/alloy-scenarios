@@ -1,6 +1,6 @@
 services:
   pushgateway:
-    image: prom/pushgateway:${PUSHGATEWAY_VERSION:-v1.11.3}
+    image: prom/pushgateway:${PUSHGATEWAY_VERSION:-v1.11.5}
     ports:
       - 9091:9091/tcp
 
