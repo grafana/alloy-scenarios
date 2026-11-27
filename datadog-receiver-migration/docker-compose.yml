@@ -43,7 +43,7 @@ services:
       - 9090:9090
 
   tempo:
-    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.7}
+    image: grafana/tempo:${GRAFANA_TEMPO_VERSION:-2.10.10}
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./tempo-config.yaml:/etc/tempo.yaml
