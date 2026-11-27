@@ -71,7 +71,7 @@ The **Alloy Route** addon records the character you're logged in as, anywhere in
 
 [`cloud/config.alloy`](cloud/config.alloy) tails decoded files in `exports/` and pushes them to the stack's Loki endpoint. It keeps the in-game timestamp and uses `seq` to order rows within a second. `region`, `realm` and `character` become stream labels, and `type` and `session_id` become structured metadata.
 
-1. Create a write-only access policy and token. Use a Grafana Cloud token (`GCOM_TOKEN`) that can read stacks and manage access policies:
+1. Create a write-only access policy and token. Use a Grafana Cloud token that can read stacks and manage access policies, in `GCOM_TOKEN` or in `GRAFANA_CLOUD_TOKEN` as gcx uses:
 
    ```sh
    GCOM_TOKEN=... python3 cloud/create_access_policy.py --stack wow

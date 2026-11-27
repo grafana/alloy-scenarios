@@ -3,7 +3,7 @@
 
     GCOM_TOKEN=... python3 cloud/create_access_policy.py --stack wow
 
-GCOM_TOKEN must be able to read the stack and write access policies and
+GCOM_TOKEN (or GRAFANA_CLOUD_TOKEN, as gcx uses) must be able to read the stack and write access policies and
 tokens (for example a token whose policy has stacks:read,
 accesspolicies:read, accesspolicies:write and accesspolicies:delete).
 The new token is written to cloud/.env with mode 600 and never printed.
@@ -45,9 +45,10 @@ def main():
     parser.add_argument("--policy", default="alloyroute-logs-write", help="access policy name")
     parser.add_argument("--env", default=str(Path(__file__).with_name(".env")), help="file to write")
     args = parser.parse_args()
-    token = os.environ.get("GCOM_TOKEN")
+    token = os.environ.get("GCOM_TOKEN") or os.environ.get("GRAFANA_CLOUD_TOKEN")
     if not token:
-        raise SystemExit("create_access_policy: set GCOM_TOKEN to a Grafana Cloud access policy token.")
+        raise SystemExit("create_access_policy: set GCOM_TOKEN (or GRAFANA_CLOUD_TOKEN) to a Grafana Cloud "
+                         "access policy token.")
     api = args.api or ("https://grafana-dev.com/api" if args.domain == "grafana-dev.net" else "https://grafana.com/api")
 
     stack = call(api, f"/instances/{args.stack}", token)
@@ -76,7 +77,7 @@ def main():
     with os.fdopen(descriptor, "w") as handle:
         handle.write(f"GRAFANA_CLOUD_LOKI_URL={loki_url.rstrip('/')}/loki/api/v1/push\n")
         handle.write(f"GRAFANA_CLOUD_LOKI_USER={loki_user}\n")
-        handle.write(f"GRAFANA_CLOUD_TOKEN={created['token']}\n")
+        handle.write(f"ALLOYROUTE_LOKI_TOKEN={created['token']}\n")
     os.chmod(env, 0o600)
     print(f"Wrote {env} (mode 600). The token is stored there only.")
 

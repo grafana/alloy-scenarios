@@ -65,7 +65,7 @@ loki.write "grafana_cloud" {
 
     basic_auth {
       username = sys.env("GRAFANA_CLOUD_LOKI_USER")
-      password = sys.env("GRAFANA_CLOUD_TOKEN")
+      password = sys.env("ALLOYROUTE_LOKI_TOKEN")
     }
   }
 
