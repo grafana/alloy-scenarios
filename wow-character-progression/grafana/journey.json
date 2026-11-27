@@ -1,0 +1,768 @@
+{
+  "uid": "tirisfal-journey",
+  "title": "Tirisfal Glades · A Forsaken journey",
+  "description": "Simulated Undead priest. Prometheus stores character stats, Loki stores map observations and quest interactions, and Tempo stores chapter traces. Use the time picker or zoom a chart to investigate part of a run.",
+  "tags": [
+    "wow",
+    "simulation"
+  ],
+  "schemaVersion": 39,
+  "version": 2,
+  "editable": true,
+  "timezone": "browser",
+  "time": {
+    "from": "now-27h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "templating": {
+    "list": [
+      {
+        "type": "query",
+        "name": "run",
+        "label": "Simulated run",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(wow_journey_level, run)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "definition": "label_values(wow_journey_level, run)",
+        "refresh": 2,
+        "sort": 4,
+        "options": [],
+        "current": {},
+        "multi": false,
+        "includeAll": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "geomap",
+      "title": "Tirisfal Glades · Traveled route",
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 15,
+        "h": 13
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "queryType": "range",
+          "direction": "forward",
+          "maxLines": 1000,
+          "expr": "{service_name=\"wow-journey-simulator\",service_instance_id=\"$run\"}",
+          "editorMode": "code"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "queryType": "range",
+          "direction": "backward",
+          "maxLines": 1,
+          "expr": "{service_name=\"wow-journey-simulator\",service_instance_id=\"$run\"}",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "basemap": {
+          "type": "xyz",
+          "name": "Tirisfal Glades",
+          "noRepeat": true,
+          "config": {
+            "url": "/api/datasources/proxy/uid/wow-journey/api/journey/tiles/{z}/{x}/{y}",
+            "attribution": "Map © Blizzard Entertainment · WoW Forever DB",
+            "maxZoom": 4
+          }
+        },
+        "layers": [
+          {
+            "type": "route",
+            "name": "Traveled route",
+            "filterData": {
+              "id": "byRefId",
+              "options": "A"
+            },
+            "location": {
+              "mode": "coords",
+              "latitude": "Latitude",
+              "longitude": "Longitude"
+            },
+            "config": {
+              "style": {
+                "color": {
+                  "fixed": "#503625"
+                },
+                "size": {
+                  "fixed": 6
+                },
+                "opacity": 1,
+                "lineWidth": 3
+              },
+              "showLegend": false
+            }
+          },
+          {
+            "type": "route",
+            "name": "Trail",
+            "filterData": {
+              "id": "byRefId",
+              "options": "A"
+            },
+            "location": {
+              "mode": "coords",
+              "latitude": "Latitude",
+              "longitude": "Longitude"
+            },
+            "config": {
+              "style": {
+                "color": {
+                  "fixed": "#ffdc83"
+                },
+                "size": {
+                  "fixed": 3
+                },
+                "opacity": 1,
+                "lineWidth": 3
+              },
+              "showLegend": false
+            }
+          },
+          {
+            "type": "markers",
+            "name": "Current position",
+            "filterData": {
+              "id": "byRefId",
+              "options": "B"
+            },
+            "location": {
+              "mode": "coords",
+              "latitude": "Latitude",
+              "longitude": "Longitude"
+            },
+            "config": {
+              "style": {
+                "color": {
+                  "fixed": "#83e2e5"
+                },
+                "size": {
+                  "fixed": 11
+                },
+                "opacity": 1,
+                "lineWidth": 3
+              },
+              "showLegend": false
+            }
+          }
+        ],
+        "view": {
+          "id": "coords",
+          "lat": -6,
+          "lon": -20,
+          "zoom": 2.25
+        },
+        "controls": {
+          "showZoom": true,
+          "mouseWheelZoom": false,
+          "showAttribution": true
+        },
+        "tooltip": {
+          "mode": "details"
+        }
+      },
+      "description": "Each point comes from a timestamped Loki position log. Gold traces the selected time range. Blue marks its latest position.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {
+            "source": "Line",
+            "format": "json",
+            "replace": true,
+            "jsonPaths": [
+              {
+                "path": "latitude",
+                "alias": "Latitude"
+              },
+              {
+                "path": "longitude",
+                "alias": "Longitude"
+              },
+              {
+                "path": "place",
+                "alias": "Place"
+              },
+              {
+                "path": "minute",
+                "alias": "Minute"
+              },
+              {
+                "path": "x",
+                "alias": "Map X (%)"
+              },
+              {
+                "path": "y",
+                "alias": "Map Y (%)"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Vesper Ashvale · Undead priest",
+      "id": 2,
+      "gridPos": {
+        "x": 15,
+        "y": 0,
+        "w": 9,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "Level",
+          "expr": "last_over_time(wow_journey_level{run=\"$run\"}[$__range])",
+          "instant": true,
+          "range": false,
+          "editorMode": "code",
+          "format": "time_series",
+          "interval": "30s"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "Avg. item level",
+          "expr": "last_over_time(wow_journey_item_level{run=\"$run\"}[$__range])",
+          "instant": true,
+          "range": false,
+          "editorMode": "code",
+          "format": "time_series",
+          "interval": "30s"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "wideLayout": false
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#edc685"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Location",
+      "id": 3,
+      "gridPos": {
+        "x": 15,
+        "y": 4,
+        "w": 9,
+        "h": 4
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "queryType": "range",
+          "direction": "backward",
+          "maxLines": 1,
+          "expr": "{service_name=\"wow-journey-simulator\",service_instance_id=\"$run\"}",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": "/.*/"
+        }
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#b4dbbd"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {
+            "source": "Line",
+            "format": "json",
+            "replace": true,
+            "jsonPaths": [
+              {
+                "path": "place",
+                "alias": "Location"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Session totals",
+      "id": 4,
+      "gridPos": {
+        "x": 15,
+        "y": 8,
+        "w": 9,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "Quests",
+          "expr": "last_over_time(wow_journey_quests{run=\"$run\"}[$__range])",
+          "instant": true,
+          "range": false,
+          "editorMode": "code",
+          "format": "time_series",
+          "interval": "30s"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "Kills",
+          "expr": "last_over_time(wow_journey_kills{run=\"$run\"}[$__range])",
+          "instant": true,
+          "range": false,
+          "editorMode": "code",
+          "format": "time_series",
+          "interval": "30s"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "Copper",
+          "expr": "last_over_time(wow_journey_copper{run=\"$run\"}[$__range])",
+          "instant": true,
+          "range": false,
+          "editorMode": "code",
+          "format": "time_series",
+          "interval": "30s"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "Achievements",
+          "expr": "last_over_time(wow_journey_achievements{run=\"$run\"}[$__range])",
+          "instant": true,
+          "range": false,
+          "editorMode": "code",
+          "format": "time_series",
+          "interval": "30s"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "wideLayout": false
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#c5b7df"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Experience gained",
+      "id": 5,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "Total XP",
+          "expr": "wow_journey_total_xp{run=\"$run\"}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "interval": "30s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "axisPlacement": "auto",
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total XP"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#eaba70"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "maxDataPoints": 4096,
+      "interval": "30s"
+    },
+    {
+      "type": "timeseries",
+      "title": "Health and mana",
+      "id": 6,
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "Health",
+          "expr": "wow_journey_hp{run=\"$run\"}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "interval": "30s"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "Mana",
+          "expr": "wow_journey_mana{run=\"$run\"}",
+          "instant": false,
+          "range": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "interval": "30s"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "axisPlacement": "auto",
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Health"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#89c69d"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mana"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#87ade8"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "maxDataPoints": 4096,
+      "interval": "30s"
+    },
+    {
+      "type": "logs",
+      "title": "Quest journal · NPC interactions",
+      "id": 7,
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 13,
+        "h": 10
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "queryType": "range",
+          "direction": "backward",
+          "maxLines": 200,
+          "expr": "{service_name=\"wow-journey-simulator\",service_instance_id=\"$run\"} | json | event!=\"\" | line_format \"{{.event}} · {{.who}} · {{.place}} (level {{.level}})\"",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "prettifyLogMessage": false,
+        "dedupStrategy": "none"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "Chapter traces · Open a trace",
+      "type": "table",
+      "gridPos": {
+        "x": 13,
+        "y": 21,
+        "w": 11,
+        "h": 10
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "tableType": "traces",
+          "query": "{ resource.service.name = \"wow-journey-simulator\" && span.wow.run = \"$run\" }",
+          "limit": 20
+        }
+      ],
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "traceDuration"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "traceService": true,
+              "nested": true,
+              "startTime": true
+            },
+            "indexByName": {
+              "traceName": 0,
+              "traceDuration": 1,
+              "traceID": 2
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "links": [
+    {
+      "type": "link",
+      "title": "Animated replay",
+      "url": "/d/tirisfal-replay/tirisfal-glades-animated-replay?kiosk"
+    }
+  ]
+}

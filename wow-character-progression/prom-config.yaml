@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+# The demo submits three hours of historical gameplay at startup.
+storage:
+  tsdb:
+    out_of_order_time_window: 4h

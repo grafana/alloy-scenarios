@@ -44,3 +44,4 @@ trace-log-correlation-exemplars
 vault-secrets
 windows
 windows-events
+wow-character-progression

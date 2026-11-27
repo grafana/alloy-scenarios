@@ -138,6 +138,9 @@ categories:
   - name: StatsD metrics
     path: statsd-metrics
     description: Receive legacy StatsD counter, gauge, and timer packets in Alloy and remote-write mapped Prometheus metrics.
+  - name: WoW Forever character progression
+    path: wow-character-progression
+    description: Track character progression and explore a simulated leveling session with metrics, logs, and traces collected by Alloy.
 - slug: profiles
   title: Profiles
   intro: |

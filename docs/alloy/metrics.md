@@ -22,6 +22,7 @@ in grafana/alloy copies the change into the Alloy documentation.
 | [Prometheus Pushgateway][] | Scrape metrics retained for short-lived batch jobs by Prometheus Pushgateway and remote-write them through Alloy. |
 | [OTel metrics pipeline][] | Forward OpenTelemetry metrics from applications through Alloy. Alloy batches and transforms samples before it sends them to Prometheus. |
 | [StatsD metrics][] | Receive legacy StatsD counter, gauge, and timer packets in Alloy and remote-write mapped Prometheus metrics. |
+| [WoW Forever character progression][] | Track character progression and explore a simulated leveling session with metrics, logs, and traces collected by Alloy. |
 
 Refer to the [alloy-scenarios][] repository for the full list of scenarios.
 
@@ -35,4 +36,5 @@ Refer to the [alloy-scenarios][] repository for the full list of scenarios.
 [Prometheus Pushgateway]: https://github.com/grafana/alloy-scenarios/tree/main/prometheus-pushgateway
 [OTel metrics pipeline]: https://github.com/grafana/alloy-scenarios/tree/main/otel-metrics-pipeline
 [StatsD metrics]: https://github.com/grafana/alloy-scenarios/tree/main/statsd-metrics
+[WoW Forever character progression]: https://github.com/grafana/alloy-scenarios/tree/main/wow-character-progression
 [alloy-scenarios]: https://github.com/grafana/alloy-scenarios

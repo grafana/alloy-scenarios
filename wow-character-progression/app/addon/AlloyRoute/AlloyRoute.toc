@@ -1,0 +1,7 @@
+## Interface: 16001
+## Title: Alloy Route
+## Notes: Record your character's zone visits and waypoints for Grafana Tempo.
+## Version: 1.1.0
+## AllowLoadGameType: camelot
+## SavedVariablesPerCharacter: AlloyRouteRecording
+AlloyRoute.lua

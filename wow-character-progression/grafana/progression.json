@@ -1,0 +1,176 @@
+{
+  "uid": "wow-progression",
+  "title": "Character progression",
+  "links": [{"type": "link", "title": "Forsaken journey replay", "url": "/d/tirisfal-journey/tirisfal-glades-a-forsaken-journey"}],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "region",
+        "label": "Region",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(wow_character_level, region)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "character",
+        "label": "Character",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(wow_character_level{region=~\"$region\"}, character)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Character level",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "wow_character_level{region=~\"$region\", character=~\"$character\"}",
+          "legendFormat": "{{character}} \u00b7 {{region}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "showPoints": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 1440
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Average item level",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "wow_character_item_level{region=~\"$region\", character=~\"$character\"}",
+          "legendFormat": "{{character}} \u00b7 {{region}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "showPoints": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 1440
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Achievements earned",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "wow_character_achievements{region=~\"$region\", character=~\"$character\"}",
+          "legendFormat": "{{character}} \u00b7 {{region}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "showPoints": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 1440
+    },
+    {
+      "id": 4,
+      "title": "Progression events",
+      "type": "logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"wow-character-tracker\"} | region=~\"${region:regex}\" | character=~\"${character:regex}\"",
+          "queryType": "range"
+        }
+      ]
+    }
+  ]
+}

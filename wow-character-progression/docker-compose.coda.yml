@@ -1,0 +1,21 @@
+services:
+  tracker:
+    build:
+      context: ./app
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.11-slim}
+    ports:
+      - "127.0.0.1:${TRACKER_PORT:-8095}:8080"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      JOURNEY_METRICS_ENDPOINT: alloy:4320
+      PYROSCOPE_SERVER_ADDRESS: http://alloy:9999
+      GRAFANA_PORT: ${GRAFANA_PORT:-3000}
+      BLIZZARD_CLIENT_ID: ${BLIZZARD_CLIENT_ID:-}
+      BLIZZARD_CLIENT_SECRET: ${BLIZZARD_CLIENT_SECRET:-}
+      POLL_SECONDS: ${POLL_SECONDS:-900}
+    volumes:
+      - roster:/data
+
+volumes:
+  roster:

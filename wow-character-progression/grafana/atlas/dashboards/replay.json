@@ -1,0 +1,64 @@
+{
+  "uid": "tirisfal-replay",
+  "title": "Tirisfal Glades \u00b7 Animated replay",
+  "description": "An interactive three-hour simulated Undead leveling run.",
+  "tags": [
+    "world-of-warcraft",
+    "simulation"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timepicker": {
+    "hidden": true
+  },
+  "editable": false,
+  "panels": [
+    {
+      "id": 1,
+      "type": "alloy-journeyatlas-panel",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 33
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "wow-journey"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "wow-journey"
+          },
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "url": "http://tracker:8080/api/journey",
+          "format": "table",
+          "root_selector": "",
+          "columns": [],
+          "url_options": {
+            "method": "GET",
+            "headers": [],
+            "params": []
+          }
+        }
+      ],
+      "options": {},
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    }
+  ]
+}

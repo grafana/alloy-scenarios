@@ -1,0 +1,16 @@
+{
+  "type": "panel",
+  "name": "Tirisfal Journey Atlas",
+  "id": "alloy-journeyatlas-panel",
+  "info": {
+    "description": "Replay a simulated Forsaken character's journey through Tirisfal Glades.",
+    "author": {"name": "Alloy scenarios"},
+    "keywords": ["map", "replay"],
+    "logos": {"small": "compass.svg", "large": "compass.svg"},
+    "links": [],
+    "screenshots": [],
+    "version": "1.0.0",
+    "updated": "2026-11-25"
+  },
+  "dependencies": {"grafanaDependency": ">=13.0.0", "plugins": []}
+}

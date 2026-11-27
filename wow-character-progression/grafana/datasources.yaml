@@ -1,0 +1,34 @@
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    url: http://prometheus:9090
+    isDefault: true
+  - name: Loki
+    uid: loki
+    type: loki
+    url: http://loki:3100
+    jsonData:
+      derivedFields:
+        - name: Trace
+          matcherType: label
+          matcherRegex: '^trace_id$'
+          datasourceUid: tempo
+          url: '$${__value.raw}'
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    url: http://tempo:3200
+  - name: Pyroscope
+    uid: pyroscope
+    type: grafana-pyroscope-datasource
+    url: http://pyroscope:4040
+  - name: Journey replay
+    uid: wow-journey
+    url: http://tracker:8080
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    jsonData:
+      allowedHosts:
+        - http://tracker:8080

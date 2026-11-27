@@ -103,6 +103,7 @@ These scenarios collect and forward metrics with Alloy.
 | [Prometheus Pushgateway](prometheus-pushgateway/) | Scrape metrics retained for short-lived batch jobs by Prometheus Pushgateway and remote-write them through Alloy. |
 | [OTel metrics pipeline](otel-metrics-pipeline/) | Forward OpenTelemetry metrics from applications through Alloy. Alloy batches and transforms samples before it sends them to Prometheus. |
 | [StatsD metrics](statsd-metrics/) | Receive legacy StatsD counter, gauge, and timer packets in Alloy and remote-write mapped Prometheus metrics. |
+| [WoW Forever character progression](wow-character-progression/) | Track character progression and explore a simulated leveling session with metrics, logs, and traces collected by Alloy. |
 
 ### Profiles
 

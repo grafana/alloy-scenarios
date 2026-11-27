@@ -1,0 +1,23 @@
+server:
+  http_listen_port: 3200
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+storage:
+  trace:
+    backend: local
+    blocklist_poll: 10s
+    wal:
+      path: /var/tempo/wal
+      ingestion_time_range_slack: 4h
+    local:
+      path: /var/tempo/blocks
+# A replay arrives with spans dated across the preceding three hours.
+query_frontend:
+  search:
+    query_ingesters_until: 4h
+    ingester_shards: 1
+    query_backend_after: 0s

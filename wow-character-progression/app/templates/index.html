@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Character roster · WoW Forever</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <script defer src="/static/roster.js"></script>
+  </head>
+  <body data-grafana-port="{{ grafana_port }}">
+    <header>
+      <div class="wrap bar">
+        <span>WoW Forever</span>
+        <a id="journey" href="/journey/dashboard">Forsaken journey ↗</a>
+        <a id="dashboard" href="#">Progression dashboard ↗</a>
+      </div>
+    </header>
+    <main class="wrap">
+      <h1>Character roster</h1>
+      <p class="intro">
+        Follow levels, gear, and achievements as your characters progress.
+      </p>
+      <section class="enroll" aria-labelledby="track-title">
+        <h2 id="track-title">Track a character</h2>
+        <form id="enroll">
+          <label>
+            Character name
+            <input
+              id="name"
+              name="name"
+              placeholder="First name and surname"
+              required
+              maxlength="100"
+              autocomplete="off"
+            />
+          </label>
+          <label>
+            Region
+            <select id="region" name="region">
+              <option value="eu">Europe</option>
+              <option value="us">Americas &amp; Oceania</option>
+              <option value="kr">Korea</option>
+              <option value="tw">Taiwan</option>
+            </select>
+          </label>
+          <button>Start tracking</button>
+        </form>
+        <p class="hint">
+          Profiles appear after a character reaches level 10 and logs out.
+          Source: {{ source }}.
+        </p>
+        <p id="notice" role="status"></p>
+      </section>
+      <section aria-labelledby="roster-title">
+        <div class="heading">
+          <h2 id="roster-title">Tracked characters</h2>
+          <span id="count"></span>
+        </div>
+        <p id="load-error" role="status"></p>
+        <div id="roster"></div>
+      </section>
+      <section class="enroll" aria-labelledby="route-title">
+        <h2 id="route-title">My map routes</h2>
+        <p><a href="/addon/AlloyRoute.zip">Download Alloy Route</a> and unzip it into
+          <code>_forever_/Interface/AddOns/</code>. In WoW, type <code>/alloyroute start</code>
+          before travelling. Click <strong>Save &amp; Reload</strong> on the in-game recording panel when finished. If it stays open, type <code>/reload</code>.</p>
+        <form id="route-form">
+          <label>Saved route file
+            <input type="file" id="route-file" accept=".lua" required />
+          </label>
+          <button>Import to Tempo</button>
+        </form>
+        <p class="hint">Choose your character’s <code>SavedVariables/AlloyRoute.lua</code> under the game’s WTF folder.</p>
+        <p id="route-status" role="status"></p>
+        <ol id="route-visits"></ol>
+      </section>
+      <template id="card">
+        <article>
+          <div class="profile">
+            <div class="portrait" aria-hidden="true"></div>
+            <div>
+              <h3></h3>
+              <p class="identity"></p>
+            </div>
+          </div>
+          <dl>
+            <div>
+              <dt>Level</dt>
+              <dd></dd>
+            </div>
+            <div>
+              <dt>Avg. item level</dt>
+              <dd></dd>
+            </div>
+            <div>
+              <dt>Achievements</dt>
+              <dd></dd>
+            </div>
+          </dl>
+          <p class="state"></p>
+          <footer>
+            <a class="history">View history ↗</a>
+            <button class="remove" type="button">Stop tracking</button>
+          </footer>
+        </article>
+      </template>
+    </main>
+  </body>
+</html>
