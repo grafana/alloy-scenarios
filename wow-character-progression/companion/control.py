@@ -16,7 +16,7 @@ from settings import configure_cloud, load_settings, public_cloud, save_private,
 from simulate import simulate
 
 UI = Path(__file__).with_name("ui")
-ASSETS = {"/": ("index.html", "text/html"), "/app.css": ("app.css", "text/css"),
+ASSETS = {"/field-plate.jpg": ("field-plate.jpg", "image/jpeg"), "/": ("index.html", "text/html"), "/app.css": ("app.css", "text/css"),
           "/app.js": ("app.js", "text/javascript")}
 
 

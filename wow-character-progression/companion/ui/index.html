@@ -11,86 +11,87 @@
     <header>
       <div class="bar">
         <div class="brand">
-          <span class="mark" aria-hidden="true">✧</span> Azeroth Chronicle
+          <span class="mark" aria-hidden="true">✥</span> Azeroth Chronicle
         </div>
-        <span class="sub">Companion</span
-        ><button id="open-settings" class="quiet">Settings</button>
+        <nav aria-label="Grafana dashboards">
+          <a id="dashboard" hidden target="_blank" rel="noopener">Journey ↗</a>
+          <a id="progression" hidden target="_blank" rel="noopener"
+            >Progression ↗</a
+          >
+        </nav>
+        <button id="open-settings" class="quiet">Settings</button>
       </div>
     </header>
-    <main>
-      <div class="heading">
-        <div>
-          <h1>Explorer’s journal</h1>
-          <p>
-            Follow your character’s journey from a WoW save to Grafana Alloy.
-          </p>
-        </div>
-        <a id="dashboard" class="button" hidden target="_blank" rel="noopener"
-          >Journey ↗</a
-        ><a
-          id="progression"
-          class="button"
-          hidden
-          target="_blank"
-          rel="noopener"
-          >Progression ↗</a
-        >
-      </div>
-      <section class="capture">
-        <div class="mode" role="group" aria-label="Recording source">
-          <button id="real" aria-pressed="true">Real character</button
-          ><button id="simulated" aria-pressed="false">Simulated</button>
-        </div>
-        <div class="capture-content">
-          <div>
-            <div class="indicator">
-              <i></i><span id="source-status">Connecting</span>
+    <main class="binding">
+      <div class="spread">
+        <section class="leaf frontispiece" aria-labelledby="journal-heading">
+          <div class="running-head">
+            <span>Expedition field notes</span><span aria-hidden="true">✥</span>
+          </div>
+          <h1 id="journal-heading">Explorer’s<br /><em>journal</em></h1>
+          <img
+            class="plate"
+            src="/field-plate.jpg"
+            alt=""
+            width="720"
+            height="480"
+          />
+          <section class="capture" aria-labelledby="source-title">
+            <div class="section-head">
+              <h2 id="source-title">Character saves</h2>
+              <span id="source-status" role="status">Connecting</span>
             </div>
-            <h2 id="source-title">Character saves</h2>
+            <div class="mode" role="group" aria-label="Recording source">
+              <button id="real" aria-pressed="true">Real character</button
+              ><button id="simulated" aria-pressed="false">Simulated</button>
+            </div>
             <p id="source-copy"></p>
+            <div id="sim-controls" hidden>
+              <label for="example">Sample session</label
+              ><select id="example">
+                <option value="gear">Equipment changes · 3m 30s</option>
+                <option value="journey">
+                  Forsaken journey · 3 hours
+                </option></select
+              ><button class="primary" id="generate">Generate recording</button>
+            </div>
+            <p id="reader-error" role="status"></p>
+            <div id="notice" role="status"></div>
+          </section>
+        </section>
+        <section class="leaf records" aria-label="Character field notes">
+          <div class="running-head">
+            <span id="entry-date">Field observations</span
+            ><span id="collector"></span>
           </div>
-          <div id="sim-controls" hidden>
-            <label for="example">Sample session</label
-            ><select id="example">
-              <option value="gear">Equipment changes · 3m 30s</option>
-              <option value="journey">
-                Forsaken journey · 3 hours
-              </option></select
-            ><button class="primary" id="generate">Generate recording</button>
-          </div>
-          <figure id="route-view" hidden>
-            <canvas
-              width="500"
-              height="170"
-              aria-label="Path formed by the latest save’s map positions"
-            ></canvas>
-            <figcaption></figcaption>
-          </figure>
-        </div>
-      </section>
-      <section class="latest" aria-labelledby="latest-label">
-        <div class="section-head">
-          <h2 id="latest-label">Latest save read</h2>
-          <span id="collector"></span>
-        </div>
-        <div id="read-report">Waiting for a character save.</div>
-      </section>
-      <p id="reader-error" role="status"></p>
-      <div id="notice" role="status"></div>
-      <section>
-        <div class="section-head">
-          <h2>Recent sessions</h2>
-          <span id="session-count"></span>
-        </div>
-        <div id="sessions"></div>
-        <p id="empty" hidden>
-          Your first saved session will appear here after a reload or logout.
-        </p>
-        <p class="footnote">
-          Delivery receipts come from your local Alloy collector. Open Grafana
-          to inspect the stored signals.
-        </p>
-      </section>
+          <section class="latest" aria-labelledby="latest-label">
+            <h2 id="latest-label">Latest save read</h2>
+            <div id="read-report">Waiting for a character save.</div>
+            <figure id="route-view" hidden>
+              <canvas
+                width="500"
+                height="170"
+                aria-label="Path formed by the latest save’s map positions"
+              ></canvas>
+              <figcaption></figcaption>
+            </figure>
+          </section>
+          <section class="ledger">
+            <div class="section-head">
+              <h2>Session ledger</h2>
+              <span id="session-count"></span>
+            </div>
+            <div id="sessions"></div>
+            <p id="empty" hidden>
+              Your first saved session will appear here after a reload or
+              logout.
+            </p>
+            <p class="footnote">
+              Delivery receipts come from your local Alloy collector.
+            </p>
+          </section>
+        </section>
+      </div>
     </main>
     <dialog id="settings">
       <form id="config-form">

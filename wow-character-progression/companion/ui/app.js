@@ -79,7 +79,13 @@ function drawRoute(stats, show) {
   view.hidden = !show || !pts?.length;
   if (view.hidden) return;
   view.querySelector("figcaption").textContent =
-    stats.map_zone + " · latest recorded path";
+    stats.map_zone +
+    " · " +
+    pts
+      .at(-1)
+      .map((v) => (v / 100).toFixed(2))
+      .join(", ") +
+    " · last position";
   const ctx = view.querySelector("canvas").getContext("2d");
   const xs = pts.map((p) => p[0]),
     ys = pts.map((p) => p[1]),
@@ -106,10 +112,26 @@ function drawRoute(stats, show) {
   }
   ctx.stroke();
   ctx.beginPath();
+  ctx.font = "italic 15px Georgia";
+  ctx.fillStyle = "#584c34";
+  ctx.fillText("N", 15, 18);
+  ctx.beginPath();
+  ctx.moveTo(21, 22);
+  ctx.lineTo(16, 39);
+  ctx.lineTo(21, 34);
+  ctx.lineTo(26, 39);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
   ctx.lineWidth = 4;
   ctx.strokeStyle = "#65542f";
   ctx.moveTo(...path[0]);
   for (const point of path) ctx.lineTo(...point);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(...path[0], 6, 0, 2 * Math.PI);
+  ctx.fillStyle = "#f2e9d4";
+  ctx.fill();
   ctx.stroke();
   ctx.beginPath();
   ctx.arc(...path[path.length - 1], 7, 0, 2 * Math.PI);
@@ -152,16 +174,27 @@ function render(s) {
   el("collector").textContent = s.collector;
   el("reader-error").textContent = real ? s.error : "";
   const read = s.latest;
-  drawRoute(s.sessions.find((item) => item.key === read?.key)?.stats, real);
+  const last = s.sessions.find((item) => item.key === read?.key);
+  drawRoute(last?.stats, true);
+  el("entry-date").textContent = read
+    ? new Date(read.ended).toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : "Field observations";
   if (read) {
-    const heading = node(
-      "h3",
-      read.character +
-        " · " +
-        read.realm +
-        " (" +
-        read.region.toUpperCase() +
-        ")",
+    const heading = node("h3", read.character);
+    const identity = node(
+      "p",
+      [
+        last?.stats.zone,
+        last?.stats.level != null ? "Level " + last.stats.level : null,
+        read.realm + " · " + read.region.toUpperCase(),
+      ]
+        .filter(Boolean)
+        .join("  /  "),
+      "identity",
     );
     const timing = node(
       "p",
@@ -170,6 +203,7 @@ function render(s) {
         date(read.ended) +
         " · Read " +
         date(read.read_at * 1000),
+      "timing",
     );
     const counts = node("div", "", "totals");
     for (const [value, label] of [
@@ -181,7 +215,29 @@ function render(s) {
       block.append(node("b", value), node("span", label));
       counts.append(block);
     }
-    el("read-report").replaceChildren(heading, timing, counts);
+    const notes = [];
+    if (last) {
+      const stats = last.stats;
+      if (stats.combat_seconds > 0)
+        notes.push(duration(stats.combat_seconds) + " in combat");
+      if (stats.xp_gain > 0) notes.push(stats.xp_gain + " XP gained");
+      if (stats.gear_swaps > 0)
+        notes.push(
+          stats.gear_swaps +
+            " equipment " +
+            (stats.gear_swaps === 1 ? "change" : "changes"),
+        );
+      if (stats.quest_turn_ins > 0)
+        notes.push(stats.quest_turn_ins + " quests turned in");
+    }
+    const observation = node("p", notes.join(" · "), "observation");
+    el("read-report").replaceChildren(
+      heading,
+      identity,
+      observation,
+      counts,
+      timing,
+    );
   } else
     el("read-report").textContent = real
       ? "Waiting for a character save."
