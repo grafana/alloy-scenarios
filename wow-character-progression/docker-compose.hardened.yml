@@ -1,0 +1,19 @@
+services:
+  prometheus:
+    image: dhi.io/prometheus:${WOW_PROMETHEUS_HARDENED_VERSION:-3@sha256:71f5c4b8974ba5c595e0ed0a3e38a7a050f14bac5e4510ae06d7153653f03b05}
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/var/prometheus
+      - --web.enable-otlp-receiver
+      - --web.enable-remote-write-receiver
+    volumes: !override
+      - ./prom-config.yaml:/etc/prometheus/prometheus.yml:ro
+      - metrics:/var/prometheus
+
+  tempo:
+    image: dhi.io/tempo:${WOW_GRAFANA_TEMPO_HARDENED_VERSION:-2@sha256:335e3e84a994158d4a0595186fd19fc6f506a9777966bdbe584d9a5a7088d471}
+
+  grafana:
+    image: dhi.io/grafana:${WOW_GRAFANA_HARDENED_VERSION:-13@sha256:f894d5021a04124530b4d11a3fcab6bb5bb2eec61c7192373f769032ab0a9b06}
+    environment:
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: cloudwatch,elasticsearch,grafana-postgresql-datasource,grafana-pyroscope-datasource,influxdb,jaeger,loki,mssql,mysql,opentsdb,prometheus,stackdriver,tempo,zipkin,alloy-journeyatlas-panel

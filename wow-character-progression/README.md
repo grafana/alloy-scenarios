@@ -20,6 +20,8 @@ The tracker, Grafana, and [Alloy](http://localhost:12345) bind to localhost. Ove
 docker compose -f docker-compose.yml -f docker-compose.coda.yml down
 ```
 
+For a fresh local deployment using Docker Hardened Images for Grafana, Prometheus and Tempo, sign in with `docker login dhi.io`. With Compose 2.24.4 or later, run `docker compose -p wow-hardened -f docker-compose.yml -f docker-compose.coda.yml -f docker-compose.hardened.yml up -d` and use the same project and files when stopping. The separate Cloud collector only needs the public Alloy image.
+
 The roster, last observed values, and backend data use Docker volumes and survive ordinary restarts.
 
 ## Character data
