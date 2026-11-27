@@ -90,6 +90,93 @@ For example, this Explore query retrieves the vest swaps from the test character
 {service_name="wow-alloyroute",region="eu",realm="Fixture",character="AlloyGearDemo"} | type="gear_swap"
 ```
 
+## Where metrics, logs and traces come from
+
+The private Cloud pipeline stores addon events in Loki. Grafana can turn a numeric field in those logs into a time series at query time. The local demonstration also shows how an application produces native OpenTelemetry metrics, logs and traces from a single observation.
+
+```mermaid
+flowchart LR
+    subgraph Personal["Your character • Grafana Cloud"]
+      P["Completed addon session"] --> R["Reader: one JSON object per event"]
+      R --> L["Alloy → Cloud Loki"]
+      L -->|Filter gear_start or gear_swap| T["Gear tables"]
+      L -->|Extract armour and game time| C["Armour chart"]
+      L -->|LogQL unwrap| M["Metric calculated on demand"]
+    end
+    subgraph Demo["Simulated journey • local Docker stack"]
+      S["One sample every 30 seconds"] --> G["12 timestamped OTLP gauges"]
+      S --> E["OTLP log with chapter trace ID"]
+      S --> V["Chapter span with position events and quest child spans"]
+      G -->|Alloy port 4320 • historical metrics| PR["Prometheus"]
+      E -->|Alloy port 4317 • logs| LK["Loki"]
+      V -->|Alloy port 4317 • traces| TE["Tempo"]
+      PR --> D["Local journey dashboard"]
+      LK --> D
+      TE --> D
+    end
+```
+
+### A metric from your character's logs
+
+The Cloud armour panel extracts the time and number from each `armor` record, draws one step per recorded change and separates sessions. To use the same records in a **metric query** in Explore, select Loki and run:
+
+```logql
+last_over_time(
+  {service_name="wow-alloyroute", realm="Fixture", character="AlloyGearDemo"}
+  | type="armor"
+  | json armor="armor"
+  | unwrap armor
+  | __error__="" [1m]
+) by (character, realm, region)
+```
+
+Replace the realm and character for your own data. At each query step, Loki selects the latest numeric armour value observed in the previous minute. A minute without an observation produces a gap. In the verified example this yields **42 → 55 → 60 → 20**. The Cloud gear collector sends only to Loki. It does not create a Prometheus series or send gear spans to Tempo.
+
+### One local observation in three payloads
+
+The simulator's first sample places Vesper Ashvale at level 1 in Deathknell crypt. These excerpts come from running the exporter with run ID `1790000000`. They show selected fields from the decoded OTLP messages. On the wire the simulator sends protobuf batches.
+
+**Metric.** The exporter creates one gauge point per numeric measurement. Level, for example, is 1 at the original gameplay timestamp. Prometheus can plot `wow_journey_level{character="vesper-ashvale",run="1790000000"}`. Choose your local run ID to query a different replay.
+
+```json
+{
+  "name": "wow_journey_level",
+  "gauge": {"dataPoints": [{
+    "timeUnixNano": "1790000000000000000", "asInt": "1",
+    "attributes": [
+      {"key":"character","value":{"stringValue":"vesper-ashvale"}},
+      {"key":"run","value":{"stringValue":"1790000000"}}
+    ]
+  }]}
+}
+```
+
+**Log.** The same sample becomes an INFO log. The body contains JSON text with the event, character and map position. The OTLP log envelope also carries the trace and span IDs. In local Loki, `{service_name="wow-journey-simulator"} | json | quest_id="363"` finds the quest.
+
+```json
+{
+  "timeUnixNano": "1790000000000000000",
+  "severityText": "INFO",
+  "traceId": "4dd330de8ed67e4fac091dd49ff4074e",
+  "spanId": "753213beeb54f8e0",
+  "body": {"stringValue":"{\"run\":\"1790000000\",\"character\":\"Vesper Ashvale\",\"minute\":0.0,\"level\":1,\"place\":\"Deathknell crypt\",\"activity\":\"Awakening\",\"event\":\"Awoke in the crypt\",\"who\":\"Undertaker Mordo\",\"quest_id\":363,\"x\":30.0,\"y\":71.6,\"latitude\":-45.940393663323405,\"longitude\":-72.0}"}
+}
+```
+
+**Trace.** The exporter groups the sample into a chapter. The Deathknell root span lasts 25 minutes and contains a timestamped `map.position` event for each sample. The opening quest becomes a child span. Its span ID matches the log above, so you can move from a single quest record to its surrounding chapter. In local Tempo, search `{ resource.service.name = "wow-journey-simulator" && name = "Deathknell" }`.
+
+```json
+[
+  {"name":"Deathknell","traceId":"4dd330de8ed67e4fac091dd49ff4074e","spanId":"76b26e13cd716a8b",
+   "startTimeUnixNano":"1790000000000000000","endTimeUnixNano":"1790001500000000000",
+   "events":[{"name":"map.position","timeUnixNano":"1790000000000000000"}]},
+  {"name":"Awoke in the crypt","traceId":"4dd330de8ed67e4fac091dd49ff4074e",
+   "spanId":"753213beeb54f8e0","parentSpanId":"76b26e13cd716a8b"}
+]
+```
+
+The optional Battle.net tracker has a separate live path in the local stack. A profile poll produces level, average item-level and achievement gauges, logs changes or failures, and wraps its HTTP calls in a `character.poll` trace. These three signals enter Alloy on port 4317. The older v1 route importer can also turn consecutive positions in a zone into a `character.zone_visit` span. The v2 gear reader uses the Cloud path shown above. [Simulator exporter](app/journey_telemetry.py) · [Local Alloy pipelines](config.alloy) · [Profile tracker](app/tracker.py) · [v1 route spans](app/routes.py)
+
 ## Save limits and retention
 
 The in-game buffer stops at 4,096 data rows or 1,000,000 bytes and warns at 80%. After confirming a session reached Grafana, use `/alloyroute clear` and then `/alloyroute clear confirm` to free the character’s buffer. The reader writes only to the local export directory. Clearing the in-game buffer leaves previously exported files and Loki records intact. Grafana history is available for your stack’s configured Loki retention period. Older saves remain readable and only contain the fields the addon recorded at the time.
