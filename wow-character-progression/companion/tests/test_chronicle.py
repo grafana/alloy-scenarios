@@ -105,3 +105,24 @@ class DeliveryJournal(Workspace):
         _, rows = read_recording.read_file(self.tmp / "AlloyRoute.lua")
         self.assertEqual([r["quantity"] for r in rows if r["type"]=="loot_received"],[3])
         self.assertFalse(any(r["type"]=="target" for r in rows))
+
+    def test_portrait_requires_matching_identity_and_official_asset(self):
+        from io import BytesIO
+        from portrait import Portraits
+        portraits = Portraits(self.tmp)
+        portraits.configure("test-client", "test-secret")
+        header = {"region":"eu", "character":"River", "player_guid":"Player-123-0000002A"}
+        media = {"character":{"id":42, "slug":"river-stone"}, "assets":[
+            {"key":"main-raw","value":"https://other.invalid/forever-eu/model.png"},
+            {"key":"avatar","value":"https://render.worldofwarcraft.com/forever-eu/character/42.jpg"}]}
+        def stream(value):
+            return BytesIO(json.dumps(value).encode())
+        with patch("portrait.urlopen", side_effect=[stream({"access_token":"fake","expires_in":600}),stream(media)]) as api:
+            result = portraits.lookup(header,"recorded-character","River Stone")
+            self.assertEqual(result["kind"], "avatar")
+            self.assertEqual(portraits.lookup(header,"recorded-character"), result)
+            self.assertEqual(api.call_count, 2)
+        media["character"]["id"] = 44
+        with patch("portrait.urlopen",return_value=stream(media)):
+            mismatch = portraits.lookup(header,"different-recording","River Stone")
+        self.assertNotIn("url",mismatch)

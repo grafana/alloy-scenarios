@@ -9,7 +9,9 @@ import threading
 import time
 from contextlib import closing
 from journal import history
-from urllib.parse import urlsplit
+from portrait import Portraits
+import re
+from urllib.parse import parse_qs, urlsplit
 
 from export_signals import GROWTH_SIGNAL, TRACE_SIGNAL, activity_trace_id
 from settings import configure_cloud, load_settings, public_cloud, save_private, start_collector
@@ -31,6 +33,8 @@ class Companion:
         self.wakeup = threading.Event()
         self.seen = {}
         self.error = ""
+        self.portraits = Portraits(self.folder)
+        self.portrait_lock = threading.Lock()
 
     def watch(self):
         while True:
@@ -56,9 +60,9 @@ class Companion:
             self.config = config
             self.wakeup.set()
 
-    def status(self):
+    def status(self, selected=None):
         with self.lock:
-            sessions, latest = history(self.folder, self.config["mode"])
+            sessions, latest, characters = history(self.folder, self.config["mode"], selected)
             state = self.folder / ".delivery" / "delivery.sqlite"
             sent, checks, attempts, offsets, health = set(), {}, {}, {}, None
             if state.is_file():
@@ -92,11 +96,27 @@ class Companion:
             else:
                 collector = "Alloy ready" if health[1] else "Alloy offline"
             return {"config": self.config.copy(), "client_present": Path(self.config["client"]).is_dir(),
-                    "cloud": public_cloud(), "sessions": sessions, "latest": latest,
+                    "portrait_configured": all(self.portraits.credentials()), "characters": characters, "cloud": public_cloud(), "sessions": sessions, "latest": latest,
                     "collector": collector, "error": self.error}
 
     def action(self, route, data):
-        if route == "/settings":
+        if route == "/portrait-settings":
+            with self.portrait_lock:
+                self.portraits.configure(data.get("client_id"), data.get("secret"))
+        elif route == "/portrait":
+            key = data.get("session")
+            if not isinstance(key, str) or not re.fullmatch("[0-9a-f]{64}", key):
+                raise ValueError("Select a recorded character.")
+            with self.lock:
+                sessions, _, _ = history(self.folder, selected=data.get("character"))
+                item = next((s for s in sessions if s["key"] == key and s["origin"] == "real"), None)
+                if not item:
+                    raise ValueError("Portraits are available for real character saves.")
+                with (self.folder / (key + ".jsonl")).open() as stream:
+                    header = json.loads(next(stream))
+            with self.portrait_lock:
+                return self.portraits.lookup(header, item["character_key"], data.get("name"))
+        elif route == "/settings":
             self.settings(data)
         elif route == "/simulate":
             with self.lock:
@@ -121,7 +141,7 @@ def serve(app, port):
             self.send_header("Content-Type", kind + "; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; form-action 'self'")
+            self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' https://render.worldofwarcraft.com; frame-ancestors 'none'; form-action 'self'")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -135,7 +155,7 @@ def serve(app, port):
                 return self.reply(403, b"{}")
             path = urlsplit(self.path).path
             if path == "/status":
-                return self.reply(200, json.dumps(app.status()).encode())
+                return self.reply(200, json.dumps(app.status(parse_qs(urlsplit(self.path).query).get("character",[None])[0])).encode())
             if path in ASSETS:
                 name, kind = ASSETS[path]
                 return self.reply(200, (UI / name).read_bytes(), kind)
@@ -152,10 +172,10 @@ def serve(app, port):
                 data = json.loads(self.rfile.read(length))
                 if not isinstance(data, dict):
                     raise ValueError("Expected a settings object.")
-                app.action(self.path, data)
+                result = app.action(self.path, data)
             except (ValueError, TypeError, OSError, subprocess.SubprocessError) as exc:
                 return self.reply(400, json.dumps({"error": str(exc)}).encode())
-            self.reply(200, b'{"ok":true}')
+            self.reply(200, json.dumps(result or {"ok":True}).encode())
 
         def log_message(self, fmt, *args):
             if self.command != "GET":

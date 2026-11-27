@@ -138,6 +138,140 @@ function drawRoute(stats, show) {
   ctx.fillStyle = "#305a46";
   ctx.fill();
 }
+let selected = localStorage.getItem("chronicle-character") || "";
+let portraitSession,
+  portraitRequest = 0,
+  refreshRequest = 0;
+function renderCharacter(s, last) {
+  const picker = el("character-select");
+  const choices = JSON.stringify(s.characters);
+  if (picker.dataset.choices !== choices) {
+    picker.replaceChildren(
+      ...s.characters.map((c) => {
+        const opt = node(
+          "option",
+          c.character + " · " + c.realm + " (" + c.region.toUpperCase() + ")",
+        );
+        opt.value = c.character_key;
+        return opt;
+      }),
+    );
+    picker.dataset.choices = choices;
+  }
+  picker.value = last?.character_key || "";
+  if (!last) {
+    el("character-sheet").textContent = "No recorded character yet.";
+    return;
+  }
+  const v = last.stats;
+  const title = node("h3", last.character),
+    identity = node(
+      "p",
+      [
+        v.zone,
+        v.level != null ? "Level " + v.level : null,
+        v.race,
+        v.class,
+        v.faction,
+      ]
+        .filter(Boolean)
+        .join("  /  "),
+      "identity",
+    );
+  const values = node("dl", "", "stat-grid");
+  const fraction = (v, m) => (v == null ? null : m != null ? v + " / " + m : v);
+  const pairs = [
+    ["Experience", fraction(v.xp, v.xp_max)],
+    ["Health", fraction(v.health, v.health_max)],
+    [v.power_type || "Power", fraction(v.power, v.power_max)],
+    ["Armour", v.armor_final],
+    ["Coin (copper)", v.money_copper],
+    ["XP gained", v.xp_gain],
+    ["Combat", v.combat_seconds != null ? v.combat_seconds + "s" : null],
+    ["Gear swaps", v.gear_swaps],
+    ["Quest turn-ins", v.quest_turn_ins],
+  ];
+  for (const [label, value] of pairs)
+    if (value != null) {
+      const field = node("div", "");
+      field.append(node("dt", label), node("dd", value));
+      values.append(field);
+    }
+  const notes = node("div", "", "observations");
+  for (const [key, label] of [
+    ["last_quest", "Last quest observed"],
+    ["last_swap", "Last equipment change"],
+  ]) {
+    const value = s.sessions.find((r) => r.stats[key])?.stats[key];
+    if (value) notes.append(node("p", label + " · " + value));
+  }
+  el("character-sheet").replaceChildren(title, identity, values, notes);
+  const portraitKey = last.key + ":" + s.portrait_configured;
+  if (portraitSession !== portraitKey) {
+    portraitSession = portraitKey;
+    portraitRequest++;
+    el("portrait").hidden = true;
+    el("character-image").removeAttribute("src");
+    el("portrait-controls").hidden = last.origin !== "real";
+    el("portrait-name").value = last.character;
+    el("portrait-note").textContent = s.portrait_configured
+      ? "Blizzard may publish a render after a level 10 logout."
+      : "Add Battle.net application credentials in Settings to enable portraits.";
+    if (s.portrait_configured && last.origin === "real") loadPortrait(last);
+  }
+}
+async function loadPortrait(last, name) {
+  const request = ++portraitRequest;
+  try {
+    const r = await fetch("/portrait", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session: last.key,
+        character: last.character_key,
+        name,
+      }),
+    });
+    const result = await r.json();
+    if (request !== portraitRequest) return;
+    el("portrait-note").textContent =
+      result.error || result.message || "Official Battle.net portrait.";
+    el("portrait").hidden = !result.url;
+    if (result.url) {
+      el("character-image").alt = last.character + " · Battle.net render";
+      el("character-image").src = result.url;
+    }
+  } catch {
+    if (request === portraitRequest)
+      el("portrait-note").textContent = "Could not reach the companion.";
+  }
+}
+el("character-image").onerror = () => {
+  el("portrait").hidden = true;
+  el("portrait-note").textContent = "Blizzard’s image could not be loaded.";
+};
+el("character-select").onchange = () => {
+  selected = el("character-select").value;
+  localStorage.setItem("chronicle-character", selected);
+  refresh().catch((e) => {
+    el("notice").textContent = e.message;
+  });
+};
+el("portrait-form").onsubmit = (e) => {
+  e.preventDefault();
+  if (state.sessions[0])
+    loadPortrait(state.sessions[0], el("portrait-name").value);
+};
+el("battle-form").onsubmit = async (e) => {
+  e.preventDefault();
+  await act(
+    "/portrait-settings",
+    { client_id: el("battle-id").value, secret: el("battle-secret").value },
+    "Battle.net credentials saved.",
+    true,
+  );
+  el("battle-secret").value = "";
+};
 function render(s) {
   state = s;
   const real = s.config.mode === "real",
@@ -158,15 +292,17 @@ function render(s) {
   el("sim-controls").hidden = real;
   el("dashboard").hidden = !stack;
   el("progression").hidden = !stack;
+  const last = s.sessions[0];
+  renderCharacter(s, last);
   if (stack) {
     for (const [id, path] of [
       ["dashboard", "/d/wow-character-gear"],
       ["progression", "/d/wow-chronicle-progression"],
     ]) {
       const url = new URL(path, stack);
-      if (s.latest) {
+      if (last) {
         for (const field of ["character", "realm", "region"])
-          url.searchParams.set("var-" + field, s.latest[field]);
+          url.searchParams.set("var-" + field, last[field]);
       }
       el(id).href = url;
     }
@@ -174,31 +310,21 @@ function render(s) {
   el("collector").textContent = s.collector;
   el("reader-error").textContent = real ? s.error : "";
   const read = s.latest;
-  const last = s.sessions.find((item) => item.key === read?.key);
+
   drawRoute(last?.stats, true);
-  el("entry-date").textContent = read
-    ? new Date(read.ended).toLocaleDateString(undefined, {
+  el("entry-date").textContent = last
+    ? new Date(last.ended).toLocaleDateString(undefined, {
         day: "numeric",
         month: "long",
         year: "numeric",
       })
     : "Field observations";
   if (read) {
-    const heading = node("h3", read.character);
-    const identity = node(
-      "p",
-      [
-        last?.stats.zone,
-        last?.stats.level != null ? "Level " + last.stats.level : null,
-        read.realm + " · " + read.region.toUpperCase(),
-      ]
-        .filter(Boolean)
-        .join("  /  "),
-      "identity",
-    );
     const timing = node(
       "p",
-      source(read.origin) +
+      read.character +
+        " · " +
+        source(read.origin) +
         " · Gameplay ended " +
         date(read.ended) +
         " · Read " +
@@ -215,29 +341,7 @@ function render(s) {
       block.append(node("b", value), node("span", label));
       counts.append(block);
     }
-    const notes = [];
-    if (last) {
-      const stats = last.stats;
-      if (stats.combat_seconds > 0)
-        notes.push(duration(stats.combat_seconds) + " in combat");
-      if (stats.xp_gain > 0) notes.push(stats.xp_gain + " XP gained");
-      if (stats.gear_swaps > 0)
-        notes.push(
-          stats.gear_swaps +
-            " equipment " +
-            (stats.gear_swaps === 1 ? "change" : "changes"),
-        );
-      if (stats.quest_turn_ins > 0)
-        notes.push(stats.quest_turn_ins + " quests turned in");
-    }
-    const observation = node("p", notes.join(" · "), "observation");
-    el("read-report").replaceChildren(
-      heading,
-      identity,
-      observation,
-      counts,
-      timing,
-    );
+    el("read-report").replaceChildren(counts, timing);
   } else
     el("read-report").textContent = real
       ? "Waiting for a character save."
@@ -366,9 +470,11 @@ function render(s) {
   el("empty").hidden = !!rows.length;
 }
 async function refresh() {
-  const r = await fetch("/status");
+  const request = ++refreshRequest;
+  const r = await fetch("/status?character=" + encodeURIComponent(selected));
   if (!r.ok) throw Error("Companion unavailable");
-  render(await r.json());
+  const data = await r.json();
+  if (request === refreshRequest) render(data);
 }
 async function act(route, data = {}, message = "Saved.", inDialog = false) {
   if (busy) return;
@@ -395,14 +501,17 @@ async function act(route, data = {}, message = "Saved.", inDialog = false) {
   }
 }
 for (const mode of ["real", "simulated"])
-  el(mode).onclick = () =>
-    act(
+  el(mode).onclick = () => {
+    selected = "";
+    localStorage.removeItem("chronicle-character");
+    return act(
       "/settings",
       { mode },
       mode === "real"
         ? "Watching for real character saves."
         : "Simulation mode selected.",
     );
+  };
 el("generate").onclick = () =>
   act(
     "/simulate",
@@ -420,6 +529,9 @@ el("open-settings").onclick = () => {
         ? "Saved · leave blank to keep"
         : "";
   }
+  el("battle-state").textContent = state.portrait_configured
+    ? "Credentials are configured on this machine."
+    : "Optional. Enter a Battle.net developer application to enable portraits.";
   el("settings-notice").textContent = "";
   el("settings").showModal();
 };

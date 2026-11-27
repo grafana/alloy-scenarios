@@ -1,5 +1,6 @@
 """Local observations about save reads. Immutable session files remain the export queue."""
 from contextlib import closing
+import hashlib
 import json
 import sqlite3
 import time
@@ -15,9 +16,28 @@ def connect(folder):
     return db
 
 
+def character_key(header):
+    return hashlib.sha256((header["region"] + "/" + header["player_guid"]).encode()).hexdigest()
+
+
 def index(db, key, header, rows, origin):
     fields = ("ts", "ended", "duration_seconds", "character", "realm", "region", "rows", "session_id")
+    summary = {k: header[k] for k in fields}
+    summary["character_key"] = character_key(header)
     stats = session_summary(header, rows)
+    for field in ("race", "class", "faction"):
+        if field in header:
+            stats[field] = header[field]
+    for row in rows:
+        if row["type"] == "snapshot":
+            for field in ("xp", "xp_max", "health", "health_max", "power", "power_max", "power_type", "money_copper"):
+                if field in row:
+                    stats[field] = row[field]
+        if row["type"] == "gear_swap":
+            stats["last_swap"] = row["slot"] + " · " + row["item_name"]
+        if row["type"] in ("quest_accepted", "quest_turned_in") and row.get("quest_title"):
+            stats["last_quest"] = row["quest_title"]
+
     positions = [r for r in rows if {"map_id", "x", "y"} <= r.keys()]
     if positions:
         last_map = positions[-1]["map_id"]
@@ -30,8 +50,8 @@ def index(db, key, header, rows, origin):
         stats["map_points"] = run[::max(1, len(run)//100)] + [run[-1]]
         stats["map_zone"] = positions[-1].get("zone", f"Map {last_map}")
     db.execute("INSERT INTO entry VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET "
-               "origin=COALESCE(entry.origin, excluded.origin)",
-               (key, json.dumps({k: header[k] for k in fields}), json.dumps(stats), origin))
+               "origin=COALESCE(entry.origin, excluded.origin), header=excluded.header, stats=excluded.stats",
+               (key, json.dumps(summary), json.dumps(stats), origin))
 
 
 def note_read(folder, sessions, events, new, origin):
@@ -51,9 +71,9 @@ def note_read(folder, sessions, events, new, origin):
         db.execute("INSERT OR REPLACE INTO latest VALUES (?,?)", (1 if origin == "real" else 2, json.dumps(report)))
 
 
-def history(folder, mode="real"):
+def history(folder, mode="real", selected=None):
     with closing(connect(folder)) as db, db:
-        keys = {key for key, in db.execute("SELECT key FROM entry")}
+        keys = {key for key, in db.execute("SELECT key FROM entry WHERE json_extract(header,'$.character_key') IS NOT NULL")}
         for path in folder.glob("*.jsonl"):
             if path.stem in keys:
                 continue
@@ -64,7 +84,21 @@ def history(folder, mode="real"):
             except (OSError, ValueError, KeyError, StopIteration):
                 continue
         last = db.execute("SELECT report FROM latest WHERE id=?", (1 if mode == "real" else 2,)).fetchone()
+        report = json.loads(last[0]) if last else None
+        characters = []
+        for raw, origin in db.execute("SELECT header,origin FROM entry GROUP BY json_extract(header,'$.character_key') "
+                                     "ORDER BY max(json_extract(header,'$.ts')) DESC"):
+            h = json.loads(raw)
+            characters.append({k: h[k] for k in ("character_key","character","realm","region")} | {"origin":origin})
+        if selected not in {c["character_key"] for c in characters}:
+            selected = None
+        if selected is None and report:
+            ref = db.execute("SELECT json_extract(header,'$.character_key') FROM entry WHERE key=?", (report["key"],)).fetchone()
+            selected = ref[0] if ref else None
+        if not selected and characters:
+            selected = characters[0]["character_key"]
         entries = [dict(json.loads(header), key=key, stats=json.loads(stats), origin=origin)
                    for key, header, stats, origin in db.execute(
-                       "SELECT key,header,stats,origin FROM entry ORDER BY json_extract(header,'$.ts') DESC LIMIT 40")]
-    return entries, json.loads(last[0]) if last else None
+                       "SELECT key,header,stats,origin FROM entry WHERE json_extract(header,'$.character_key')=? "
+                       "ORDER BY json_extract(header,'$.ts') DESC LIMIT 40", (selected,))]
+    return entries, report, characters

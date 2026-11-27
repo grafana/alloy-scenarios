@@ -65,7 +65,28 @@
             ><span id="collector"></span>
           </div>
           <section class="latest" aria-labelledby="latest-label">
-            <h2 id="latest-label">Latest save read</h2>
+            <label class="choose" for="character-select"
+              >Character journal<select id="character-select"></select
+            ></label>
+            <h2 id="latest-label">Character sheet</h2>
+            <div id="character-sheet"></div>
+            <figure id="portrait" hidden>
+              <img id="character-image" alt="" />
+              <figcaption>Battle.net character render</figcaption>
+            </figure>
+            <details id="portrait-controls">
+              <summary>Battle.net portrait</summary>
+              <form id="portrait-form">
+                <label
+                  >Character’s first name and surname<input
+                    id="portrait-name"
+                    required
+                    maxlength="120" /></label
+                ><button>Look up portrait</button>
+              </form>
+              <p id="portrait-note" role="status"></p>
+            </details>
+            <h2 class="receipt-heading">Latest save read</h2>
             <div id="read-report">Waiting for a character save.</div>
             <figure id="route-view" hidden>
               <canvas
@@ -110,6 +131,24 @@
               max="300"
               required /></label
           ><button class="button" type="submit">Save capture settings</button>
+        </fieldset>
+      </form>
+      <form id="battle-form">
+        <fieldset>
+          <legend>Battle.net portraits</legend>
+          <p id="battle-state"></p>
+          <label
+            >Application client ID<input
+              id="battle-id"
+              autocomplete="off"
+              required /></label
+          ><label
+            >Application client secret<input
+              id="battle-secret"
+              type="password"
+              autocomplete="new-password"
+              required /></label
+          ><button>Save portrait credentials</button>
         </fieldset>
       </form>
       <form id="cloud-form">

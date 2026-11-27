@@ -36,6 +36,12 @@ Enable **Azeroth Chronicle** on the character selection screen. Click **Start re
 
 Click **Save & Reload**, type `/reload`, or log out normally to write the save. The companion can then export everything recorded since the last save, with the original event times. Recording resumes automatically after reload and at your next login. Characters with existing v2 recordings resume on upgrade. Use `/chronicle stop` to pause across reloads and logins. The addon warns at 80% and stops at 4,096 data rows or 1,000,000 bytes. After checking delivery, choose **Clear…** and confirm to free the space used by previously saved sessions. The current session keeps recording. WoW persists the clear on the next reload or logout. [Save format and offline reader](companion/FORMAT.md)
 
+### Character sheets and Battle.net portraits
+
+Select a recorded character at the top of the journal to see their latest stats, observed gear and quests, map sketch, session ledger and dashboard links. Older saves can have fewer fields.
+
+For an optional character portrait, add your Battle.net application client ID and secret in **Settings**. Open **Battle.net portrait** on a real character’s sheet and enter their first name and surname. The companion checks Blizzard’s returned character ID against the selected save. It loads the full-body rendered image or avatar from Blizzard’s render service. The companion stores credentials and successful name matches locally. The API supplies still images. A newly created character may need to reach level 10, log out and wait for Blizzard to publish media. [Forever character-media response](https://us.forums.blizzard.com/en/blizzard/t/wow-forever-api-what-works-so-far-plus-a-ts-client/60334/5)
+
 ### Try a simulated session
 
 Install Lua 5.1 or LuaJIT, choose **Simulated**, select **Equipment changes** or **Forsaken journey**, and click **Generate recording**. The short example swaps a vest and changes armour. The three-hour example follows a fictional priest through combat, quest hand-ins and equipment changes in Tirisfal Glades. It runs immediately using a simulated game clock. The companion pauses its real-save watcher in this mode. Switching back to **Real character** picks up completed saves from the client folder.
