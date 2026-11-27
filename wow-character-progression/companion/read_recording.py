@@ -9,6 +9,7 @@ Diagnostics go to stderr. Standard library only, Python 3.9 or later.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -16,6 +17,7 @@ import sys
 import tempfile
 from collections import Counter
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import unquote_to_bytes
 
 VARIABLE = "AlloyRouteRecording"
@@ -279,37 +281,63 @@ def lines(sessions, events):
         yield json.dumps(item, ensure_ascii=False)
 
 
+def write_sessions(folder, sessions, events):
+    """Publish complete, immutable files so Alloy can retain its tail offsets."""
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    offset = 0
+    for session in sessions:
+        end = offset + session["rows"]
+        body = "".join(line + "\n" for line in lines([session], events[offset:end])).encode()
+        offset = end
+        identity = [session[k] for k in ("region", "realm", "player_guid", "session_id")]
+        key = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+        dest = folder / (key + ".jsonl")
+        if dest.exists() and dest.read_bytes() == body:
+            continue
+        with tempfile.NamedTemporaryFile(dir=folder, delete=False) as tmp:
+            try:
+                tmp.write(body)
+                tmp.flush()
+                # link publishes without replacing a file another reader has already created.
+                try:
+                    os.link(tmp.name, dest)
+                except FileExistsError:
+                    if dest.read_bytes() != body:
+                        raise RecordingError(f"Conflicting contents for session {session['session_id']}.")
+            finally:
+                os.unlink(tmp.name)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("path", help="WTF/Account/<account>/<realm>/<character>/SavedVariables/AlloyRoute.lua")
     target = parser.add_mutually_exclusive_group()
     target.add_argument("-o", "--output", help="write JSON Lines here atomically instead of stdout")
-    target.add_argument("--export-dir", help="write <region>-<realm>-<character>-<session>.jsonl into this "
-                        "folder for Alloy to ship; rereading the same save replaces the same file")
+    target.add_argument("--export-dir", help="write one immutable JSON Lines file per session into this "
+                        "folder for Alloy to ship; previously exported sessions are skipped")
     args = parser.parse_args(argv)
     try:
         sessions, events = read_file(args.path)
     except (OSError, RecordingError) as exc:
         print(f"read_recording: {exc}", file=sys.stderr)
         return 2
-    output = "".join(line + "\n" for line in lines(sessions, events))
-    destination = args.output
     if args.export_dir:
-        first = sessions[0]
-        name = "-".join(re.sub(r"[^A-Za-z0-9_.]+", "_", str(first[key]))
-                        for key in ("region", "realm", "character", "session_id"))
-        os.makedirs(args.export_dir, exist_ok=True)
-        destination = os.path.join(args.export_dir, name + ".jsonl")
-    if destination:
-        # Write beside the target, then rename, so a watcher never sees half a file.
-        folder = os.path.dirname(os.path.abspath(destination))
-        handle, temp = tempfile.mkstemp(dir=folder, prefix=".alloyroute-", suffix=".tmp")
-        with os.fdopen(handle, "w", encoding="utf-8") as out:
-            out.write(output)
-        os.replace(temp, destination)
-        print(f"read_recording: wrote {destination}", file=sys.stderr)
+        try:
+            write_sessions(args.export_dir, sessions, events)
+        except (OSError, RecordingError) as exc:
+            print(f"read_recording: {exc}", file=sys.stderr)
+            return 2
     else:
-        sys.stdout.write(output)
+        output = "".join(line + "\n" for line in lines(sessions, events))
+        if args.output:
+            folder = os.path.dirname(os.path.abspath(args.output))
+            handle, temp = tempfile.mkstemp(dir=folder, prefix=".alloyroute-", suffix=".tmp")
+            with os.fdopen(handle, "w", encoding="utf-8") as out:
+                out.write(output)
+            os.replace(temp, args.output)
+        else:
+            sys.stdout.write(output)
     counts = Counter(event["type"] for event in events)
     names = ", ".join(f"{key} {value}" for key, value in sorted(counts.items()))
     for session in sessions:

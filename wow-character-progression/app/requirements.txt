@@ -3,4 +3,4 @@ requests==2.34.2
 opentelemetry-sdk==1.43.0
 opentelemetry-exporter-otlp-proto-grpc==1.43.0
 pyroscope-io==1.4.0
-Pillow==12.2.0
+Pillow==13.0.0

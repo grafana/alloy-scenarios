@@ -3,7 +3,8 @@
 #   docker compose up -d
 services:
   alloy:
-    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.19.2}
+    restart: unless-stopped
+    image: grafana/alloy:${WOW_GRAFANA_ALLOY_VERSION:-v1.22.0}
     command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
     env_file:
       - path: .env

@@ -4,72 +4,72 @@
 // the stack's Loki endpoint. Credentials come from the environment (cloud/.env).
 
 local.file_match "recordings" {
-  path_targets = [{
-    __path__     = coalesce(sys.env("ALLOYROUTE_EXPORT_GLOB"), "/exports/*.jsonl"),
-    service_name = "wow-alloyroute",
-  }]
-  sync_period = "10s"
+	path_targets = [{
+		__path__     = coalesce(sys.env("ALLOYROUTE_EXPORT_GLOB"), "/exports/*.jsonl"),
+		service_name = "wow-alloyroute",
+	}]
+	sync_period = "10s"
 }
 
 loki.source.file "recordings" {
-  targets       = local.file_match.recordings.targets
-  forward_to    = [loki.process.recordings.receiver]
-  tail_from_end = false
+	targets       = local.file_match.recordings.targets
+	forward_to    = [loki.process.recordings.receiver]
+	tail_from_end = false
 }
 
 loki.process "recordings" {
-  stage.json {
-    expressions = {
-      ts_ns      = "",
-      type       = "",
-      session_id = "",
-      region     = "",
-      realm      = "",
-      character  = "",
-    }
-  }
+	stage.json {
+		expressions = {
+			ts_ns      = "",
+			type       = "",
+			session_id = "",
+			region     = "",
+			realm      = "",
+			character  = "",
+		}
+	}
 
-  // Order by gameplay time. seq separates rows within one second.
-  stage.timestamp {
-    source = "ts_ns"
-    format = "UnixNs"
-  }
+	// Order by gameplay time. seq separates rows within one second.
+	stage.timestamp {
+		source = "ts_ns"
+		format = "UnixNs"
+	}
 
-  // A few low-cardinality stream labels identify the character.
-  stage.labels {
-    values = {
-      region    = "",
-      realm     = "",
-      character = "",
-    }
-  }
+	// A few low-cardinality stream labels identify the character.
+	stage.labels {
+		values = {
+			region    = "",
+			realm     = "",
+			character = "",
+		}
+	}
 
-  // Per-line details stay out of the index.
-  stage.structured_metadata {
-    values = {
-      type       = "",
-      session_id = "",
-    }
-  }
+	// Per-line details stay out of the index.
+	stage.structured_metadata {
+		values = {
+			type       = "",
+			session_id = "",
+		}
+	}
 
-  stage.label_drop {
-    values = ["filename"]
-  }
+	stage.label_drop {
+		values = ["filename"]
+	}
 
-  forward_to = [loki.write.grafana_cloud.receiver]
+	forward_to = [loki.write.grafana_cloud.receiver]
 }
 
 loki.write "grafana_cloud" {
-  endpoint {
-    url = sys.env("GRAFANA_CLOUD_LOKI_URL")
+	endpoint {
+		url = sys.env("GRAFANA_CLOUD_LOKI_URL")
 
-    basic_auth {
-      username = sys.env("GRAFANA_CLOUD_LOKI_USER")
-      password = sys.env("ALLOYROUTE_LOKI_TOKEN")
-    }
-  }
+		basic_auth {
+			username = sys.env("GRAFANA_CLOUD_LOKI_USER")
+			password = sys.env("ALLOYROUTE_LOKI_TOKEN")
+		}
+	}
 
-  external_labels = {
-    source = "alloyroute-v2",
-  }
+	external_labels = {
+		source = "alloyroute-v2",
+	}
 }

@@ -214,6 +214,22 @@ class DamagedFileTests(unittest.TestCase):
         sessions, rows = read_recording.read_file(path)
         self.assertEqual(len(rows), 22)
 
+    def test_incremental_exports_keep_the_first_file_and_tail_offset(self):
+        sessions, events = read_recording.read_file(FIXTURES / "night_elf_druid.lua")
+        output = self.tmp / "exports"
+        read_recording.write_sessions(output, sessions[:1], events[:sessions[0]["rows"]])
+        first, = output.glob("*.jsonl")
+        inode, stamp = first.stat().st_ino, first.stat().st_mtime_ns
+        read_recording.write_sessions(output, sessions, events)
+        read_recording.write_sessions(output, sessions, events)
+        self.assertEqual((first.stat().st_ino, first.stat().st_mtime_ns), (inode, stamp))
+        files = list(output.glob("*.jsonl"))
+        self.assertEqual(len(files), 2)
+        for path in files:
+            records = [json.loads(line) for line in path.read_text().splitlines()]
+            self.assertEqual(len(records), 1 + records[0]["rows"])
+            self.assertEqual(len({row["session_id"] for row in records}), 1)
+
     def test_output_is_atomic(self):
         path = self.tmp / "AlloyRoute.lua"
         path.write_text(self.good)

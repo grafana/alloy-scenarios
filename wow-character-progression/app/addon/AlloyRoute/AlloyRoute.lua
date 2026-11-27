@@ -22,7 +22,7 @@ end
 
 -- Restricted values are secret on this client; never compare or concatenate them.
 local function readable(value)
-    return value ~= nil and not (issecretvalue and issecretvalue(value))
+    return not (issecretvalue and issecretvalue(value)) and value ~= nil
 end
 
 local function text(value)

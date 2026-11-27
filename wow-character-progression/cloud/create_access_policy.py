@@ -18,6 +18,7 @@ import socket
 import sys
 import urllib.error
 import urllib.request
+from urllib.parse import urlencode
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -51,20 +52,30 @@ def main():
                          "access policy token.")
     api = args.api or ("https://grafana-dev.com/api" if args.domain == "grafana-dev.net" else "https://grafana.com/api")
 
+    env = Path(args.env)
+    if env.exists() or env.is_symlink():
+        raise SystemExit(f"Configuration already exists at {env}. Choose a new --env path to rotate credentials.")
     stack = call(api, f"/instances/{args.stack}", token)
     region, loki_url, loki_user = stack.get("regionSlug"), stack.get("hlInstanceUrl"), stack.get("hlInstanceId")
     if not (stack.get("id") and region and loki_url and loki_user):
         raise SystemExit("create_access_policy: the stack response has no Loki instance details.")
     print(f"Stack {args.stack}: id {stack['id']}, region {region}, Loki {loki_url} user {loki_user}")
 
-    policy = call(api, f"/v1/accesspolicies?region={region}", token, {
-        "name": args.policy,
-        "displayName": "Alloy Route logs (write)",
-        "scopes": ["logs:write"],
-        "realms": [{"type": "stack", "identifier": str(stack["id"]), "labelPolicies": []}],
-    })
+    realms = [{"type": "stack", "identifier": str(stack["id"]), "labelPolicies": []}]
+    lookup = urlencode({"region": region, "name": args.policy})
+    matches = call(api, f"/v1/accesspolicies?{lookup}", token)["items"]
+    if matches:
+        policy = matches[0]
+        targets = [(item["type"], str(item["identifier"])) for item in policy["realms"]]
+        if targets != [("stack", str(stack["id"]))] or set(policy["scopes"]) != {"logs:write"}:
+            raise SystemExit("Existing policy has a different stack or scope. Choose another --policy name.")
+    else:
+        policy = call(api, f"/v1/accesspolicies?region={region}", token, {
+            "name": args.policy, "displayName": "Alloy Route logs (write)",
+            "scopes": ["logs:write"], "realms": realms,
+        })
     print(f"Access policy {args.policy}: {policy['id']} (logs:write on stack {args.stack})")
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     host = "".join(c for c in socket.gethostname().split(".")[0].lower() if c.isalnum() or c == "-")[:40]
     created = call(api, f"/v1/tokens?region={region}", token, {
         "name": f"alloyroute-{host or 'alloy'}-{stamp}",
@@ -72,8 +83,7 @@ def main():
         "accessPolicyId": policy["id"],
     })
 
-    env = Path(args.env)
-    descriptor = os.open(env, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    descriptor = os.open(env, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w") as handle:
         handle.write(f"GRAFANA_CLOUD_LOKI_URL={loki_url.rstrip('/')}/loki/api/v1/push\n")
         handle.write(f"GRAFANA_CLOUD_LOKI_USER={loki_user}\n")

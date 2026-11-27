@@ -79,12 +79,14 @@ The **Alloy Route** addon records the character you're logged in as, anywhere in
 
    The script looks up the stack's Loki URL and user, creates `alloyroute-logs-write` with the `logs:write` scope on that stack only, creates a token and writes `cloud/.env` with mode 600. To set this up by hand instead, copy `cloud/.env.example` to `cloud/.env`. Then fill it in from the stack's Loki **Details** page and a token created under **Administration > Cloud access policies**.
 
-2. Start Alloy, then export a save into `exports/`. Rereading the same save replaces the same file, and Loki drops lines it already holds:
+2. Start Alloy and run the local reader. The reader checks the T7 every five seconds for character saves. It publishes one complete file per session into `exports/` and skips sessions it already exported.
 
    ```sh
-   docker compose -f cloud/docker-compose.yml up -d
-   python3 companion/read_recording.py "<path to AlloyRoute.lua>" --export-dir exports
+   docker compose --project-name wow-route-cloud --env-file cloud/.env -f cloud/docker-compose.yml up -d
+   python3 companion/watch_recordings.py
    ```
+
+   For another installation, pass `--client "/path/to/_forever_"`. For a single checkpoint, run `python3 companion/read_recording.py "<path to AlloyRoute.lua>" --export-dir exports`. With the reader running, each **Save & Reload** or normal logout sends the newly saved sessions. Use `/alloyroute start` again after reloading to record the next session.
 
 3. In Grafana Explore on the Loki data source, query `{service_name="wow-alloyroute"}`. For a level chart, use:
 
