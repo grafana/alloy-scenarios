@@ -1,0 +1,8 @@
+# Decoded recordings and local captures hold real account, realm and character names.
+exports/
+captures/
+*.jsonl
+!companion/fixtures/*.jsonl
+# Grafana Cloud credentials
+cloud/.env
+.env

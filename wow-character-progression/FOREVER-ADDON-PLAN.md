@@ -1,5 +1,7 @@
 # Capture a WoW Forever session on the T7
 
+> **Status:** The v2 recorder, reader, fixtures and offline checks are implemented. See [README](README.md#record-your-own-character) and [companion/FORMAT.md](companion/FORMAT.md). Real-client capture is pending the first login.
+
 Extend **AlloyRoute** to record the character who is actually logged in, anywhere in WoW Forever. The deliverable for this phase is a game-written SavedVariables file and a local command that decodes it into readable events. Stop once the capture has been verified. Grafana dashboards, telemetry export and an always-running file watcher are later work.
 
 ## 1. Start with the existing recorder

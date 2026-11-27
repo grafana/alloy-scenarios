@@ -39,15 +39,62 @@ To use the Battle.net Profile API, set `BLIZZARD_CLIENT_ID` and `BLIZZARD_CLIENT
 
 The tracker sends metrics, logs, and traces to Alloy over OTLP/gRPC. Its Python profiling SDK sends profiles to Alloy’s Pyroscope receiver. Alloy forwards the four signals to their respective backends.
 
-## Import a personal map route
+## Record your own character
 
-1. Download **Alloy Route** from the roster and extract its folder into the Forever client’s `Interface/AddOns/` directory. Enable the addon on the character selection screen.
-2. In game, enter `/alloyroute start`. The addon samples your character every ten seconds and on zone transitions. It records changed positions as percentages of the current map. A zone can have observations without coordinates, for example inside an instance.
-3. Watch the in-game panel for the waypoint count, size, and capacity. It reminds you once at 500 waypoints or 100 kB, warns again at 80% of either limit, and stops recording when full. Click **Save & Reload** to finish and write the route to disk. If the panel stays open, type `/reload`. In **My map routes**, choose the character’s `WTF/Account/<account>/<realm>/<character>/SavedVariables/AlloyRoute.lua` and select **Import to Tempo**.
-4. Open a zone visit from the result list. Each trace has the original visit times and its timestamped waypoint events. Reimporting the same file returns the existing trace links.
-5. After importing, use `/alloyroute clear` to make space for the next recording. The addon keeps one bounded recording per character. Each reload or logout ends the active recording.
+The **Alloy Route** addon records the character you're logged in as, anywhere in WoW Forever, at any level. It records level, XP, health, the active power type and amount, copper, and map position. It also records zone and level changes, NPC windows, and quest accepts and turn-ins. The game writes the recording to the character's SavedVariables file. A local reader turns that file into JSON Lines. Alloy can then ship them to Grafana Cloud. [`companion/FORMAT.md`](companion/FORMAT.md) documents every field.
 
-Route import works independently of the Armory roster and needs no Battle.net credentials.
+1. Install the addon into the client and confirm the drive path:
+
+   ```sh
+   companion/install_addon.sh "/Volumes/T7/Blizzard/World of Warcraft/_forever_"
+   ```
+
+   On the character selection screen, open **AddOns** and enable **Alloy Route**. If it is listed as out of date, run `/dump select(4, GetBuildInfo())` in game and set `## Interface:` in `AlloyRoute.toc` to the printed number.
+
+2. In game, enter `/alloyroute start`. The panel shows the row count, size and capacity. A snapshot is taken at the start and then every ten seconds whenever something changed, even while standing still. Speak to an NPC or hand in a quest to record an interaction. `/alloyroute status` prints usage; `/alloyroute stop` ends the session without reloading.
+3. Click **Save & Reload**, type `/reload`, or log out normally. The game writes SavedVariables only at that point, so a crash loses the unsaved session. After a reload, `/alloyroute start` adds a new session to the same save.
+4. Find the character's save and decode it on the Mac. This needs only Python 3.9 or later, with no Docker, network or credentials:
+
+   ```sh
+   companion/find_saves.sh
+   mkdir -p captures
+   python3 companion/read_recording.py "/Volumes/T7/Blizzard/World of Warcraft/_forever_/WTF/Account/<account>/<realm>/<character>/SavedVariables/AlloyRoute.lua" > captures/first-login.jsonl
+   ```
+
+   The reader prints one session object and then one event per line. It writes diagnostics and per-type counts to stderr. A truncated or unfinished file exits with status 2 and writes nothing.
+
+5. After exporting, run `/alloyroute clear` and then `/alloyroute clear confirm` to free space. A character holds up to 4,096 rows or 1,000,000 bytes, about 11 hours of constant movement. The panel warns at 80% and stops recording when full.
+
+`captures/` and `exports/` are git-ignored because decoded files contain real account, realm and character names.
+
+### Send recordings to Grafana Cloud
+
+[`cloud/config.alloy`](cloud/config.alloy) tails decoded files in `exports/` and pushes them to the stack's Loki endpoint. It keeps the in-game timestamp and uses `seq` to order rows within a second. `region`, `realm` and `character` become stream labels, and `type` and `session_id` become structured metadata.
+
+1. Create a write-only access policy and token. Use a Grafana Cloud token (`GCOM_TOKEN`) that can read stacks and manage access policies:
+
+   ```sh
+   GCOM_TOKEN=... python3 cloud/create_access_policy.py --stack wow
+   ```
+
+   The script looks up the stack's Loki URL and user, creates `alloyroute-logs-write` with the `logs:write` scope on that stack only, creates a token and writes `cloud/.env` with mode 600. To set this up by hand instead, copy `cloud/.env.example` to `cloud/.env`. Then fill it in from the stack's Loki **Details** page and a token created under **Administration > Cloud access policies**.
+
+2. Start Alloy, then export a save into `exports/`. Rereading the same save replaces the same file, and Loki drops lines it already holds:
+
+   ```sh
+   docker compose -f cloud/docker-compose.yml up -d
+   python3 companion/read_recording.py "<path to AlloyRoute.lua>" --export-dir exports
+   ```
+
+3. In Grafana Explore on the Loki data source, query `{service_name="wow-alloyroute"}`. For a level chart, use:
+
+   ```logql
+   max by (character, realm) (max_over_time({service_name="wow-alloyroute"} | type="snapshot" | json | unwrap level [5m]))
+   ```
+
+   Loki rejects lines older than the stack's maximum sample age, so export soon after playing.
+
+The tracker's **My map routes** importer still reads v1 route files. It points v2 recordings to the reader instead.
 
 ## Simulated Forsaken journey
 

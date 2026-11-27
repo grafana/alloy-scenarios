@@ -1,0 +1,19 @@
+# Alloy only: tails decoded recordings and pushes them to Grafana Cloud.
+#   cp .env.example .env   # then fill it in, or run create_access_policy.py
+#   docker compose up -d
+services:
+  alloy:
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.17.1}
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    env_file:
+      - path: .env
+        required: true
+    ports:
+      - "127.0.0.1:${ALLOY_PORT:-12345}:12345"
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy:ro
+      - ${ALLOYROUTE_EXPORT_DIR:-../exports}:/exports:ro
+      - alloy-data:/var/lib/alloy/data
+
+volumes:
+  alloy-data:
