@@ -18,7 +18,7 @@ services:
   # Generates continuous HTTP traffic against demo-app so beyla.ebpf has
   # requests to turn into traces and RED metrics.
   loadgen:
-    image: curlimages/curl:${CURL_VERSION:-8.21.0}
+    image: curlimages/curl:${CURL_VERSION:-8.23.0}
     entrypoint:
       - sh
       - -c
