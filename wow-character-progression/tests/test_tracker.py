@@ -1,6 +1,5 @@
 """Run with the tracker dependencies and PYTHONPATH=app."""
 
-import json
 import os
 import tempfile
 import unittest
@@ -18,6 +17,9 @@ class ProgressionTests(unittest.TestCase):
         db = patch.object(tracker, "db_file", Path(tmp.name) / "roster.sqlite")
         db.start()
         self.addCleanup(db.stop)
+        enabled = patch.object(tracker.source, "enabled", True)
+        enabled.start()
+        self.addCleanup(enabled.stop)
         tracker.initialize()
         self.client = tracker.app.test_client()
         self.player = {"name": "River Stone", "region": "eu"}
@@ -110,18 +112,13 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(calls[1].kwargs["params"]["namespace"], "profile-forever-eu")
         self.assertEqual(calls[1].kwargs["headers"], {"Authorization": "Bearer example"})
 
-    def test_armory_wrong_character_and_unpublished_profile(self):
+    def test_missing_credentials_make_no_outbound_requests(self):
         with patch.dict(os.environ, BLIZZARD_CLIENT_ID="", BLIZZARD_CLIENT_SECRET=""):
             src = Profiles()
-        state = {"character": {"slug": "river-stone", "region": "us"}}
-        page = "var characterProfileInitialState = " + json.dumps(state)
-        with (
-            patch.object(src.http, "request", return_value=Mock(ok=True, status_code=200, text=page)),
-            self.assertRaisesRegex(ProfileError, "different character"),
-        ):
-            src.fetch("eu", "river-stone")
-        with (
-            patch.object(src.http, "request", return_value=Mock(ok=False, status_code=404)),
-            self.assertRaisesRegex(ProfileError, "level 10"),
-        ):
-            src.fetch("eu", "river-stone")
+        with patch.object(src.http, "request") as http, patch.object(tracker, "source", src):
+            with self.assertRaisesRegex(ProfileError, "credentials"):
+                src.fetch("eu", "river-stone")
+            client = tracker.app.test_client()
+            self.assertEqual(client.post("/api/characters", json={"name": "River Stone", "region": "eu"}).status_code, 503)
+            self.assertIn(b"Set BLIZZARD_CLIENT_ID", client.get("/").data)
+            http.assert_not_called()

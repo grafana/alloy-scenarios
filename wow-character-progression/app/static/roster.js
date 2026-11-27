@@ -25,12 +25,6 @@ function card(row) {
     .split(" ")
     .map((part) => Array.from(part)[0])
     .join("");
-  if (snap?.avatar) {
-    const image = new Image();
-    image.alt = "";
-    image.onload = () => portrait.replaceChildren(image);
-    image.src = snap.avatar;
-  }
   for (const [i, field] of ["level", "item_level", "achievements"].entries()) {
     el.querySelectorAll("dd")[i].textContent = snap?.[field] ?? "—";
   }
@@ -81,7 +75,7 @@ async function refresh() {
       const p = document.createElement("p");
       p.className = "empty";
       p.textContent =
-        "Add your first character to start recording progression.";
+        "No tracked characters.";
       roster.append(p);
     }
   } catch {

@@ -83,11 +83,10 @@
       "options": {
         "basemap": {
           "type": "xyz",
-          "name": "Tirisfal Glades",
+          "name": "Zone coordinates",
           "noRepeat": true,
           "config": {
-            "url": "/api/datasources/proxy/uid/wow-journey/api/journey/tiles/{z}/{x}/{y}",
-            "attribution": "Map © Blizzard Entertainment · WoW Forever DB",
+            "url": "/api/datasources/proxy/uid/wow-journey/api/journey/grid/tiles/{z}/{x}/{y}",
             "maxZoom": 4
           }
         },

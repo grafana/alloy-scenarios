@@ -11,7 +11,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 from flask import Response, Flask, abort, jsonify, redirect, render_template, request
 from opentelemetry import trace
 from opentelemetry.metrics import Observation
-from journey_map import tile
+from journey_map import grid_webp, tile
 from journey import SAMPLES
 from journey_telemetry import current as journey_run, start_replay
 from profiles import REGIONS, ProfileError, Profiles
@@ -57,6 +57,8 @@ def roster():
 
 def observations(field):
     def observe(_options):
+        if not source.enabled:
+            return
         for row in roster():
             if row["snapshot"] and row["snapshot"][field] is not None and not row["error"]:
                 yield Observation(row["snapshot"][field], {"character": row["slug"], "region": row["region"]})
@@ -65,7 +67,7 @@ def observations(field):
 
 
 def poll(row):
-    attrs = {"character": row["slug"], "region": row["region"], "source": source.source}
+    attrs = {"character": row["slug"], "region": row["region"], "source": "Battle.net API"}
     with tracer.start_as_current_span("character.poll", attributes=attrs) as span:
         try:
             snap = source.fetch(row["region"], row["slug"])
@@ -136,7 +138,7 @@ def worker():
 @app.get("/")
 def index():
     return render_template(
-        "index.html", source=source.source, grafana_port=int(os.getenv("GRAFANA_PORT", "3000"))
+        "index.html", profiles_enabled=source.enabled, grafana_port=int(os.getenv("GRAFANA_PORT", "3000"))
     )
 
 
@@ -158,7 +160,13 @@ def journey():
 
 
 
+@app.get("/api/journey/grid.webp")
+def journey_grid():
+    return Response(grid_webp(), mimetype="image/webp")
+
+
 @app.get("/api/journey/tiles/<int:z>/<int:x>/<int:y>")
+@app.get("/api/journey/grid/tiles/<int:z>/<int:x>/<int:y>")
 def journey_tile(z, x, y):
     if z > 4 or max(x, y) >= 2 ** z:
         abort(404)
@@ -174,6 +182,8 @@ def list_characters():
 
 @app.post("/api/characters")
 def add():
+    if not source.enabled:
+        return {"error": "Configure Battle.net API credentials to enable profile tracking."}, 503
     data = request.get_json()
     if not isinstance(data, dict):
         return {"error": "Enter a character name and region."}, 400
@@ -210,5 +220,6 @@ if __name__ == "__main__":
     initialize()
     configure(observations)
     start_replay(db_file)
-    threading.Thread(target=worker, daemon=True, name="profile-poller").start()
+    if source.enabled:
+        threading.Thread(target=worker, daemon=True, name="profile-poller").start()
     app.run(host="0.0.0.0", port=8080, use_reloader=False)

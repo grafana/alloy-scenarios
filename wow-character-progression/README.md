@@ -10,7 +10,7 @@ From this directory, start both the tracker and the observability stack:
 docker compose -f docker-compose.yml -f docker-compose.coda.yml up -d --build
 ```
 
-1. Open the [character roster](http://localhost:8095), enter the character’s first name and surname, choose the region, and select **Start tracking**. Public profiles generally appear after the first logout at level 10 or above.
+1. For live profiles, set `BLIZZARD_CLIENT_ID` and `BLIZZARD_CLIENT_SECRET` in a local `.env` file and rerun the startup command. The simulated journey and addon reader work without these credentials. Open the [character roster](http://localhost:8095), enter the character’s first name and surname, choose the region, and select **Start tracking**. Public profiles generally appear after the first logout at level 10 or above.
 2. Once the first sync completes, select **View history** on the character card. The [Grafana dashboard](http://localhost:3000/d/wow-progression/character-progression) also lets you select the region and character. Allow a minute or two for backend startup and the first telemetry batches.
 3. Add other characters to the same roster. **Stop tracking** removes a character from the roster and ends polling for that character. Previously recorded telemetry remains available for the backends’ retention periods.
 
@@ -26,9 +26,7 @@ The roster, last observed values, and backend data use Docker volumes and surviv
 
 ## Character data
 
-By default the tracker reads the profile data embedded in the character’s achievements page on Blizzard’s public Armory. This mode needs no developer account. Profile changes become visible when Blizzard publishes a new snapshot, usually after logout. A missing average item level appears as a dash. A failed lookup shows the reason, keeps the timestamp of the last successful sync, and retries at the next scheduled poll.
-
-To use the Battle.net Profile API, set `BLIZZARD_CLIENT_ID` and `BLIZZARD_CLIENT_SECRET` in a local `.env` file and rerun the startup command. The tracker obtains an application token, caches it until shortly before expiry, and requests the profile summary and achievements using the `profile-forever-{region}` namespace. Players enter only their character name and region in either mode. `POLL_SECONDS` controls the polling interval (default 900, minimum 60). [Battle.net developer portal](https://develop.battle.net/) · [Forever endpoint examples](https://mhuijskens.com/WoWForever/Api/)
+The tracker uses the Battle.net Profile API for live profile lookups. It caches an application token until shortly before expiry and requests the profile summary and achievements from the regional Forever namespace. A missing item level appears as a dash. A failed lookup preserves the last successful sync time and retries at the next scheduled poll. `POLL_SECONDS` controls the polling interval (default 900, minimum 60). [Battle.net developer portal](https://develop.battle.net/) · [Forever endpoint examples](https://mhuijskens.com/WoWForever/Api/)
 
 ## Follow a poll through Alloy
 
@@ -110,10 +108,8 @@ Open [Forsaken journey](http://localhost:8095/journey/dashboard) to see the late
 | Route, latest position and quest journal | LogQL queries on timestamped JSON records in Loki. Each position has zone coordinates and a trace ID. |
 | Chapter traces | A TraceQL search in Tempo. Open a result to inspect its quest spans and timestamped position events. |
 
-The tracker simulates Vesper Ashvale, an Undead priest, at 30-second intervals. It publishes one run every 24 hours and persists the run ID alongside the roster so routine tracker restarts reuse the same session. Alloy sends historical OpenTelemetry metrics to Prometheus’s OTLP receiver, logs to Loki and traces to Tempo. The **Simulated run** variable comes from Prometheus. The artwork is served as local XYZ tiles. The map’s trail and position are drawn from Loki.
+The tracker simulates Vesper Ashvale, an Undead priest, at 30-second intervals. It publishes one run every 24 hours and persists the run ID alongside the roster so routine tracker restarts reuse the same session. Alloy sends historical OpenTelemetry metrics to Prometheus’s OTLP receiver, logs to Loki and traces to Tempo. The **Simulated run** variable comes from Prometheus. The route and latest position come from Loki. Both map views use a locally generated grid of zone coordinates, labeled in percentages.
 
 **Animated replay** opens the optional custom atlas. Its playback controls use a local JSON timeline through Infinity. The editable dashboard’s gameplay panels query the telemetry backends. Route coordinates, rewards, stats and timestamps are simulated.
 
 The opening follows [Wowhead’s Undead quest sequence](https://www.wowhead.com/classic/guide/quests/horde-reputation-quests-leveling). The journey carries the Scarlet documents to Brill, visits Solliden Farmstead and returns to Coleman Farthing after Agamand Mills. Quest entries link to their Forever database pages. [Vital Intelligence](https://www.wowhead.com/forever/quest=383/vital-intelligence) · [Fields of Grief](https://www.wowhead.com/forever/quest=365/fields-of-grief) · [The Haunted Mills](https://www.wowhead.com/forever/quest=362/the-haunted-mills).
-
-Map artwork © Blizzard Entertainment, sourced from the [WoW Forever DB Tirisfal Glades map](https://wowfdb.com/zones/tirisfal-glades/map/).

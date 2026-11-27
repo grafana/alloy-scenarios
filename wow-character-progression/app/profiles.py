@@ -1,8 +1,6 @@
-"""Read the same character progression measures from either Blizzard source."""
+"""Read the same character progression measures from the Battle.net Profile API."""
 
-import json
 import os
-import re
 import time
 from urllib.parse import quote, urlsplit
 
@@ -15,12 +13,6 @@ REGIONS = {"eu": "en_GB", "us": "en_US", "kr": "ko_KR", "tw": "zh_TW"}
 
 class ProfileError(Exception):
     """An actionable, credential-free message for the roster and telemetry."""
-
-
-def photo_url(profile):
-    url = profile.get("avatar", {}).get("url", "")
-    parts = urlsplit(url)
-    return url if parts.scheme == "https" and parts.hostname == "render.worldofwarcraft.com" else ""
 
 
 def whole(value, field):
@@ -40,7 +32,7 @@ class Profiles:
         self.secret = os.getenv("BLIZZARD_CLIENT_SECRET")
         if bool(self.client_id) != bool(self.secret):
             raise ValueError("Set both Battle.net client credentials or leave both empty.")
-        self.source = "Battle.net API" if self.client_id else "Blizzard Armory"
+        self.enabled = bool(self.client_id)
         self.http = requests.Session()
         self.token = None
         self.expires = 0
@@ -60,17 +52,17 @@ class Profiles:
             if response.status_code in (401, 403):
                 self.expires = 0
                 raise ProfileError(
-                    f"Blizzard denied access ({response.status_code}). Check the selected source."
+                    f"Blizzard denied access ({response.status_code}). Check the Battle.net API credentials."
                 )
             if not response.ok:
                 raise ProfileError(f"Blizzard returned HTTP {response.status_code}. Will retry.")
             return response
 
     def fetch(self, region, slug):
+        if not self.enabled:
+            raise ProfileError("Configure Battle.net API credentials to enable profile tracking.")
         try:
-            if self.client_id:
-                return self.api_profile(region, quote(slug, safe=""))
-            return self.armory_profile(region, quote(slug, safe=""))
+            return self.api_profile(region, quote(slug, safe=""))
         except (KeyError, IndexError, ValueError, TypeError, AttributeError):
             raise ProfileError("Blizzard returned an incomplete profile. Will retry.") from None
 
@@ -97,28 +89,4 @@ class Profiles:
             "item_level": item_level(profile.get("average_item_level")),
             "achievements": whole(achievements["total_quantity"], "achievement count"),
             "class_name": profile["character_class"]["name"],
-            "avatar": "",
-        }
-
-    def armory_profile(self, region, slug):
-        url = f"https://worldofwarcraft.blizzard.com/en-gb/forever/{region}/armory/character/{slug}/achievements"
-        page = self.request("GET", url, "armory.profile").text
-        marker = re.search(r"\bvar\s+characterProfileInitialState\s*=\s*", page)
-        if not marker:
-            raise ProfileError(
-                "Armory profile unavailable. Check the full name and region, then try after logout."
-            )
-        state, _ = json.JSONDecoder().raw_decode(page, marker.end())
-        profile = state["character"]
-        # Some Armory URLs redirect. Never publish another profile under the submitted name.
-        if profile["region"] != region or quote(profile["slug"], safe="") != slug:
-            raise ProfileError("Armory returned a different character. Check the name and region.")
-        return {
-            "level": whole(profile["level"], "level"),
-            "item_level": item_level(profile.get("averageItemLevel")),
-            "achievements": sum(
-                whole(c["count"], "achievement count") for c in state["achievementIndex"]["categories"]
-            ),
-            "class_name": profile["class"]["name"],
-            "avatar": photo_url(profile),
         }

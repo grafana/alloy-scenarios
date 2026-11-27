@@ -43,11 +43,14 @@
               <option value="tw">Taiwan</option>
             </select>
           </label>
-          <button>Start tracking</button>
+          <button{% if not profiles_enabled %} disabled{% endif %}>Start tracking</button>
         </form>
         <p class="hint">
-          Profiles appear after a character reaches level 10 and logs out.
-          Source: {{ source }}.
+          {% if profiles_enabled %}
+          Profiles appear in the Battle.net API after a character reaches level 10 and logs out.
+          {% else %}
+          Set BLIZZARD_CLIENT_ID and BLIZZARD_CLIENT_SECRET and restart the tracker to enable profile tracking.
+          {% endif %}
         </p>
         <p id="notice" role="status"></p>
       </section>

@@ -17,8 +17,8 @@ define(["exports", "react", "@grafana/data"], function (exports, React, grafana)
   <h1>Tirisfal Glades</h1><p>A field journal of Vesper Ashvale’s first ten levels.</p></div></div>
   <div class="edition"><i></i> Simulated journey <small>3 hours &nbsp;·&nbsp; Undead priest</small></div></header>
   <div class="columns"><section class="mapcard"><div class="cardtop"><h2>Route atlas</h2><div class="legend"><i></i> Traveled <b></b> Ahead</div></div>
-  <svg class="map" role="img" aria-label="Travel route over the Tirisfal Glades zone map" viewBox="155 175 606 350">
-    <image href="/api/datasources/proxy/uid/wow-journey/static/tirisfal.webp" width="1002" height="668"/>
+  <svg class="map" role="img" aria-label="Simulated route on a grid of Tirisfal Glades zone coordinates" viewBox="155 175 606 350">
+    <image href="/api/datasources/proxy/uid/wow-journey/api/journey/grid.webp" width="1002" height="668"/>
     <polyline class="future"/><polyline class="shadow"/><polyline class="past"/>
     <g class="pins"></g><g class="maplabels">
       <text x="339" y="459">Deathknell</text><text x="263" y="387" text-anchor="middle">Night Web’s Hollow</text>
@@ -36,8 +36,7 @@ define(["exports", "react", "@grafana/data"], function (exports, React, grafana)
   <svg class="xpchart" aria-label="Cumulative experience over three hours" role="img" viewBox="0 0 1000 62" preserveAspectRatio="none"><path class="xpfill"/><path class="xpline"/><line class="cursor" y1="0" y2="62"/></svg>
   <div class="axis"><span>0h</span><span>1h</span><span>2h</span><span>3h</span></div>
   <div class="jump"><span>Jump to level</span><div class="ticks"></div></div></section>
-  <footer><span>Map © Blizzard Entertainment · <a href="https://wowfdb.com/zones/tirisfal-glades/map/" target="_blank" rel="noopener">WoW Forever DB ↗</a></span>
-  <a href="https://www.wowhead.com/classic/guide/quests/horde-reputation-quests-leveling" target="_blank" rel="noopener">Quest route research · Wowhead ↗</a></footer>
+  <footer><a href="https://www.wowhead.com/classic/guide/quests/horde-reputation-quests-leveling" target="_blank" rel="noopener">Quest route research · Wowhead ↗</a></footer>
 </main>`;
     const el = selector => root.querySelector(selector);
     const value = (key, text) => { el('[data-v="' + key + '"]').textContent = text; };
