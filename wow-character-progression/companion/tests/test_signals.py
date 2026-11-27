@@ -45,13 +45,46 @@ class GameplaySignals(Workspace):
             point = points["wow_addon_session_" + name]
             self.assertEqual((point["asInt"], point["timeUnixNano"]), (str(expected), "123456789"))
         batch, = export_signals.traces(hdr, events)
-        root, child = batch["resourceSpans"][0]["scopeSpans"][0]["spans"]
-        self.assertEqual(root["spanId"], child["parentSpanId"])
-        self.assertEqual(child["traceId"], read_recording.session_key(hdr)[:32])
-        self.assertEqual([e["timeUnixNano"] for e in child["events"]], [r["ts_ns"] for r in events])
-        names = [e["name"] for e in child["events"]]
-        self.assertIn("combat.already_active", names)
-        self.assertLess(names.index("quest.accepted"), names.index("quest.turned_in"))
+        spans = batch["resourceSpans"][0]["scopeSpans"][0]["spans"]
+        root, = [s for s in spans if s["name"] == "wow.session"]
+        visit, = [s for s in spans if s["name"] == "Visit · Tirisfal Glades"]
+        fights = [s for s in spans if s["name"] == "Combat"]
+        quest, = [s for s in spans if s["name"] == "Quest · Training"]
+        self.assertEqual(quest["parentSpanId"], root["spanId"])
+        self.assertEqual([s["parentSpanId"] for s in fights], [visit["spanId"]] * 2)
+        self.assertEqual(fights[0]["startTimeUnixNano"], root["startTimeUnixNano"])
+        self.assertEqual(fights[1]["endTimeUnixNano"], root["endTimeUnixNano"])
+        self.assertEqual([e["name"] for e in quest["events"]], ["quest.accepted", "quest.turned_in"])
+        self.assertEqual(sorted(int(e["timeUnixNano"]) for s in spans for e in s.get("events", [])),
+                         [int(r["ts_ns"]) for r in events])
+        self.assertEqual(root["traceId"], export_signals.activity_trace_id(read_recording.session_key(hdr)))
+
+    def test_zone_revisit_and_cross_zone_fight(self):
+        hdr, events = self.capture("""
+            H.slash("start")
+            H.advance(5)
+            H.fire("PLAYER_REGEN_DISABLED")
+            H.advance(5)
+            S.zone, S.map = "Brill", 999
+            H.fire("ZONE_CHANGED_NEW_AREA")
+            H.advance(5)
+            H.fire("PLAYER_REGEN_ENABLED")
+            S.zone, S.map = "Tirisfal Glades", 1420
+            H.fire("ZONE_CHANGED_NEW_AREA")
+            H.fire("QUEST_ACCEPTED", 99)
+            H.advance(10)
+            H.logout()
+        """)
+        batch, = export_signals.traces(hdr, events)
+        spans = batch["resourceSpans"][0]["scopeSpans"][0]["spans"]
+        root = spans[0]
+        visits = [s for s in spans if s["name"].startswith("Visit · ")]
+        self.assertEqual([s["name"] for s in visits], ["Visit · Tirisfal Glades", "Visit · Brill", "Visit · Tirisfal Glades"])
+        self.assertEqual([s["endTimeUnixNano"] for s in visits[:-1]], [s["startTimeUnixNano"] for s in visits[1:]])
+        self.assertEqual(next(s for s in spans if s["name"] == "Combat")["parentSpanId"], root["spanId"])
+        quest = next(s for s in spans if s["name"].startswith("Quest · "))
+        self.assertEqual(quest["endTimeUnixNano"], root["endTimeUnixNano"])
+        self.assertIn({"key":"wow.quest_end","value":{"stringValue":"session_end"}}, quest["attributes"])
 
     def test_distinguish_unobserved_combat_from_idle(self):
         hdr, events = self.capture('H.slash("start"); H.logout()')
@@ -73,7 +106,7 @@ class GameplaySignals(Workspace):
         db.execute("CREATE TABLE checkpoint(session PRIMARY KEY,stamp)")
         with patch.object(export_signals, "post", side_effect=[None, OSError("offline")]) as post:
             with self.assertRaises(OSError):
-                export_signals.deliver(db, path, "traces", "http://collector")
+                export_signals.deliver(db, path, export_signals.TRACE_SIGNAL, "http://collector")
             failed_payload = post.call_args.args[-1]
         with patch.object(export_signals, "post") as post:
             export_signals.scan(db, self.tmp, "http://collector")

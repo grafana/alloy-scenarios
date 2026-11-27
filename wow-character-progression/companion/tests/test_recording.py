@@ -335,10 +335,71 @@ H.logout()
         self.assertEqual(len(sessions), 2, "the earlier session survives a new start")
         self.assertIn("type /alloyroute clear confirm", messages)
 
+    def test_panel_position_survives_reload(self):
+        self.run_scenario("""
+            local function panel()
+                for _, frame in ipairs(H.frames) do
+                    if frame.scripts.OnDragStop then return frame end
+                end
+            end
+            function UIParent:GetWidth() return 1200 end
+            function UIParent:GetHeight() return 800 end
+            local frame = panel()
+            assert(frame.point[1] == "LEFT" and frame.point[4] == 12)
+            function frame:GetLeft() return 300 end
+            function frame:GetBottom() return 400 end
+            frame.scripts.OnDragStop(frame)
+            H.load()
+            local point = panel().point
+            assert(point[1] == "BOTTOMLEFT" and point[4] == 300 and point[5] == 400)
+            H.logout()
+        """)
+
+    def test_clear_button_preserves_active_session_and_recording_resumes(self):
+        self.run_scenario("""
+            H.slash("start")
+            H.advance(5)
+            assert(not H.click("Clear…"))
+            H.reload()
+            local prior = AlloyRouteRecording
+            assert(H.click("Clear…") and H.popup and AlloyRouteRecording == prior)
+            H.popup = nil -- dismiss as Cancel or Escape
+            assert(AlloyRouteRecording == prior)
+            H.advance(5)
+            assert(H.click("Clear…"))
+            H.popup.OnAccept()
+            assert(AlloyRouteRecording == nil)
+            H.advance(15)
+            H.logout()
+        """)
+        sessions, rows = read_recording.read_file(self.tmp / "AlloyRoute.lua")
+        self.assertEqual([s["duration_seconds"] for s in sessions], [20])
+        self.assertGreater(len(rows), 0)
+
+    def test_explicit_pause_and_login_resume_after_upgrade(self):
+        self.run_scenario("""
+            H.slash("start")
+            H.advance(6)
+            H.logout()
+            AlloyRouteAutoRecord = nil -- upgrade from v2.2
+            H.load()
+            H.fire("PLAYER_ENTERING_WORLD", true, false)
+            H.advance(11)
+            H.slash("stop")
+            H.reload()
+            H.advance(12)
+            assert(H.click("Start recording"))
+            H.advance(7)
+            H.logout()
+        """)
+        sessions, _ = read_recording.read_file(self.tmp / "AlloyRoute.lua")
+        self.assertEqual([s["duration_seconds"] for s in sessions], [6, 11, 7])
+
     def test_clear_confirm_removes_recording(self):
         saved, messages = self.run_scenario("""
 H.slash("start")
 H.advance(20)
+H.slash("stop")
 H.reload()
 H.slash("clear confirm")
 H.logout()

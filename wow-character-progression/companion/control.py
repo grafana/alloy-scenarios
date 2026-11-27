@@ -8,6 +8,7 @@ import subprocess
 import threading
 from urllib.parse import urlsplit
 
+from export_signals import TRACE_SIGNAL, activity_trace_id
 from settings import configure_cloud, load_settings, public_cloud, save_private, start_collector
 from simulate import simulate
 
@@ -73,8 +74,8 @@ class Companion:
                     header = json.loads(next(stream))
                 sessions.append({"key": path.stem, **{k: header[k] for k in
                     ("ts", "ended", "duration_seconds", "character", "realm", "region", "rows", "session_id")},
-                    "checkpoint_ms": checkpoints.get(path.stem),
-                    "metrics": (path.stem, "checkpoint_metrics") in sent, "traces": (path.stem, "traces") in sent})
+                    "checkpoint_ms": checkpoints.get(path.stem), "trace_id": activity_trace_id(path.stem),
+                    "metrics": (path.stem, "checkpoint_metrics") in sent, "traces": (path.stem, TRACE_SIGNAL) in sent})
             except (OSError, KeyError, ValueError, StopIteration):
                 continue
         return sorted(sessions, key=lambda s: s["ts"], reverse=True)[:40]

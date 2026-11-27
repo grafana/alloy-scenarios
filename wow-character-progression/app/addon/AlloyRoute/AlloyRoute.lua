@@ -9,6 +9,7 @@ local regions = { [1] = "us", [2] = "kr", [3] = "eu", [4] = "tw", [5] = "cn" }
 local pending = {}     -- rows written this UI session, joined into the save at logout
 local pendingBytes = 0 -- bytes those rows add to the saved string, separators included
 local savedBytes, savedRows = 0, 0
+local loadedRows = 0 -- rows already written to disk before this UI session
 local segment          -- the active recording segment, or nil
 local timer, lastZone, lastBody, reminder, reloadHint = nil, nil, nil, 0, false
 local full = false -- the last segment stopped because the next row did not fit
@@ -37,10 +38,6 @@ local function int(value)
     return string.format("%.0f", value)
 end
 
-local function hasRecording()
-    return savedRows > 0 or #pending > 0 or (AlloyRouteRecording ~= nil and AlloyRouteRecording ~= "")
-end
-
 local function usedBytes()
     return savedBytes + pendingBytes
 end
@@ -51,19 +48,31 @@ end
 
 -- Visible while this character has a recording to save or export.
 local panel = CreateFrame("Frame", nil, UIParent)
-panel:SetSize(292, 76)
-panel:SetPoint("TOP", UIParent, "TOP", 0, -80)
+panel:SetSize(218, 66)
+panel:SetPoint("LEFT", UIParent, "LEFT", 12, 0)
+panel:SetClampedToScreen(true)
+panel:SetMovable(true)
+panel:EnableMouse(true)
+panel:RegisterForDrag("LeftButton")
+panel:SetScript("OnDragStart", function(self) self:StartMoving() end)
+panel:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    AlloyRoutePanelPosition = { self:GetLeft() / UIParent:GetWidth(), self:GetBottom() / UIParent:GetHeight() }
+end)
 local background = panel:CreateTexture(nil, "BACKGROUND")
 background:SetAllPoints()
-background:SetColorTexture(0.07, 0.09, 0.08, 0.91)
-local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-title:SetPoint("TOPLEFT", 10, -9)
+background:SetColorTexture(0.07, 0.09, 0.08, 0.80)
+local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+title:SetPoint("TOPLEFT", 8, -5)
 local details = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-details:SetPoint("BOTTOMLEFT", 10, 10)
+details:SetPoint("TOPLEFT", 8, -22)
 local save = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-save:SetSize(118, 24)
-save:SetPoint("TOPRIGHT", -7, -5)
-save:SetText("Save & Reload")
+save:SetSize(113, 22)
+save:SetPoint("BOTTOMLEFT", 5, 3)
+local clear = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+clear:SetSize(88, 22)
+clear:SetPoint("BOTTOMRIGHT", -5, 3)
+clear:SetText("Clear…")
 panel:Hide()
 
 local function refreshPanel()
@@ -87,16 +96,17 @@ local function refreshPanel()
             say("You have a sizeable recording. Click Save & Reload when convenient.")
         end
     end
-    local state = timer and "Recording" or "Stopped"
+    local state = segment and "Recording" or (#pending > 0 and "Ready to save" or "Paused")
     if stage == 3 then state = "Full" end
     title:SetText("Alloy Route - " .. state)
     local percent = math.min(100, math.floor(fraction * 100))
     local unit = rows == 1 and "row" or "rows"
     local usage = string.format("%d %s  ·  %.1f KiB  ·  %d%% full", rows, unit, bytes / 1024, percent)
-    if reloadHint then usage = usage .. "\nType /reload to save if this panel stays open." end
+    if reloadHint then usage = "If still here, type /reload to save." end
     details:SetText(usage)
     if stage >= 2 then details:SetTextColor(1, 0.72, 0.25) else details:SetTextColor(1, 1, 1) end
-    save:SetEnabled(#pending > 0)
+    save:SetText((segment or #pending > 0) and "Save & Reload" or "Start recording")
+    clear:SetEnabled(savedBytes > 0)
     panel:Show()
 end
 
@@ -300,8 +310,11 @@ local function start()
         end
     end
     if usedRows() + #baseline + 3 > MAX_ROWS or usedBytes() + requiredBytes > MAX_BYTES then
+        full = true
+        refreshPanel()
         return say("This character's recording is full. Export it, then use /alloyroute clear.")
     end
+    AlloyRouteAutoRecord = true
     append(header, false)
     segment = { id = id, seq = 0, count = 0, gear = GetInventoryItemID and gear, retryGear = {} }
     lastZone, lastBody, reminder, reloadHint, full = nil, nil, 0, false, false
@@ -332,6 +345,7 @@ local function start()
 end
 
 save:SetScript("OnClick", function()
+    if not segment and #pending == 0 then start(); return end
     snapshot(true)
     reloadHint = true
     refreshPanel()
@@ -389,25 +403,43 @@ local function quest(kind, id, xpReward, moneyReward)
         cached.unitType or "", cached.npcId or "", cached.name or "")
 end
 
+local function clearRecording()
+    if savedBytes == 0 then return end
+    AlloyRouteRecording, savedBytes = nil, 0
+    savedRows = savedRows - loadedRows
+    loadedRows, reminder, reloadHint, full = 0, 0, false, false
+    say("Cleared the previously saved sessions for this character.")
+    if AlloyRouteAutoRecord and not segment and #pending == 0 then start() end
+    refreshPanel()
+end
+
+StaticPopupDialogs.ALLOYROUTE_CLEAR = {
+    text = "Clear the sessions saved before this login or reload? Check Grafana first. Your current recording will continue.",
+    button1 = "Clear recordings", button2 = CANCEL,
+    OnAccept = clearRecording, timeout = 0, whileDead = true, hideOnEscape = true,
+}
+clear:SetScript("OnClick", function()
+    if savedBytes > 0 then StaticPopup_Show("ALLOYROUTE_CLEAR") end
+end)
+
 SLASH_ALLOYROUTE1 = "/alloyroute"
 SlashCmdList.ALLOYROUTE = function(input)
     local cmd = strtrim(input):lower()
     if cmd == "start" then
         start()
-    elseif cmd == "stop" and segment then
-        snapshot(true)
-        finish()
+    elseif cmd == "stop" then
+        AlloyRouteAutoRecord = false
+        if segment then snapshot(true); finish() end
+        refreshPanel()
         say("Stopped. Click Save & Reload or log out to write your recording to disk.")
-    elseif cmd == "clear" and not segment then
-        if hasRecording() then
+    elseif cmd == "clear" then
+        if savedBytes > 0 then
             say("This deletes the saved recording. Export it first, then type /alloyroute clear confirm.")
         else
             say("Nothing to clear.")
         end
-    elseif cmd == "clear confirm" and not segment then
-        AlloyRouteRecording, pending, pendingBytes, savedBytes, savedRows = nil, {}, 0, 0, 0
-        panel:Hide()
-        say("Cleared this character's saved recording.")
+    elseif cmd == "clear confirm" then
+        clearRecording()
     elseif cmd == "status" then
         say(string.format("%s. %d rows, %.1f KiB of %d KiB.", segment and "Recording" or "Stopped",
             usedRows(), usedBytes() / 1024, MAX_BYTES / 1024))
@@ -430,6 +462,11 @@ end
 events:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" then
         if ... ~= "AlloyRoute" then return end
+        local pos = AlloyRoutePanelPosition
+        if type(pos) == "table" and type(pos[1]) == "number" and type(pos[2]) == "number" then
+            panel:ClearAllPoints()
+            panel:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", pos[1] * UIParent:GetWidth(), pos[2] * UIParent:GetHeight())
+        end
         local saved = AlloyRouteRecording
         if type(saved) ~= "string" then AlloyRouteRecording, saved = nil, "" end
         savedBytes = #saved
@@ -439,15 +476,20 @@ events:SetScript("OnEvent", function(_, event, ...)
                 savedRows = savedRows + 1
             end
         end
+        loadedRows = savedRows
+        if AlloyRouteAutoRecord == nil and saved:sub(1, 3) == "v2|" then AlloyRouteAutoRecord = true end
         if Enum and Enum.PlayerInteractionType then
             for key, value in pairs(Enum.PlayerInteractionType) do interactionNames[value] = key end
         end
         if savedBytes > 0 then
             reminder = 3 -- capacity warnings are for the session being recorded
             refreshPanel()
-            say(string.format("%d saved rows are waiting for export. Read the file, then /alloyroute clear.",
+            say(string.format("%d previously saved rows. Clear them after checking Grafana.",
                 savedRows))
         end
+        return
+    elseif event == "PLAYER_ENTERING_WORLD" and not segment then
+        if AlloyRouteAutoRecord then start() else refreshPanel() end
         return
     elseif event == "PLAYER_LOGOUT" then
         if segment then

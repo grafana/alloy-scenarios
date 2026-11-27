@@ -120,15 +120,21 @@ sequenceDiagram
 }]}}
 ```
 
-**Traces.** The companion derives a stable trace ID from the session identity. A `wow.session` root covers the original gameplay interval. Its child spans group up to 64 events each. Here are selected fields from the child span containing the vest swap.
+**Traces.** The companion turns intervals into spans and attaches point observations as events. The `wow.session` root covers gameplay time. Each contiguous visit to a recorded zone gets a span. Moving within the zone adds coordinate samples. Returning to a zone starts a new visit. The companion nests a combat span inside its visit when both boundaries fit there. A fight that crosses a zone boundary sits under the session.
+
+An accepted quest opens a span. Its turn-in closes it. If the recording ends first, the span carries `wow.quest_end=session_end`, so the displayed duration covers only the observed interval. A turn-in whose acceptance predates the session remains a timestamped event. Long visits group observations into batches of up to 64 events to preserve their detail.
+
+This excerpt shows the zone span containing the vest swap in the gear example.
 
 ```json
-{"name":"wow.recording.segment","traceId":"46d9a2ac97ab73d50b9e84dc332258c1",
- "spanId":"c08801a7bcfec010","parentSpanId":"3255431c2d0b1c98",
+{"name":"Visit · Test zone","traceId":"05df16880983eb29a3157c66d10fbf47",
+ "spanId":"fd01658a3c92effd","parentSpanId":"d03e6e8657117d74",
  "events":[{"name":"equipment.change","timeUnixNano":"1790000060000000022",
  "attributes":[{"key":"wow.slot","value":{"stringValue":"Chest"}},
                {"key":"wow.item_id","value":{"intValue":"1002"}}]}]}
 ```
+
+Upgrading rebuilds the activity traces from local JSONL exports with versioned trace IDs. Previous Tempo links remain valid for the stack’s retention period. The dashboard and companion open the new traces. Logs and metrics keep their existing delivery checkpoints.
 
 **Combat and quests.** Entering or leaving combat creates a `combat` log with the state, game time and available map coordinates. The corresponding trace events are `combat.entered` and `combat.left`. Recording can start during combat or stop before it ends. The exporter counts observed entries and clips observed combat time to the recording. Quest records become `quest.accepted` and `quest.turned_in` trace events, with IDs, titles, NPC details and reported rewards when available. The dashboard’s **Combat and quest journal** puts both activities in gameplay order. Open the session trace to see them alongside `map.position` events. Saved coordinates are in hundredths of a map percent.
 

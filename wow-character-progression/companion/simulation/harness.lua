@@ -34,6 +34,7 @@ function widget:Show() self.shown = true end
 function widget:Hide() self.shown = false end
 function widget:SetText(value) self.text = value end
 function widget:SetEnabled(value) self.enabled = value end
+function widget:SetPoint(...) self.point = {...} end
 local function newWidget()
     return setmetatable({ scripts = {}, events = {} }, widget)
 end
@@ -45,6 +46,9 @@ function CreateFrame()
     return frame
 end
 UIParent = newWidget()
+StaticPopupDialogs = {}
+CANCEL = "Cancel"
+function StaticPopup_Show(id) H.popup = StaticPopupDialogs[id] end
 
 C_Timer = {}
 function C_Timer.NewTicker(seconds, fn)
@@ -128,9 +132,12 @@ function H.load()
     H.fire("ADDON_LOADED", "AlloyRoute")
 end
 
-function H.click()
+function H.click(label)
     for _, frame in ipairs(H.frames) do
-        if frame.scripts.OnClick then frame.scripts.OnClick(frame) end
+        if frame.text == (label or "Save & Reload") and frame.enabled ~= false then
+            frame.scripts.OnClick(frame)
+            return true
+        end
     end
 end
 

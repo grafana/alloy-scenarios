@@ -15,10 +15,11 @@ def scan(root, output, seen):
             signature = (stat.st_ino, stat.st_size, stat.st_mtime_ns)
             if seen.get(path) == signature:
                 continue
-            sessions, events = read_file(path)
+            sessions, events = read_file(path, allow_empty=True)
             write_sessions(output, sessions, events)
             seen[path] = signature
-            print(f"Exported {len(sessions)} saved sessions for {sessions[0]['character']}.", flush=True)
+            if sessions:
+                print(f"Exported {len(sessions)} saved sessions for {sessions[0]['character']}.", flush=True)
         except (ValueError, OSError, OverflowError) as exc:
             print(f"Waiting for a complete checkpoint: {exc}", file=sys.stderr, flush=True)
     for missing in seen.keys() - paths:

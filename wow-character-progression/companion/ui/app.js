@@ -7,7 +7,7 @@ function link(url, text) {
 function traceURL(stack,s) {
   const uid='grafanacloud-traces', url=new URL('/explore',stack);
   const range={from:new Date((s.ts-60)*1000).toISOString(),to:new Date(Date.parse(s.ended)+60000).toISOString()};
-  const pane={datasource:uid,queries:[{refId:'A',queryType:'traceql',query:s.key.slice(0,32),datasource:{type:'tempo',uid}}],range};
+  const pane={datasource:uid,queries:[{refId:'A',queryType:'traceql',query:s.trace_id,datasource:{type:'tempo',uid}}],range};
   url.searchParams.set('schemaVersion','1'); url.searchParams.set('panes',JSON.stringify({trace:pane})); return url;
 }
 function dashboardURL(stack,s) {
@@ -25,7 +25,7 @@ function render(s) {
   el('real').setAttribute('aria-pressed',real);el('simulated').setAttribute('aria-pressed',!real);
   el('source-title').textContent=real?'Character saves':'Session simulator';
   el('source-status').textContent=real?(s.client_present?'Watching for saves':'Waiting for WoW directory'):'Ready to generate';
-  el('source-copy').textContent=real?'Start with /alloyroute start in WoW. Save & Reload or log out to export the session.':'Run the addon with sample equipment or a leveling journey. The recording goes to your configured Grafana stack.';
+  el('source-copy').textContent=real?'Start recording once in WoW. Reloads export your session and resume recording.':'Run the addon with sample equipment or a leveling journey. The recording goes to your configured Grafana stack.';
   el('sim-controls').hidden=real;
   el('dashboard').hidden=!stack;
   if(stack)el('dashboard').href=dashboardURL(stack);

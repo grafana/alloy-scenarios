@@ -278,7 +278,7 @@ def decode(recording):
     return sessions, events
 
 
-def read_file(path):
+def read_file(path, *, allow_empty=False):
     with open(path, "rb") as handle:
         raw = handle.read()
     try:
@@ -288,6 +288,8 @@ def read_file(path):
     values = saved_variables(text)
     recording = values.get(VARIABLE)
     if recording is None:
+        if allow_empty:
+            return [], []
         raise RecordingError(f"No {VARIABLE} in this file. Record a session, then Save & Reload.")
     if not isinstance(recording, str):
         raise RecordingError(f"{VARIABLE} is not a recording string.")

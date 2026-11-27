@@ -31,9 +31,9 @@ Install the addon, substituting the path to your Forever client.
 companion/install_addon.sh "/Volumes/T7/Blizzard/World of Warcraft/_forever_"
 ```
 
-Enable **Alloy Route** on the character selection screen. In game, type `/alloyroute start`. The addon records starting gear, equipment changes, effective armour, map position, level, XP, health, power and copper when available. It also records combat entry and exit, NPC windows, quest accepts and quest turn-ins. The quest record can include its title, ID, NPC and reported rewards. Combat tracking measures time your character was in combat during recording. Damage, healing, individual hits, kills and quest objective counters are outside this recording format.
+Enable **Alloy Route** on the character selection screen. Click **Start recording** or type `/alloyroute start` once per character. Drag the panel by its title to move it from the left edge. The addon records starting gear, equipment changes, effective armour, map position, level, XP, health, power and copper when available. It also records combat entry and exit, NPC windows, quest accepts and quest turn-ins. The quest record can include its title, ID, NPC and reported rewards. Combat tracking measures time your character was in combat during recording. Damage, healing, individual hits, kills and quest objective counters are outside this recording format.
 
-Click **Save & Reload**, type `/reload`, or log out normally to write the save. The companion can then export everything recorded since the last save, with the original event times. After reloading, use `/alloyroute start` for the next session. The addon warns at 80% and stops at 4,096 data rows or 1,000,000 bytes. Once you have verified delivery, `/alloyroute clear` followed by `/alloyroute clear confirm` frees the in-game buffer. [Save format and offline reader](companion/FORMAT.md)
+Click **Save & Reload**, type `/reload`, or log out normally to write the save. The companion can then export everything recorded since the last save, with the original event times. Recording resumes automatically after reload and at your next login. Characters with existing v2 recordings resume on upgrade. Use `/alloyroute stop` to pause across reloads and logins. The addon warns at 80% and stops at 4,096 data rows or 1,000,000 bytes. After checking delivery, choose **Clear…** and confirm to free the space used by previously saved sessions. The current session keeps recording. WoW persists the clear on the next reload or logout. [Save format and offline reader](companion/FORMAT.md)
 
 ### Try a simulated session
 
@@ -44,7 +44,7 @@ Install Lua 5.1 or LuaJIT, choose **Simulated**, select **Equipment changes** or
 | Data source | What it shows |
 | --- | --- |
 | Loki | The original gameplay timeline, including starting gear, every observed swap and armour change, and the combat and quest journal. |
-| Tempo | One trace per recording, with timestamped positions, combat boundaries, quest accepts and turn-ins, NPC interactions and equipment changes. |
+| Tempo | One trace per recording. Each zone visit, observed combat interval and accepted quest has a duration. Coordinates, gear changes and NPC interactions appear as timestamped events. |
 | Cloud Metrics | One summary per export, including final character stats, starting/minimum/maximum armour, quest counts, entries into combat and observed combat seconds. This also works when a save contains hours of gameplay. |
 
 Sessions made before version 2.1 lack gear history. Combat boundaries begin with 2.2. The UI reports local export and collector acknowledgements. Open the dashboard to verify arrival in Cloud. Export soon after playing so game timestamps fall within the destination’s ingestion and retention windows.

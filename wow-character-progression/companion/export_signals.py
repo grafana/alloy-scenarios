@@ -98,33 +98,106 @@ def metrics(header, rows, timestamp):
     yield envelope("Metrics", measures, header)
 
 
-def traces(header, rows):
-    trace_id = session_key(header)[:32]
-    def span_id(key):
-        return hashlib.sha256((trace_id + "/" + key).encode()).hexdigest()[:16]
+TRACE_SIGNAL = "activity_traces_v2"
 
-    root_id = span_id("session")
-    end = max((header["ts"] + header["duration_seconds"]) * 10**9, int(rows[-1]["ts_ns"]) if rows else 0)
-    root = {"name": "wow.session", "kind": 1, "traceId": trace_id, "spanId": root_id,
-            "startTimeUnixNano": header["ts_ns"], "endTimeUnixNano": str(end),
-            "attributes": attributes({"wow.session_id": header["session_id"], "wow.recorded_rows": len(rows)})}
-    spans = [root]
-    # Bounded child spans keep position and equipment events below per-span event limits.
-    for offset in range(0, len(rows), 64):
-        chunk = rows[offset:offset + 64]
-        events = []
-        for row in chunk:
-            fields = {"wow." + k: v for k, v in row.items() if k not in IDENTITY}
-            name = SPAN_EVENTS.get(row["type"], row["type"])
-            if row["type"] == "combat":
-                name = "combat." + row["state"]
-            if row["type"] == "snapshot" and "x" not in row:
-                name = "character.snapshot"
-            events.append({"name": name, "timeUnixNano": row["ts_ns"], "attributes": attributes(fields)})
-        spans.append({"name": "wow.recording.segment", "kind": 1, "traceId": trace_id,
-                      "spanId": span_id(str(offset)), "parentSpanId": root_id,
-                      "startTimeUnixNano": chunk[0]["ts_ns"], "endTimeUnixNano": chunk[-1]["ts_ns"],
-                      "events": events})
+
+def activity_trace_id(key):
+    # A different trace ID keeps old, immutable Tempo traces and links valid.
+    return hashlib.sha256(("activities-v2/" + key).encode()).hexdigest()[:32]
+
+
+def trace_event(row):
+    name = SPAN_EVENTS.get(row["type"], row["type"])
+    if row["type"] == "combat":
+        name = "combat." + row["state"]
+    elif row["type"] == "snapshot" and not {"x", "y"} <= row.keys():
+        name = "character.snapshot"
+    fields = {"wow." + k: v for k, v in row.items() if k not in IDENTITY}
+    return {"name": name, "timeUnixNano": row["ts_ns"], "attributes": attributes(fields)}
+
+
+def traces(header, rows):
+    trace_id = activity_trace_id(session_key(header))
+    start = int(header["ts_ns"])
+    end = max((header["ts"] + header["duration_seconds"]) * 10**9, int(rows[-1]["ts_ns"]) if rows else start)
+    spans = []
+
+    def span(name, key, begin, finish, parent=None, **tags):
+        ident = hashlib.sha256((trace_id + "/" + key).encode()).hexdigest()[:16]
+        item = {"name": name, "kind": 1, "traceId": trace_id, "spanId": ident,
+                "startTimeUnixNano": str(begin), "endTimeUnixNano": str(finish),
+                "attributes": attributes({"wow." + k: v for k, v in tags.items()})}
+        if parent:
+            item["parentSpanId"] = parent["spanId"]
+        spans.append(item)
+        return item
+
+    root = span("wow.session", "session", start, end, session_id=header["session_id"],
+                recorded_rows=len(rows), trace_schema=2)
+    visit = fight = fight_visit = location = None
+    quests = {}
+    for row in rows:
+        stamp, seq, kind = int(row["ts_ns"]), str(row["seq"]), row["type"]
+        if "zone" in row or "map_id" in row:
+            here = (row.get("map_id"), row.get("zone"))
+            if here != location:
+                if visit:
+                    visit["endTimeUnixNano"] = str(stamp)
+                location = here
+                place = row.get("zone") or f'Map {row["map_id"]}'
+                tags = {k: row[k] for k in ("map_id", "zone") if k in row}
+                begin = start if visit is None and row["ts"] == header["ts"] else stamp
+                visit = span("Visit · " + place, "visit/" + seq, begin, end, root, activity="zone_visit", **tags)
+        owner = visit or root
+        if kind == "combat":
+            state = row["state"]
+            if state in ("entered", "already_active") and fight is None:
+                begin = start if state == "already_active" else stamp
+                fight = span("Combat", "combat/" + seq, begin, end, root, activity="combat", entry=state)
+                fight_visit = visit
+            if fight:
+                owner = fight
+                if state == "left":
+                    fight["endTimeUnixNano"] = str(stamp)
+                    if fight_visit is visit and visit and int(fight["startTimeUnixNano"]) >= int(visit["startTimeUnixNano"]):
+                        fight["parentSpanId"] = visit["spanId"]
+                    fight = None
+        elif kind in ("quest_accepted", "quest_turned_in") and "quest_id" in row:
+            qid = row["quest_id"]
+            if kind == "quest_accepted":
+                # A fresh acceptance also bounds an earlier unpaired observation.
+                previous = quests.pop(qid, None)
+                if previous:
+                    previous["endTimeUnixNano"] = str(stamp)
+                    previous["attributes"] += attributes({"wow.quest_end": "accepted_again"})
+                label = row.get("quest_title") or f"#{qid}"
+                quests[qid] = span("Quest · " + label, "quest/" + seq, stamp, end, root, activity="quest", quest_id=qid)
+                owner = quests[qid]
+            elif qid in quests:
+                owner = quests.pop(qid)
+                owner["endTimeUnixNano"] = str(stamp)
+                owner["attributes"] += attributes({"wow.quest_end": "turned_in"})
+        owner.setdefault("events", []).append(trace_event(row))
+
+    for quest in quests.values():
+        quest["attributes"] += attributes({"wow.quest_end": "session_end"})
+    if fight:
+        fight["attributes"] += attributes({"wow.combat_end": "session_end"})
+        if fight_visit is visit and visit and int(fight["startTimeUnixNano"]) >= int(visit["startTimeUnixNano"]):
+            fight["parentSpanId"] = visit["spanId"]
+
+    # Long visits may have hundreds of samples. Keep them under their location
+    # and bound events per span for backends that cap the stored event count.
+    for parent in list(spans):
+        events = parent.get("events", [])
+        if len(events) <= 64:
+            continue
+        del parent["events"]
+        for offset in range(0, len(events), 64):
+            chunk = events[offset:offset + 64]
+            piece = span("Observations", f'{parent["spanId"]}/{offset}', chunk[0]["timeUnixNano"],
+                         chunk[-1]["timeUnixNano"], parent, activity="observations")
+            piece["events"] = chunk
     for offset in range(0, len(spans), 8):
         yield envelope("Spans", spans[offset:offset + 8], header)
 
@@ -166,7 +239,7 @@ def deliver(db, path, signal, endpoint):
     for i, payload in enumerate(batches):
         if i < start:
             continue
-        post(endpoint, "metrics" if signal == "checkpoint_metrics" else signal, payload)
+        post(endpoint, "metrics" if signal == "checkpoint_metrics" else "traces", payload)
         with db:
             db.execute("INSERT OR REPLACE INTO delivery VALUES (?, ?, ?)", (key, signal, i + 1))
     with db:
@@ -177,7 +250,7 @@ def scan(db, folder, endpoint):
     done = set(db.execute("SELECT session, signal FROM delivery WHERE next_batch=-1"))
     pending = []
     for path in folder.glob("*.jsonl"):
-        signals = [s for s in ("checkpoint_metrics", "traces") if (path.stem, s) not in done]
+        signals = [s for s in ("checkpoint_metrics", TRACE_SIGNAL) if (path.stem, s) not in done]
         if not signals:
             continue
         try:

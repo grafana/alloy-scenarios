@@ -421,7 +421,7 @@
             },
             "queryType": "traceql",
             "tableType": "traces",
-            "query": "{ resource.service.name = \"wow-alloyroute\" && resource.wow.region = \"$region\" && resource.wow.realm = \"$realm\" && resource.wow.character = \"$character\" && name = \"wow.session\" && span.wow.session_id =~ \"${session:raw}\" }",
+            "query": "{ resource.service.name = \"wow-alloyroute\" && resource.wow.region = \"$region\" && resource.wow.realm = \"$realm\" && resource.wow.character = \"$character\" && name = \"wow.session\" && span.wow.trace_schema = 2 && span.wow.session_id =~ \"${session:raw}\" }",
             "limit": 50
           }
         ],
