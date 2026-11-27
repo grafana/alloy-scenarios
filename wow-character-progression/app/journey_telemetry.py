@@ -15,7 +15,6 @@ from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import ExportM
 from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2_grpc import MetricsServiceStub
 from opentelemetry.proto.trace.v1.trace_pb2 import Span
 
-from journey import CHAPTERS, SAMPLES
 from journey_map import map_position
 from routes import NANOSECONDS, attr, send_spans
 
@@ -35,7 +34,7 @@ def chapter_id(start, chapter):
     return hashlib.sha256(f"tirisfal:{start}:{chapter}".encode()).digest()
 
 
-def export_run(start):
+def export_run(start, chapters, samples):
     run = str(start)
     metric_request = ExportMetricsServiceRequest()
     log_request = ExportLogsServiceRequest()
@@ -45,8 +44,8 @@ def export_run(start):
     gauges = {field: metrics.metrics.add(name=f"wow_journey_{field}").gauge for field in FIELDS}
     series_labels = [attr("run", run), attr("character", "vesper-ashvale")]
     spans = []
-    for i, (minute, chapter) in enumerate(CHAPTERS):
-        stop = CHAPTERS[i+1][0] if i+1 < len(CHAPTERS) else 180
+    for i, (minute, chapter) in enumerate(chapters):
+        stop = chapters[i+1][0] if i+1 < len(chapters) else 180
         digest = chapter_id(start, chapter)
         root = Span(name=chapter, trace_id=digest[:16], span_id=digest[16:24],
                     kind=Span.SPAN_KIND_INTERNAL, start_time_unix_nano=(start+minute*60)*NANOSECONDS,
@@ -54,7 +53,7 @@ def export_run(start):
                     attributes=[attr("wow.run", run), attr("wow.source", "simulation"),
                                 attr("character", "vesper-ashvale"), attr("wow.zone", "Tirisfal Glades")])
         spans.append(root)
-        for row in SAMPLES:
+        for row in samples:
             if row["chapter"] != chapter:
                 continue
             stamp = int(start+row["minute"]*60)*NANOSECONDS
@@ -93,26 +92,23 @@ def export_run(start):
 
 def start_replay(db_file):
     state = Path(db_file).with_suffix(".journey.json")
+    source = Path(os.getenv("COMPANION_REPLAY", "/companion-replay/replay.json"))
     def worker():
         while True:
             try:
-                prior = json.loads(state.read_text()) if state.exists() else {}
-                now = int(time.time())
-                if now - prior.get("start", 0) >= 27*3600:
-                    prior = {"start": (now // 30)*30 - 3*3600}
-                    tmp = state.with_suffix(".tmp")
-                    tmp.write_text(json.dumps(prior))
-                    tmp.replace(state)
-                start = prior["start"]
-                if not prior.get("sent"):
-                    export_run(start)
-                    prior["sent"] = True
-                    tmp = state.with_suffix(".tmp")
-                    tmp.write_text(json.dumps(prior))
-                    tmp.replace(state)
-                current.update(start=start, trace_ids={name: chapter_id(start,name)[:16].hex() for _,name in CHAPTERS})
-                time.sleep(max(1,start+27*3600-time.time()))
+                if source.exists():
+                    replay = json.loads(source.read_text())
+                    start = replay["start"]
+                    if current.get("start") != start:
+                        prior = json.loads(state.read_text()) if state.exists() else {}
+                        if prior.get("start") != start or not prior.get("sent"):
+                            export_run(start, replay["chapters"], replay["samples"])
+                            tmp = state.with_suffix(".tmp")
+                            tmp.write_text(json.dumps({"start": start, "sent": True}))
+                            tmp.replace(state)
+                        current.update(start=start, samples=replay["samples"], trace_ids={
+                            name: chapter_id(start, name)[:16].hex() for _, name in replay["chapters"]})
             except Exception:
-                logging.exception("Could not publish the simulated journey")
-                time.sleep(30)
-    threading.Thread(target=worker, daemon=True, name="journey-telemetry").start()
+                logging.exception("Could not project the companion replay into the local atlas")
+            time.sleep(10)
+    threading.Thread(target=worker, daemon=True, name="companion-atlas").start()

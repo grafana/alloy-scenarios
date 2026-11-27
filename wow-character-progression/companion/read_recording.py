@@ -147,6 +147,7 @@ ROWS = {
                        "power", "power_max", "money_copper", "map_id", "zone", "x", "y")),
     "b": ("gear_start", ("slot", "item_id", "item_name")),
     "c": ("gear_swap", ("slot", "previous_item_id", "previous_item_name", "item_id", "item_name")),
+    "f": ("combat", ("state", "map_id", "zone", "x", "y")),
     "a": ("armor", ("armor",)),
     "z": ("zone_change", ("map_id", "zone")),
     "l": ("level_up", ("level",)),
@@ -156,7 +157,7 @@ ROWS = {
 }
 TEXT = {"client_build", "realm", "character", "player_guid", "race", "class", "faction", "power_type",
         "zone", "interaction", "npc_unit_type", "npc_name", "quest_title", "action", "session_id", "region",
-        "format", "type", "slot", "item_name", "previous_item_name"}
+        "state", "format", "type", "slot", "item_name", "previous_item_name"}
 QUEST_ACTIONS = {"accepted", "turned_in"}
 
 
@@ -245,6 +246,8 @@ def decode(recording):
         for axis in ("x", "y"):
             if axis in data and not 0 <= data[axis] <= 10000:
                 raise RecordingError(f"{where}: map coordinate out of range.")
+        if kind == "combat" and data.get("state") not in {"idle", "already_active", "entered", "left"}:
+            raise RecordingError(f"{where}: unknown combat state.")
         if kind == "armor" and data.get("armor", -1) < 0:
             raise RecordingError(f"{where}: expected a nonnegative armour reading.")
         if kind in ("gear_start", "gear_swap"):
@@ -291,6 +294,11 @@ def lines(sessions, events):
         yield json.dumps(item, ensure_ascii=False)
 
 
+def session_key(session):
+    identity = [session[k] for k in ("region", "realm", "player_guid", "session_id")]
+    return hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+
+
 def write_sessions(folder, sessions, events):
     """Publish complete, immutable files so Alloy can retain its tail offsets."""
     folder = Path(folder)
@@ -300,8 +308,7 @@ def write_sessions(folder, sessions, events):
         end = offset + session["rows"]
         body = "".join(line + "\n" for line in lines([session], events[offset:end])).encode()
         offset = end
-        identity = [session[k] for k in ("region", "realm", "player_guid", "session_id")]
-        key = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+        key = session_key(session)
         dest = folder / (key + ".jsonl")
         if dest.exists() and dest.read_bytes() == body:
             continue

@@ -8,7 +8,7 @@ WTF/Account/<account>/<realm>/<character>/SavedVariables/AlloyRoute.lua
 
 The string holds one or more **sessions**. Each session is a header row, its data rows and a footer row. Rows are separated by `;` and fields by `|`. Text fields are UTF-8, percent-encoded except for `A-Z a-z 0-9 _ . -`, so the string never contains quotes, backslashes or delimiters. Numbers are base-10 integers. **An empty field means the value was unavailable or restricted in game.** A real zero is written as `0`.
 
-[`fixtures/undead_warrior.lua`](fixtures/undead_warrior.lua) and [`fixtures/night_elf_druid.lua`](fixtures/night_elf_druid.lua) are complete examples. The matching `.jsonl` files show what `read_recording.py` emits for them. Both were written by the real addon running in `tests/harness.lua`. The characters, realms and GUIDs are synthetic.
+[`fixtures/undead_warrior.lua`](fixtures/undead_warrior.lua) and [`fixtures/night_elf_druid.lua`](fixtures/night_elf_druid.lua) are complete examples. The matching `.jsonl` files show what `read_recording.py` emits for them. Both were written by the real addon running in `simulation/harness.lua`. The characters, realms and GUIDs are synthetic.
 
 ## Session header
 
@@ -38,12 +38,13 @@ Every data row starts with `type|time|seq`. `time` is `GetServerTime()` in Unix 
 | `b` starting gear | `slot\|item_id\|item_name` | Once for each of the 19 equipment slots at session start |
 | `c` gear swap | `slot\|previous_item_id\|previous_item_name\|item_id\|item_name` | On a changed equipment slot, including removal |
 | `a` armour | `armor` | Effective character-sheet armour at session boundaries and on observed changes |
+| `f` combat | `state\|map_id\|zone\|x\|y` | Since 2.2. Initial readable state is `idle` or `already_active`. `entered` and `left` mark subsequent combat transitions. Map fields are optional. |
 | `z` zone change | `map_id\|zone` | When the map ID or zone text changes, followed by a snapshot. Kept when coordinates are unavailable, for example in an instance |
 | `l` level up | `level` | On `PLAYER_LEVEL_UP`, followed by a snapshot using the event's level and a second snapshot 2 s later |
 | `n` interaction | `interaction\|npc_unit_type\|npc_id\|npc_name` | Once per NPC window. `interaction` is the `Enum.PlayerInteractionType` name, such as `Gossip`, `QuestGiver`, `Merchant` or `Trainer` |
 | `q` quest | `action\|quest_id\|quest_title\|reward_xp\|reward_copper\|npc_unit_type\|npc_id\|npc_name` | `action` is `accepted` or `turned_in`. Rewards come from `QUEST_TURNED_IN` and stay separate from measured XP and money |
 
-Addon 2.1 adds these three row types to v2. Item ID 0 means Empty. An unreadable slot is marked Unavailable with no ID. A readable ID without a cached name appears as `Item #<id>`. A restricted armour value produces no armour row. A change in buffs can affect armour without a gear swap.
+Addon 2.1 adds the gear and armour row types to v2. Item ID 0 means Empty. An unreadable slot is marked Unavailable with no ID. A readable ID without a cached name appears as `Item #<id>`. A restricted armour value produces no armour row. A change in buffs can affect armour without a gear swap.
 
 Snapshot units:
 
@@ -70,7 +71,7 @@ The whole string holds at most 4,096 data rows and 1,000,000 bytes. Before appen
 
 ## Reader output
 
-`read_recording.py` emits one JSON object per line: a `session` object for each session, then the events in order. Every event repeats `session_id`, `region`, `realm`, `character` and `player_guid`. Each object has `time` (UTC, ISO 8601), `ts` (Unix seconds) and `ts_ns`, a nanosecond timestamp that adds `seq` so Loki keeps rows in recorded order. Event types are `snapshot`, `zone_change`, `level_up`, `interaction`, `quest_accepted`, `quest_turned_in`, `gear_start`, `gear_swap` and `armor`. Empty fields are omitted.
+`read_recording.py` emits one JSON object per line: a `session` object for each session, then the events in order. Every event repeats `session_id`, `region`, `realm`, `character` and `player_guid`. Each object has `time` (UTC, ISO 8601), `ts` (Unix seconds) and `ts_ns`, a nanosecond timestamp that adds `seq` so Loki keeps rows in recorded order. Event types are `snapshot`, `zone_change`, `level_up`, `interaction`, `quest_accepted`, `quest_turned_in`, `gear_start`, `gear_swap` `armor` and `combat`. Empty fields are omitted.
 
 The reader refuses the whole file, writes nothing to stdout or the output path, and exits with status 2 when:
 

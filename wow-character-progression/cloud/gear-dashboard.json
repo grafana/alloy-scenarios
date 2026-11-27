@@ -31,6 +31,30 @@
           "refresh": 1
         },
         {
+          "name": "metrics",
+          "label": "Metrics data source",
+          "type": "datasource",
+          "query": "prometheus",
+          "current": {
+            "text": "grafanacloud-prom",
+            "value": "grafanacloud-prom"
+          },
+          "refresh": 1,
+          "hide": 2
+        },
+        {
+          "name": "traces",
+          "label": "Trace data source",
+          "type": "datasource",
+          "query": "tempo",
+          "current": {
+            "text": "grafanacloud-traces",
+            "value": "grafanacloud-traces"
+          },
+          "refresh": 1,
+          "hide": 2
+        },
+        {
           "type": "query",
           "name": "region",
           "label": "Region",
@@ -353,6 +377,231 @@
                 {
                   "path": "session_id",
                   "alias": "Session"
+                }
+              ]
+            }
+          },
+          {
+            "id": "convertFieldType",
+            "options": {
+              "conversions": [
+                {
+                  "targetField": "Time",
+                  "destinationType": "time"
+                }
+              ]
+            }
+          }
+        ],
+        "options": {
+          "showHeader": true
+        }
+      },
+      {
+        "id": 4,
+        "title": "Session traces",
+        "description": "Open a session trace to inspect timestamped positions, equipment changes, quests and NPC interactions.",
+        "type": "table",
+        "gridPos": {
+          "x": 0,
+          "y": 25,
+          "w": 24,
+          "h": 8
+        },
+        "datasource": {
+          "type": "tempo",
+          "uid": "${traces}"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "tempo",
+              "uid": "${traces}"
+            },
+            "queryType": "traceql",
+            "tableType": "traces",
+            "query": "{ resource.service.name = \"wow-alloyroute\" && resource.wow.region = \"$region\" && resource.wow.realm = \"$realm\" && resource.wow.character = \"$character\" && name = \"wow.session\" && span.wow.session_id =~ \"${session:raw}\" }",
+            "limit": 50
+          }
+        ],
+        "options": {
+          "showHeader": true
+        },
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        }
+      },
+      {
+        "id": 5,
+        "type": "timeseries",
+        "title": "Armour at export • Cloud Metrics",
+        "description": "Native gauges for the complete session, stamped at export time. Use a time range including export to see them. The character filters apply to this panel.",
+        "gridPos": {
+          "x": 0,
+          "y": 33,
+          "w": 24,
+          "h": 8
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${metrics}"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 0,
+            "min": 0,
+            "custom": {
+              "drawStyle": "points",
+              "showPoints": "always",
+              "pointSize": 6
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${metrics}"
+            },
+            "expr": "wow_addon_checkpoint_armor{region=\"$region\", realm=\"$realm\", character=\"$character\"}",
+            "legendFormat": "Final",
+            "range": true,
+            "editorMode": "code"
+          },
+          {
+            "refId": "B",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${metrics}"
+            },
+            "expr": "wow_addon_session_armor_start{region=\"$region\", realm=\"$realm\", character=\"$character\"}",
+            "legendFormat": "Starting",
+            "range": true,
+            "editorMode": "code"
+          },
+          {
+            "refId": "C",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${metrics}"
+            },
+            "expr": "wow_addon_session_armor_min{region=\"$region\", realm=\"$realm\", character=\"$character\"}",
+            "legendFormat": "Minimum",
+            "range": true,
+            "editorMode": "code"
+          },
+          {
+            "refId": "D",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${metrics}"
+            },
+            "expr": "wow_addon_session_armor_max{region=\"$region\", realm=\"$realm\", character=\"$character\"}",
+            "legendFormat": "Maximum",
+            "range": true,
+            "editorMode": "code"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Combat and quest journal",
+        "description": "Combat boundaries, quest acceptances and hand-ins in gameplay order. Reward values are reported by the game on turn-in.",
+        "type": "table",
+        "gridPos": {
+          "x": 0,
+          "y": 41,
+          "w": 24,
+          "h": 8
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${logs}"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "noValue": "—",
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "Not Found": {
+                    "text": "—"
+                  }
+                }
+              }
+            ]
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "loki",
+              "uid": "${logs}"
+            },
+            "expr": "{service_name=\"wow-alloyroute\",region=\"${region}\",realm=\"${realm}\",character=\"${character}\"} | type=~\"combat|quest_accepted|quest_turned_in\" | session_id=~\"${session:raw}\"",
+            "queryType": "range",
+            "direction": "forward",
+            "maxLines": 5000
+          }
+        ],
+        "transformations": [
+          {
+            "id": "extractFields",
+            "options": {
+              "source": "body",
+              "format": "json",
+              "replace": true,
+              "keepTime": false,
+              "jsonPaths": [
+                {
+                  "path": "time",
+                  "alias": "Time"
+                },
+                {
+                  "path": "type",
+                  "alias": "Event"
+                },
+                {
+                  "path": "state",
+                  "alias": "Combat state"
+                },
+                {
+                  "path": "quest_title",
+                  "alias": "Quest"
+                },
+                {
+                  "path": "quest_id",
+                  "alias": "Quest ID"
+                },
+                {
+                  "path": "npc_name",
+                  "alias": "NPC"
+                },
+                {
+                  "path": "reward_xp",
+                  "alias": "Reward XP"
+                },
+                {
+                  "path": "reward_copper",
+                  "alias": "Reward copper"
+                },
+                {
+                  "path": "zone",
+                  "alias": "Zone"
                 }
               ]
             }

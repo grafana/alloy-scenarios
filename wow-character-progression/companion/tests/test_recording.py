@@ -28,7 +28,7 @@ needs_lua = unittest.skipUnless(LUA, "Lua 5.1 is not installed")
 
 
 def harness(scenario_path, output):
-    subprocess.run([LUA, str(HERE / "harness.lua"), str(ADDON), str(scenario_path), str(output)],
+    subprocess.run([LUA, str(COMPANION / "simulation" / "harness.lua"), str(ADDON), str(scenario_path), str(output)],
                    check=True, capture_output=True, text=True)
     return Path(output).read_text(), Path(str(output) + ".messages").read_text()
 
@@ -73,7 +73,7 @@ class Workspace(unittest.TestCase):
 class FixtureTests(Workspace):
     def test_equipped_slots_swaps_and_effective_armor(self):
         path = self.tmp / "gear.lua"
-        harness(HERE / "scenarios" / "gear.lua", path)
+        harness(COMPANION / "simulation" / "gear.lua", path)
         _, rows = read_recording.read_file(path)
         start = [r for r in rows if r["type"] == "gear_start"]
         self.assertEqual(len({r["slot"] for r in start}), 19)

@@ -2,7 +2,6 @@
 """Export completed per-character checkpoints from a WoW Forever installation."""
 import argparse
 import sys
-import time
 from pathlib import Path
 
 from read_recording import read_file, write_sessions
@@ -30,12 +29,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--client", type=Path, default=Path("/Volumes/T7/Blizzard/World of Warcraft/_forever_"))
     parser.add_argument("--export-dir", type=Path, default=Path(__file__).resolve().parents[1] / "exports")
+    parser.add_argument("--port", type=int, default=8096, help="local companion UI port")
     args = parser.parse_args()
-    seen = {}
-    print(f"Watching {args.client} for saved AlloyRoute checkpoints.", flush=True)
-    while True:
-        scan(args.client, args.export_dir, seen)
-        time.sleep(5)
+    from control import Companion, serve
+    serve(Companion(args.export_dir, args.client, scan), args.port)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,55 @@
 # WoW Forever character progression
 
-Track public World of Warcraft: Forever characters by region and full name. The web app records a baseline when you add a character, then polls Blizzard every 15 minutes. Grafana charts level, average item level, and completed achievements from the time tracking starts.
+Record a character’s route, combat, quests, gear and armour as you play. The local **Alloy Route companion** reads the addon’s completed save and sends gameplay logs, session traces and summary metrics to your Grafana Cloud stack. Its simulator runs the same addon with sample game events. [Architecture and example payloads](ARCHITECTURE.md)
 
-## Run locally
+## Personal use and privacy
+
+Alloy Route is an independent community project. Blizzard has not endorsed it or confirmed that using it is exempt from account action. The addon uses the in-game Lua API and WoW writes its per-character SavedVariables on reload or logout. The companion reads its own addon's save and exports character names, realm, character GUID, positions, equipment, combat boundaries and quest interactions to the destination you configure. Use your own recordings and a stack whose access you control. Anyone who can query the relevant data sources may see this history. Simulated mode lets you try the pipeline with a fictional character. [Blizzard’s add-on policy](https://eu.forums.blizzard.com/en/wow/t/wow-user-interface-add-on-development-policy/1642/1) · [Blizzard EULA](https://www.blizzard.com/en-gb/legal/08b946df-660a-40e4-a072-1fbde65173b1/blizzard-end-user-license-agreement)
+
+## Run the companion
+
+From this directory, start the companion with Python 3.9 or later and open the [local companion](http://127.0.0.1:8096).
+
+```sh
+python3 companion/watch_recordings.py
+```
+
+1. In **Settings**, choose your WoW client folder and how often to look for new saves. For Cloud delivery, start Docker and enter your stack URL, Loki push URL and instance ID, OpenTelemetry endpoint and instance ID, and their write tokens. Find the connection details on your stack’s Loki and OpenTelemetry tiles. The Loki token needs `logs:write`. The OpenTelemetry token needs `metrics:write` and `traces:write`. One stack-scoped token can cover all three.
+2. Save the Cloud settings to start the collector. If you already have `cloud/.env`, choose **Start configured collector**. Alternatively, with a Cloud access-policy management token in `GCOM_TOKEN`, run `python3 cloud/create_access_policy.py --stack <stack-slug> --domain <stack-domain>` and then start the collector. Settings are stored locally. The UI keeps saved tokens out of its responses.
+3. Choose **Real character** or **Simulated**. Both publish each completed recording into `exports/` and use the same collector. Files remain available locally when the collector is offline. Queued recordings go to the configured destination.
+4. Install the **WoW character gear** dashboard once on your stack. In the companion, select a character in **Recent sessions** to open its dashboard at the recorded time, or choose **Open trace** for its gameplay timeline.
+
+```sh
+gcx dashboards create --context <your-context> --api-version dashboard.grafana.app/v1beta1 -f cloud/gear-dashboard.json
+```
+
+### Record your character
+
+Install the addon, substituting the path to your Forever client.
+
+```sh
+companion/install_addon.sh "/Volumes/T7/Blizzard/World of Warcraft/_forever_"
+```
+
+Enable **Alloy Route** on the character selection screen. In game, type `/alloyroute start`. The addon records starting gear, equipment changes, effective armour, map position, level, XP, health, power and copper when available. It also records combat entry and exit, NPC windows, quest accepts and quest turn-ins. The quest record can include its title, ID, NPC and reported rewards. Combat tracking measures time your character was in combat during recording. Damage, healing, individual hits, kills and quest objective counters are outside this recording format.
+
+Click **Save & Reload**, type `/reload`, or log out normally to write the save. The companion can then export everything recorded since the last save, with the original event times. After reloading, use `/alloyroute start` for the next session. The addon warns at 80% and stops at 4,096 data rows or 1,000,000 bytes. Once you have verified delivery, `/alloyroute clear` followed by `/alloyroute clear confirm` frees the in-game buffer. [Save format and offline reader](companion/FORMAT.md)
+
+### Try a simulated session
+
+Install Lua 5.1 or LuaJIT, choose **Simulated**, select **Equipment changes** or **Forsaken journey**, and click **Generate recording**. The short example swaps a vest and changes armour. The three-hour example follows a fictional priest through combat, quest hand-ins and equipment changes in Tirisfal Glades. It runs immediately using a simulated game clock. The companion pauses its real-save watcher in this mode. Switching back to **Real character** picks up completed saves from the client folder.
+
+### What you can see in Grafana
+
+| Data source | What it shows |
+| --- | --- |
+| Loki | The original gameplay timeline, including starting gear, every observed swap and armour change, and the combat and quest journal. |
+| Tempo | One trace per recording, with timestamped positions, combat boundaries, quest accepts and turn-ins, NPC interactions and equipment changes. |
+| Cloud Metrics | One summary per export, including final character stats, starting/minimum/maximum armour, quest counts, entries into combat and observed combat seconds. This also works when a save contains hours of gameplay. |
+
+Sessions made before version 2.1 lack gear history. Combat boundaries begin with 2.2. The UI reports local export and collector acknowledgements. Open the dashboard to verify arrival in Cloud. Export soon after playing so game timestamps fall within the destination’s ingestion and retention windows.
+
+## Optional local profile tracker
 
 From this directory, start both the tracker and the observability stack:
 
@@ -20,7 +67,7 @@ The tracker, Grafana, and [Alloy](http://localhost:12345) bind to localhost. Ove
 docker compose -f docker-compose.yml -f docker-compose.coda.yml down
 ```
 
-For a fresh local deployment using Docker Hardened Images for Grafana, Prometheus and Tempo, sign in with `docker login dhi.io`. With Compose 2.24.4 or later, run `docker compose -p wow-hardened -f docker-compose.yml -f docker-compose.coda.yml -f docker-compose.hardened.yml up -d` and use the same project and files when stopping. The separate Cloud collector only needs the public Alloy image.
+For a fresh local deployment using Docker Hardened Images for Grafana, Prometheus and Tempo, sign in with `docker login dhi.io`. With Compose 2.24.4 or later, run `docker compose -p wow-hardened -f docker-compose.yml -f docker-compose.coda.yml -f docker-compose.hardened.yml up -d` and use the same project and files when stopping. The separate Cloud collector uses public Alloy and Python base images.
 
 The roster, last observed values, and backend data use Docker volumes and survive ordinary restarts.
 
@@ -39,83 +86,6 @@ The tracker uses the Battle.net Profile API for live profile lookups. It caches 
 
 The tracker sends metrics, logs, and traces to Alloy over OTLP/gRPC. Its Python profiling SDK sends profiles to Alloy’s Pyroscope receiver. Alloy forwards the four signals to their respective backends.
 
-## Gear and armour in Grafana Cloud
+## Optional local Forsaken atlas
 
-The **WoW character gear** dashboard shows your equipment when recording started, every observed slot change, and your effective armour over time. Select your region, realm and character. Set the time range to include the start of a session to see its opening gear. The [architecture guide](ARCHITECTURE.md) walks through a vest swap with the actual save and Loki payloads.
-
-Follow the recording and shipping steps below. Install the dashboard on your stack with `gcx dashboards create --context <your-context> --api-version dashboard.grafana.app/v1beta1 -f cloud/gear-dashboard.json`. Select your Loki data source in the dashboard. Recordings made before addon 2.1 have no gear history.
-
-## Record your own character
-
-The **Alloy Route** addon records the character you're logged in as, anywhere in WoW Forever, at any level. It records level, XP, health, the active power type and amount, copper, and map position. It also records zone and level changes, NPC windows, and quest accepts and turn-ins. The game writes the recording to the character's SavedVariables file. A local reader turns that file into JSON Lines. Alloy can then ship them to Grafana Cloud. [`companion/FORMAT.md`](companion/FORMAT.md) documents every field.
-
-1. Install the addon into the client and confirm the drive path:
-
-   ```sh
-   companion/install_addon.sh "/Volumes/T7/Blizzard/World of Warcraft/_forever_"
-   ```
-
-   On the character selection screen, open **AddOns** and enable **Alloy Route**. If it is listed as out of date, run `/dump select(4, GetBuildInfo())` in game and set `## Interface:` in `AlloyRoute.toc` to the printed number.
-
-2. In game, enter `/alloyroute start`. The panel shows the row count, size and capacity. A snapshot is taken at the start and then every ten seconds whenever something changed, even while standing still. Speak to an NPC or hand in a quest to record an interaction. `/alloyroute status` prints usage; `/alloyroute stop` ends the session without reloading.
-3. Click **Save & Reload**, type `/reload`, or log out normally. The game writes SavedVariables only at that point, so a crash loses the unsaved session. After a reload, `/alloyroute start` adds a new session to the same save.
-4. Find the character's save and decode it on the Mac. This needs only Python 3.9 or later, with no Docker, network or credentials:
-
-   ```sh
-   companion/find_saves.sh
-   mkdir -p captures
-   python3 companion/read_recording.py "/Volumes/T7/Blizzard/World of Warcraft/_forever_/WTF/Account/<account>/<realm>/<character>/SavedVariables/AlloyRoute.lua" > captures/first-login.jsonl
-   ```
-
-   The reader prints one session object and then one event per line. It writes diagnostics and per-type counts to stderr. A truncated or unfinished file exits with status 2 and writes nothing.
-
-5. After exporting, run `/alloyroute clear` and then `/alloyroute clear confirm` to free space. A character holds up to 4,096 rows or 1,000,000 bytes, about 11 hours of constant movement. The panel warns at 80% and stops recording when full.
-
-`captures/` and `exports/` are git-ignored because decoded files contain real account, realm and character names.
-
-### Send recordings to Grafana Cloud
-
-[`cloud/config.alloy`](cloud/config.alloy) tails decoded files in `exports/` and pushes them to the stack's Loki endpoint. It keeps the in-game timestamp and uses `seq` to order rows within a second. `region`, `realm` and `character` become stream labels, and `type` and `session_id` become structured metadata.
-
-1. Create a write-only access policy and token. Use a Grafana Cloud token that can read stacks and manage access policies, in `GCOM_TOKEN` or in `GRAFANA_CLOUD_TOKEN` as gcx uses:
-
-   ```sh
-   GCOM_TOKEN=... python3 cloud/create_access_policy.py --stack wow
-   ```
-
-   The script looks up the stack's Loki URL and user, creates `alloyroute-logs-write` with the `logs:write` scope on that stack only, creates a token and writes `cloud/.env` with mode 600. To set this up by hand instead, copy `cloud/.env.example` to `cloud/.env`. Then fill it in from the stack's Loki **Details** page and a token created under **Administration > Cloud access policies**.
-
-2. Start Alloy and run the local reader. The reader checks the T7 every five seconds for character saves. It publishes one complete file per session into `exports/` and skips sessions it already exported.
-
-   ```sh
-   docker compose --project-name wow-route-cloud --env-file cloud/.env -f cloud/docker-compose.yml up -d
-   python3 companion/watch_recordings.py
-   ```
-
-   For another installation, pass `--client "/path/to/_forever_"`. For a single checkpoint, run `python3 companion/read_recording.py "<path to AlloyRoute.lua>" --export-dir exports`. With the reader running, each **Save & Reload** or normal logout sends the newly saved sessions. Use `/alloyroute start` again after reloading to record the next session.
-
-3. In Grafana Explore on the Loki data source, query `{service_name="wow-alloyroute"}`. For a level chart, use:
-
-   ```logql
-   max by (character, realm) (max_over_time({service_name="wow-alloyroute"} | type="snapshot" | json | unwrap level [5m]))
-   ```
-
-   Loki rejects lines older than the stack's maximum sample age, so export soon after playing.
-
-The tracker's **My map routes** importer still reads v1 route files. It points v2 recordings to the reader instead.
-
-## Simulated Forsaken journey
-
-Open [Forsaken journey](http://localhost:8095/journey/dashboard) to see the latest run in Grafana, with the time picker set to its three hours of gameplay. The roster links to the same dashboard. Change the time range or drag across a chart to see the character, route and journal for part of a run. Each panel has its own editable data source query.
-
-| Panels | Stored telemetry |
-| --- | --- |
-| Level, equipment, session totals, experience, health and mana | PromQL queries on twelve historical character gauges in Prometheus |
-| Route, latest position and quest journal | LogQL queries on timestamped JSON records in Loki. Each position has zone coordinates and a trace ID. |
-| Chapter traces | A TraceQL search in Tempo. Open a result to inspect its quest spans and timestamped position events. |
-
-The tracker simulates Vesper Ashvale, an Undead priest, at 30-second intervals. It publishes one run every 24 hours and persists the run ID alongside the roster so routine tracker restarts reuse the same session. Alloy sends historical OpenTelemetry metrics to Prometheus’s OTLP receiver, logs to Loki and traces to Tempo. The **Simulated run** variable comes from Prometheus. The route and latest position come from Loki. Both map views use a locally generated grid of zone coordinates, labeled in percentages.
-
-**Animated replay** opens the optional custom atlas. Its playback controls use a local JSON timeline through Infinity. The editable dashboard’s gameplay panels query the telemetry backends. Route coordinates, rewards, stats and timestamps are simulated.
-
-The opening follows [Wowhead’s Undead quest sequence](https://www.wowhead.com/classic/guide/quests/horde-reputation-quests-leveling). The journey carries the Scarlet documents to Brill, visits Solliden Farmstead and returns to Coleman Farthing after Agamand Mills. Quest entries link to their Forever database pages. [Vital Intelligence](https://www.wowhead.com/forever/quest=383/vital-intelligence) · [Fields of Grief](https://www.wowhead.com/forever/quest=365/fields-of-grief) · [The Haunted Mills](https://www.wowhead.com/forever/quest=362/the-haunted-mills).
+Generate the three-hour journey in the companion, then open the [local journey dashboard](http://localhost:8095/journey/dashboard) with the optional stack running. The companion also writes an illustrative replay for this local dashboard. It shows a map, chapter traces and a quest journal. Its synthetic kill counts and rewards belong to the example. The route follows quests in Deathknell, Brill, Solliden Farmstead and Agamand Mills. [Wowhead quest sequence](https://www.wowhead.com/classic/guide/quests/horde-reputation-quests-leveling)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a logs:write access policy and token for Alloy Route, then write cloud/.env.
+"""Create a logs, metrics and traces write policy and token for Alloy Route, then write cloud/.env.
 
     GCOM_TOKEN=... python3 cloud/create_access_policy.py --stack wow
 
@@ -43,7 +43,8 @@ def main():
     parser.add_argument("--api", help="Cloud API base URL. Defaults to grafana-dev.com for grafana-dev.net "
                         "stacks, otherwise grafana.com")
     parser.add_argument("--domain", default="grafana-dev.net", help="stack domain (default grafana-dev.net)")
-    parser.add_argument("--policy", default="alloyroute-logs-write", help="access policy name")
+    parser.add_argument("--policy", default="alloyroute-telemetry-write", help="access policy name")
+    parser.add_argument("--otlp-endpoint", help="OTLP base URL from the stack details, including /otlp")
     parser.add_argument("--env", default=str(Path(__file__).with_name(".env")), help="file to write")
     args = parser.parse_args()
     token = os.environ.get("GCOM_TOKEN") or os.environ.get("GRAFANA_CLOUD_TOKEN")
@@ -61,20 +62,21 @@ def main():
         raise SystemExit("create_access_policy: the stack response has no Loki instance details.")
     print(f"Stack {args.stack}: id {stack['id']}, region {region}, Loki {loki_url} user {loki_user}")
 
+    scopes = ["logs:write", "metrics:write", "traces:write"]
     realms = [{"type": "stack", "identifier": str(stack["id"]), "labelPolicies": []}]
     lookup = urlencode({"region": region, "name": args.policy})
     matches = call(api, f"/v1/accesspolicies?{lookup}", token)["items"]
     if matches:
         policy = matches[0]
         targets = [(item["type"], str(item["identifier"])) for item in policy["realms"]]
-        if targets != [("stack", str(stack["id"]))] or set(policy["scopes"]) != {"logs:write"}:
+        if targets != [("stack", str(stack["id"]))] or set(policy["scopes"]) != set(scopes):
             raise SystemExit("Existing policy has a different stack or scope. Choose another --policy name.")
     else:
         policy = call(api, f"/v1/accesspolicies?region={region}", token, {
-            "name": args.policy, "displayName": "Alloy Route logs (write)",
-            "scopes": ["logs:write"], "realms": realms,
+            "name": args.policy, "displayName": "Alloy Route telemetry (write)",
+            "scopes": scopes, "realms": realms,
         })
-    print(f"Access policy {args.policy}: {policy['id']} (logs:write on stack {args.stack})")
+    print(f"Access policy {args.policy}: {policy['id']} (telemetry write on stack {args.stack})")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     host = "".join(c for c in socket.gethostname().split(".")[0].lower() if c.isalnum() or c == "-")[:40]
     created = call(api, f"/v1/tokens?region={region}", token, {
@@ -87,6 +89,10 @@ def main():
     with os.fdopen(descriptor, "w") as handle:
         handle.write(f"GRAFANA_CLOUD_LOKI_URL={loki_url.rstrip('/')}/loki/api/v1/push\n")
         handle.write(f"GRAFANA_CLOUD_LOKI_USER={loki_user}\n")
+        endpoint = args.otlp_endpoint or f"https://otlp-gateway-{region}.{args.domain}/otlp"
+        handle.write(f"ALLOYROUTE_STACK_URL=https://{args.stack}.{args.domain}\n")
+        handle.write(f"ALLOYROUTE_OTLP_ENDPOINT={endpoint}\nALLOYROUTE_OTLP_USER={stack['id']}\n")
+        handle.write(f"ALLOYROUTE_OTLP_TOKEN={created['token']}\n")
         handle.write(f"ALLOYROUTE_LOKI_TOKEN={created['token']}\n")
     os.chmod(env, 0o600)
     print(f"Wrote {env} (mode 600). The token is stored there only.")

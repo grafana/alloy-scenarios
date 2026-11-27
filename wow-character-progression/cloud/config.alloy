@@ -1,7 +1,5 @@
-// Ship decoded Alloy Route sessions to Grafana Cloud Logs.
-// read_recording.py --export-dir writes one JSON Lines file per save into
-// /exports. Alloy tails each file, keeps the in-game timestamp and pushes to
-// the stack's Loki endpoint. Credentials come from the environment (cloud/.env).
+// Send gameplay logs to Loki and native metrics and traces to the stack OTLP gateway.
+// The companion writes one JSON Lines file per session. Credentials come from cloud/.env.
 
 local.file_match "recordings" {
 	path_targets = [{
@@ -71,5 +69,38 @@ loki.write "grafana_cloud" {
 
 	external_labels = {
 		source = "alloyroute-v2",
+	}
+}
+
+otelcol.auth.basic "native" {
+	username = sys.env("ALLOYROUTE_OTLP_USER")
+	password = sys.env("ALLOYROUTE_OTLP_TOKEN")
+}
+
+otelcol.receiver.otlp "recordings" {
+	http {
+		endpoint = "0.0.0.0:4318"
+	}
+
+	output {
+		metrics = [otelcol.exporter.otlphttp.native.input]
+		traces  = [otelcol.exporter.otlphttp.native.input]
+	}
+}
+
+// A successful receiver response should follow the upstream export.
+// The companion retains unacknowledged batches on disk and retries them.
+otelcol.exporter.otlphttp "native" {
+	client {
+		endpoint = coalesce(sys.env("ALLOYROUTE_OTLP_ENDPOINT"), "http://127.0.0.1:1")
+		auth     = otelcol.auth.basic.native.handler
+	}
+
+	sending_queue {
+		enabled = false
+	}
+
+	retry_on_failure {
+		enabled = false
 	}
 }

@@ -12,7 +12,6 @@ from flask import Response, Flask, abort, jsonify, redirect, render_template, re
 from opentelemetry import trace
 from opentelemetry.metrics import Observation
 from journey_map import grid_webp, tile
-from journey import SAMPLES
 from journey_telemetry import current as journey_run, start_replay
 from profiles import REGIONS, ProfileError, Profiles
 from routes import route_blueprint
@@ -156,7 +155,7 @@ def open_journey():
 @app.get("/api/journey")
 def journey():
     trace_ids = journey_run.get("trace_ids", {})
-    return jsonify([dict(row, trace_id=trace_ids.get(row["chapter"], "")) for row in SAMPLES])
+    return jsonify([dict(row, trace_id=trace_ids.get(row["chapter"], "")) for row in journey_run.get("samples", [])])
 
 
 

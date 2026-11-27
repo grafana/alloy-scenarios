@@ -1,4 +1,4 @@
-# Alloy only: tails decoded recordings and pushes them to Grafana Cloud.
+# Ship session logs, metrics and traces to Grafana Cloud.
 #   cp .env.example .env   # then fill it in, or run create_access_policy.py
 #   docker compose up -d
 services:
@@ -15,6 +15,18 @@ services:
       - ./config.alloy:/etc/alloy/config.alloy:ro
       - ${ALLOYROUTE_EXPORT_DIR:-../exports}:/exports:ro
       - alloy-data:/var/lib/alloy/data
+
+  signals:
+    build:
+      context: ../companion
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.11-slim}
+    restart: unless-stopped
+    volumes:
+      - ${ALLOYROUTE_EXPORT_DIR:-../exports}:/exports:ro
+      - ${ALLOYROUTE_EXPORT_DIR:-../exports}/.delivery:/state
+    depends_on:
+      - alloy
 
 volumes:
   alloy-data:

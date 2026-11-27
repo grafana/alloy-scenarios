@@ -104,7 +104,7 @@ def replay():
                             hp=round(max_hp*(1-.35*cost)), max_hp=max_hp,
                             mana=round(max_mana*(1-.55*cost)), max_mana=max_mana, kills=kills,
                             copper=copper, quests=quests, item_level=1 + bisect_right(GEAR_UPGRADES, minute),
-                            achievements=0, event=event, who=who, quest_id=quest_id))
+                            achievements=0, event=event, who=who, quest_id=quest_id, complete=complete))
     # Distribute each level's XP budget across kills, deliveries and exploration.
     samples[0].update(xp=0, total_xp=0)
     total = 0

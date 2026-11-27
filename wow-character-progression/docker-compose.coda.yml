@@ -16,6 +16,7 @@ services:
       POLL_SECONDS: ${POLL_SECONDS:-900}
     volumes:
       - roster:/data
+      - ./exports/.journey:/companion-replay:ro
 
 volumes:
   roster:

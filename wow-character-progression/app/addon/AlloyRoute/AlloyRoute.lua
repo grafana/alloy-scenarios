@@ -256,6 +256,15 @@ local function commit()
     pending, pendingBytes = {}, 0
 end
 
+-- A boundary records player combat state and the position exposed by the client.
+local function combat(active, initial)
+    if not segment or segment.inCombat == active then return end
+    segment.inCombat = active
+    local map, zone, x, y = place()
+    local state = initial and (active and "already_active" or "idle") or (active and "entered" or "left")
+    record("f", state, int(map), text(zone), int(x), int(y))
+end
+
 local function start()
     if segment then return say("Already recording.") end
     local saved = AlloyRouteRecording
@@ -290,7 +299,7 @@ local function start()
             requiredBytes = requiredBytes + #baseline[slot] + 24
         end
     end
-    if usedRows() + #baseline + 2 > MAX_ROWS or usedBytes() + requiredBytes > MAX_BYTES then
+    if usedRows() + #baseline + 3 > MAX_ROWS or usedBytes() + requiredBytes > MAX_BYTES then
         return say("This character's recording is full. Export it, then use /alloyroute clear.")
     end
     append(header, false)
@@ -301,6 +310,10 @@ local function start()
         record("b", body)
     end
     snapshot(true)
+    if UnitAffectingCombat then
+        local active = UnitAffectingCombat("player")
+        if readable(active) then combat(active, true) end
+    end
     if not segment then return end
     timer = C_Timer.NewTicker(TICK_SECONDS, function()
         if not segment then return end
@@ -405,7 +418,7 @@ end
 
 local events = CreateFrame("Frame")
 for _, name in ipairs({
-    "PLAYER_EQUIPMENT_CHANGED", "UNIT_RESISTANCES", "UNIT_STATS",
+    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_EQUIPMENT_CHANGED", "UNIT_RESISTANCES", "UNIT_STATS",
     "ADDON_LOADED", "PLAYER_LOGOUT", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA",
     "PLAYER_LEVEL_UP", "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", "PLAYER_INTERACTION_MANAGER_FRAME_HIDE",
     "GOSSIP_SHOW", "GOSSIP_CLOSED", "QUEST_GREETING", "QUEST_DETAIL", "QUEST_PROGRESS",
@@ -446,7 +459,9 @@ events:SetScript("OnEvent", function(_, event, ...)
         return
     end
     if not segment then return end
-    if event == "PLAYER_EQUIPMENT_CHANGED" then
+    if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
+        combat(event == "PLAYER_REGEN_DISABLED", false)
+    elseif event == "PLAYER_EQUIPMENT_CHANGED" then
         gearChange(...)
         armor(false)
     elseif event == "UNIT_RESISTANCES" or event == "UNIT_STATS" then
@@ -470,7 +485,9 @@ events:SetScript("OnEvent", function(_, event, ...)
         noteNpc("QuestGiver")
         rememberQuest()
     elseif event == "QUEST_ACCEPTED" then
-        quest("accepted", (...))
+        local first, second = ...
+        -- Some client versions pass the quest-log index before the quest ID.
+        quest("accepted", type(second) == "number" and second or first)
     elseif event == "QUEST_TURNED_IN" then
         quest("turned_in", ...)
     elseif event == "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" or event == "QUEST_FINISHED" then
