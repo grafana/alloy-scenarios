@@ -206,6 +206,12 @@ def decode(recording):
             if session:
                 raise RecordingError(f"{where} starts a session before the previous one ended.")
             header = _fields(HEADER, parts, f"{where} (session header)")
+            # Forever can return an empty realm name even after entering the world.
+            # Player GUIDs still include the numeric realm ID in that case.
+            if "realm" not in header:
+                player = re.fullmatch(r"Player-([0-9]+)-[0-9A-Fa-f]+", header.get("player_guid", ""))
+                if player:
+                    header["realm"] = "Realm-" + player[1]
             for required in ("session_id", "started", "region", "realm", "character", "player_guid"):
                 if required not in header:
                     raise RecordingError(f"{where}: session header has no {required}.")

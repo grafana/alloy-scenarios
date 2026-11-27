@@ -99,6 +99,14 @@ class FixtureContentTests(unittest.TestCase):
         sessions, rows = read_recording.read_file(FIXTURES / f"{name}.lua")
         return sessions, rows
 
+    def test_forever_empty_realm_uses_player_realm_id(self):
+        fixture = read_recording.saved_variables((FIXTURES / "undead_warrior.lua").read_text())
+        recording = fixture["AlloyRouteRecording"].replace("|Stonewake|", "||")
+        sessions, rows = read_recording.decode(recording)
+        self.assertTrue(all(s["realm"] == "Realm-1001" for s in sessions + rows))
+        with self.assertRaisesRegex(read_recording.RecordingError, "no realm"):
+            read_recording.decode(recording.replace("Player-1001-0A1B2C3D", "Unknown"))
+
     def test_identity_is_kept_apart(self):
         a, _ = self.load("undead_warrior")
         b, _ = self.load("night_elf_druid")

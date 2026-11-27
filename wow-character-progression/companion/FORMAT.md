@@ -22,7 +22,7 @@ v2|session_id|started|client_build|region|realm|character|player_guid|race|race_
 | `started` | `1790000000` | `GetServerTime()`, Unix seconds |
 | `client_build` | `1.60.1.71139` | `GetBuildInfo()` version and build |
 | `region` | `eu` | `us`, `eu`, `kr`, `tw` or `cn` |
-| `realm` | `Stonewake` | `GetNormalizedRealmName()` |
+| `realm` | `Stonewake` | `GetNormalizedRealmName()`. If empty, the reader uses `Realm-<numeric ID>` from the player GUID |
 | `character`, `player_guid` | `Morrow`, `Player-1001-0A1B2C3D` | The GUID is unique across realms |
 | `race`, `race_id` | `Scourge`, `5` | Locale-independent file token from `UnitRace` |
 | `class`, `class_id` | `WARRIOR`, `1` | From `UnitClass` |
