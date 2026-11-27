@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Alloy Route
-## Notes: Record your character's level, stats, position, NPC and quest interactions for Grafana.
-## Version: 2.0.0
+## Notes: Record your character's equipment, armor, level, stats, position, NPC and quest interactions for Grafana.
+## Version: 2.1.0
 ## AllowLoadGameType: camelot
 ## SavedVariablesPerCharacter: AlloyRouteRecording
 AlloyRoute.lua

@@ -71,6 +71,19 @@ class Workspace(unittest.TestCase):
 
 @needs_lua
 class FixtureTests(Workspace):
+    def test_equipped_slots_swaps_and_effective_armor(self):
+        path = self.tmp / "gear.lua"
+        harness(HERE / "scenarios" / "gear.lua", path)
+        _, rows = read_recording.read_file(path)
+        start = [r for r in rows if r["type"] == "gear_start"]
+        self.assertEqual(len({r["slot"] for r in start}), 19)
+        self.assertEqual(next(r["item_name"] for r in start if r["slot"] == "Chest"), "Training Vest")
+        self.assertEqual(sum(r["item_id"] == 0 for r in start), 18)
+        swaps = [(r["ts"] - start[0]["ts"], r["previous_item_name"], r["item_name"])
+                 for r in rows if r["type"] == "gear_swap"]
+        self.assertEqual(swaps, [(60, "Training Vest", "Reinforced Vest"), (180, "Reinforced Vest", "Empty")])
+        self.assertEqual([r["armor"] for r in rows if r["type"] == "armor"], [42, 55, 60, 20, 20])
+
     def test_fixtures_match_the_addon(self):
         # The committed fixtures are what the current addon writes for each scenario.
         for name in ("undead_warrior", "night_elf_druid"):

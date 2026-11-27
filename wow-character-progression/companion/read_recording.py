@@ -145,6 +145,9 @@ HEADER = ("format", "session_id", "started", "client_build", "region", "realm", 
 ROWS = {
     "s": ("snapshot", ("level", "xp", "xp_max", "health", "health_max", "power_type_id", "power_type",
                        "power", "power_max", "money_copper", "map_id", "zone", "x", "y")),
+    "b": ("gear_start", ("slot", "item_id", "item_name")),
+    "c": ("gear_swap", ("slot", "previous_item_id", "previous_item_name", "item_id", "item_name")),
+    "a": ("armor", ("armor",)),
     "z": ("zone_change", ("map_id", "zone")),
     "l": ("level_up", ("level",)),
     "n": ("interaction", ("interaction", "npc_unit_type", "npc_id", "npc_name")),
@@ -153,7 +156,7 @@ ROWS = {
 }
 TEXT = {"client_build", "realm", "character", "player_guid", "race", "class", "faction", "power_type",
         "zone", "interaction", "npc_unit_type", "npc_name", "quest_title", "action", "session_id", "region",
-        "format", "type"}
+        "format", "type", "slot", "item_name", "previous_item_name"}
 QUEST_ACTIONS = {"accepted", "turned_in"}
 
 
@@ -242,6 +245,13 @@ def decode(recording):
         for axis in ("x", "y"):
             if axis in data and not 0 <= data[axis] <= 10000:
                 raise RecordingError(f"{where}: map coordinate out of range.")
+        if kind == "armor" and data.get("armor", -1) < 0:
+            raise RecordingError(f"{where}: expected a nonnegative armour reading.")
+        if kind in ("gear_start", "gear_swap"):
+            if not data.get("slot") or not data.get("item_name") or (kind == "gear_swap" and not data.get("previous_item_name")):
+                raise RecordingError(f"{where}: incomplete equipment entry.")
+            if data.get("item_id", 0) < 0 or data.get("previous_item_id", 0) < 0:
+                raise RecordingError(f"{where}: negative item ID.")
         if kind == "quest" and data.get("action") not in QUEST_ACTIONS:
             raise RecordingError(f"{where}: unknown quest action.")
         # Loki orders lines by timestamp; seq keeps rows within one second in order.

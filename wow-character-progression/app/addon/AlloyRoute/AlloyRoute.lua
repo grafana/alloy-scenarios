@@ -128,6 +128,61 @@ local function record(kind, ...)
     return true
 end
 
+-- Slot IDs follow WoW's equipped inventory slots, excluding bags.
+local slots = { "Head", "Neck", "Shoulders", "Shirt", "Chest", "Waist", "Legs", "Feet",
+    "Wrists", "Hands", "Ring 1", "Ring 2", "Trinket 1", "Trinket 2", "Back",
+    "Main hand", "Off hand", "Ranged", "Tabard" }
+
+local function equipped(slot, hasCurrent)
+    local id = GetInventoryItemID("player", slot)
+    if issecretvalue and issecretvalue(id) then return nil end
+    if not id then
+        local texture = GetInventoryItemTexture("player", slot)
+        if (issecretvalue and (issecretvalue(texture) or issecretvalue(hasCurrent))) or hasCurrent or texture then
+            return nil
+        end
+        return { id = 0, name = "Empty" }
+    end
+    local link = GetInventoryItemLink("player", slot)
+    if not readable(link) then link = "" end
+    local name = link:match("%[(.-)%]") or ("Item #" .. id)
+    local guid
+    if C_Item and C_Item.GetItemGUID and ItemLocation then
+        guid = C_Item.GetItemGUID(ItemLocation:CreateFromEquipmentSlot(slot))
+        if not readable(guid) then guid = nil end
+    end
+    return { id = id, name = name, guid = guid }
+end
+
+local function gearFields(item)
+    return int(item and item.id) .. "|" .. text(item and item.name or "Unavailable")
+end
+
+local function gearChange(slot, hasCurrent)
+    if not segment.gear or not readable(slot) or not slots[slot] then return end
+    local item = equipped(slot, hasCurrent)
+    if not item then
+        segment.retryGear[slot] = readable(hasCurrent) and hasCurrent or false
+        return
+    end
+    segment.retryGear[slot] = nil
+    local old = segment.gear[slot]
+    segment.gear[slot] = item
+    if old and item.id == old.id and not (old.guid and item.guid and old.guid ~= item.guid) then return end
+    record("c", text(slots[slot]), gearFields(old), gearFields(item))
+end
+
+local function armor(force)
+    if not segment or not UnitArmor then return end
+    local _, effective = UnitArmor("player")
+    if not readable(effective) then return end
+    local now = GetServerTime()
+    if effective ~= segment.armor or (force and now ~= segment.armorAt) then
+        segment.armor, segment.armorAt = effective, now
+        record("a", int(effective))
+    end
+end
+
 local function place()
     local map = C_Map.GetBestMapForUnit("player")
     if not readable(map) then map = nil end
@@ -149,6 +204,8 @@ end
 
 -- One measured snapshot. Unchanged ticks are skipped; forced snapshots are not.
 local function snapshot(force, levelOverride)
+    if not segment then return end
+    armor(force)
     if not segment then return end
     local map, zone, x, y = place()
     local zoneKey = int(map) .. "|" .. text(zone)
@@ -223,15 +280,36 @@ local function start()
         "v2", id, int(now), text(version .. "." .. build), region, text(realm), text(name),
         text(guid), text(raceFile), int(raceId), text(classFile), int(classId), text(faction),
     }, "|")
-    -- A new segment needs its header, a first snapshot and its footer.
-    if usedRows() + 1 > MAX_ROWS or usedBytes() + #header + 1 + 400 + FOOTER_RESERVE > MAX_BYTES then
+    -- Reserve the entire starting loadout before opening a session near the cap.
+    local gear, baseline = {}, {}
+    local requiredBytes = #header + 1 + 400 + FOOTER_RESERVE
+    if GetInventoryItemID then
+        for slot, label in ipairs(slots) do
+            gear[slot] = equipped(slot)
+            baseline[slot] = text(label) .. "|" .. gearFields(gear[slot])
+            requiredBytes = requiredBytes + #baseline[slot] + 24
+        end
+    end
+    if usedRows() + #baseline + 2 > MAX_ROWS or usedBytes() + requiredBytes > MAX_BYTES then
         return say("This character's recording is full. Export it, then use /alloyroute clear.")
     end
     append(header, false)
-    segment = { id = id, seq = 0, count = 0 }
+    segment = { id = id, seq = 0, count = 0, gear = GetInventoryItemID and gear, retryGear = {} }
     lastZone, lastBody, reminder, reloadHint, full = nil, nil, 0, false, false
+    for slot, body in ipairs(baseline) do
+        if not gear[slot] then segment.retryGear[slot] = false end
+        record("b", body)
+    end
     snapshot(true)
-    timer = C_Timer.NewTicker(TICK_SECONDS, function() snapshot(false) end)
+    if not segment then return end
+    timer = C_Timer.NewTicker(TICK_SECONDS, function()
+        if not segment then return end
+        for slot, hasCurrent in pairs(segment.retryGear) do
+            gearChange(slot, hasCurrent)
+            if not segment then return end
+        end
+        snapshot(false)
+    end)
     refreshPanel()
     if savedRows > 0 then
         say("Recording a new session after the saved ones. Click Save & Reload when finished.")
@@ -327,6 +405,7 @@ end
 
 local events = CreateFrame("Frame")
 for _, name in ipairs({
+    "PLAYER_EQUIPMENT_CHANGED", "UNIT_RESISTANCES", "UNIT_STATS",
     "ADDON_LOADED", "PLAYER_LOGOUT", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA",
     "PLAYER_LEVEL_UP", "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", "PLAYER_INTERACTION_MANAGER_FRAME_HIDE",
     "GOSSIP_SHOW", "GOSSIP_CLOSED", "QUEST_GREETING", "QUEST_DETAIL", "QUEST_PROGRESS",
@@ -359,6 +438,7 @@ events:SetScript("OnEvent", function(_, event, ...)
         return
     elseif event == "PLAYER_LOGOUT" then
         if segment then
+            armor(true)
             snapshot(false)
             finish()
         end
@@ -366,7 +446,12 @@ events:SetScript("OnEvent", function(_, event, ...)
         return
     end
     if not segment then return end
-    if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+    if event == "PLAYER_EQUIPMENT_CHANGED" then
+        gearChange(...)
+        armor(false)
+    elseif event == "UNIT_RESISTANCES" or event == "UNIT_STATS" then
+        if ... == "player" then armor(false) end
+    elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         snapshot(false)
     elseif event == "PLAYER_LEVEL_UP" then
         local level = ...

@@ -39,6 +39,12 @@ The tracker uses the Battle.net Profile API for live profile lookups. It caches 
 
 The tracker sends metrics, logs, and traces to Alloy over OTLP/gRPC. Its Python profiling SDK sends profiles to Alloy’s Pyroscope receiver. Alloy forwards the four signals to their respective backends.
 
+## Gear and armour in Grafana Cloud
+
+The **WoW character gear** dashboard shows your equipment when recording started, every observed slot change, and your effective armour over time. Select your region, realm and character. Set the time range to include the start of a session to see its opening gear. The [architecture guide](ARCHITECTURE.md) walks through a vest swap with the actual save and Loki payloads.
+
+Follow the recording and shipping steps below. Install the dashboard on your stack with `gcx dashboards create --context <your-context> --api-version dashboard.grafana.app/v1beta1 -f cloud/gear-dashboard.json`. Select your Loki data source in the dashboard. Recordings made before addon 2.1 have no gear history.
+
 ## Record your own character
 
 The **Alloy Route** addon records the character you're logged in as, anywhere in WoW Forever, at any level. It records level, XP, health, the active power type and amount, copper, and map position. It also records zone and level changes, NPC windows, and quest accepts and turn-ins. The game writes the recording to the character's SavedVariables file. A local reader turns that file into JSON Lines. Alloy can then ship them to Grafana Cloud. [`companion/FORMAT.md`](companion/FORMAT.md) documents every field.

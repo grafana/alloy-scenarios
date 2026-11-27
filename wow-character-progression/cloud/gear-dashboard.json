@@ -1,0 +1,378 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "wow-character-gear"
+  },
+  "spec": {
+    "title": "WoW character gear",
+    "description": "Equipment and effective armour recorded by Alloy Route from the logged-in character.",
+    "schemaVersion": 41,
+    "timezone": "browser",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "tags": [
+      "wow",
+      "alloy-route"
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "logs",
+          "label": "Logs data source",
+          "type": "datasource",
+          "query": "loki",
+          "current": {
+            "text": "grafanacloud-logs",
+            "value": "grafanacloud-logs"
+          },
+          "refresh": 1
+        },
+        {
+          "type": "query",
+          "name": "region",
+          "label": "Region",
+          "datasource": {
+            "type": "loki",
+            "uid": "${logs}"
+          },
+          "refresh": 1,
+          "sort": 1,
+          "query": {
+            "type": 1,
+            "label": "region",
+            "stream": "{service_name=\"wow-alloyroute\"}"
+          },
+          "definition": "label_values({service_name=\"wow-alloyroute\"}, region)",
+          "current": {}
+        },
+        {
+          "type": "query",
+          "name": "realm",
+          "label": "Realm",
+          "datasource": {
+            "type": "loki",
+            "uid": "${logs}"
+          },
+          "refresh": 1,
+          "sort": 1,
+          "query": {
+            "type": 1,
+            "label": "realm",
+            "stream": "{service_name=\"wow-alloyroute\",region=\"${region}\"}"
+          },
+          "definition": "label_values({service_name=\"wow-alloyroute\",region=\"${region}\"}, realm)",
+          "current": {}
+        },
+        {
+          "type": "query",
+          "name": "character",
+          "label": "Character",
+          "datasource": {
+            "type": "loki",
+            "uid": "${logs}"
+          },
+          "refresh": 1,
+          "sort": 1,
+          "query": {
+            "type": 1,
+            "label": "character",
+            "stream": "{service_name=\"wow-alloyroute\",region=\"${region}\",realm=\"${realm}\"}"
+          },
+          "definition": "label_values({service_name=\"wow-alloyroute\",region=\"${region}\",realm=\"${realm}\"}, character)",
+          "current": {}
+        },
+        {
+          "name": "session",
+          "label": "Session ID (.* for all)",
+          "type": "textbox",
+          "query": ".*",
+          "current": {
+            "text": ".*",
+            "value": ".*"
+          }
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Total armour over time",
+        "description": "Effective armour shown on the character sheet, including bonuses. Points are observations. Each recording is a separate series.",
+        "type": "timeseries",
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 24,
+          "h": 9
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${logs}"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "decimals": 0,
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "stepAfter",
+              "showPoints": "always",
+              "pointSize": 6,
+              "fillOpacity": 6
+            }
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "loki",
+              "uid": "${logs}"
+            },
+            "expr": "{service_name=\"wow-alloyroute\",region=\"${region}\",realm=\"${realm}\",character=\"${character}\"} | type=\"armor\" | session_id=~\"${session:raw}\"",
+            "queryType": "range",
+            "direction": "forward",
+            "maxLines": 5000
+          }
+        ],
+        "transformations": [
+          {
+            "id": "extractFields",
+            "options": {
+              "source": "body",
+              "format": "json",
+              "replace": true,
+              "keepTime": false,
+              "jsonPaths": [
+                {
+                  "path": "time",
+                  "alias": "Time"
+                },
+                {
+                  "path": "armor",
+                  "alias": "Armour"
+                },
+                {
+                  "path": "session_id",
+                  "alias": "Session"
+                }
+              ]
+            }
+          },
+          {
+            "id": "convertFieldType",
+            "options": {
+              "conversions": [
+                {
+                  "targetField": "Time",
+                  "destinationType": "time"
+                },
+                {
+                  "targetField": "Armour",
+                  "destinationType": "number"
+                }
+              ]
+            }
+          },
+          {
+            "id": "partitionByValues",
+            "options": {
+              "fields": [
+                "Session"
+              ],
+              "keepFields": false
+            }
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "single"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Starting equipment",
+        "description": "One row per equipment slot at the start of each recording. Choose a session or a time range that includes its start. Item ID 0 means empty.",
+        "type": "table",
+        "gridPos": {
+          "x": 0,
+          "y": 9,
+          "w": 24,
+          "h": 8
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${logs}"
+        },
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "loki",
+              "uid": "${logs}"
+            },
+            "expr": "{service_name=\"wow-alloyroute\",region=\"${region}\",realm=\"${realm}\",character=\"${character}\"} | type=\"gear_start\" | session_id=~\"${session:raw}\"",
+            "queryType": "range",
+            "direction": "forward",
+            "maxLines": 5000
+          }
+        ],
+        "transformations": [
+          {
+            "id": "extractFields",
+            "options": {
+              "source": "body",
+              "format": "json",
+              "replace": true,
+              "keepTime": false,
+              "jsonPaths": [
+                {
+                  "path": "time",
+                  "alias": "Time"
+                },
+                {
+                  "path": "slot",
+                  "alias": "Slot"
+                },
+                {
+                  "path": "item_name",
+                  "alias": "Equipped"
+                },
+                {
+                  "path": "item_id",
+                  "alias": "Item ID"
+                },
+                {
+                  "path": "session_id",
+                  "alias": "Session"
+                }
+              ]
+            }
+          },
+          {
+            "id": "convertFieldType",
+            "options": {
+              "conversions": [
+                {
+                  "targetField": "Time",
+                  "destinationType": "time"
+                }
+              ]
+            }
+          }
+        ],
+        "options": {
+          "showHeader": true,
+          "sortBy": [
+            {
+              "displayName": "Item ID",
+              "desc": true
+            }
+          ]
+        }
+      },
+      {
+        "id": 3,
+        "title": "Equipment changes",
+        "description": "Each equip, replacement or removal in game order. Empty means the slot was unoccupied.",
+        "type": "table",
+        "gridPos": {
+          "x": 0,
+          "y": 17,
+          "w": 24,
+          "h": 8
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${logs}"
+        },
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "loki",
+              "uid": "${logs}"
+            },
+            "expr": "{service_name=\"wow-alloyroute\",region=\"${region}\",realm=\"${realm}\",character=\"${character}\"} | type=\"gear_swap\" | session_id=~\"${session:raw}\"",
+            "queryType": "range",
+            "direction": "forward",
+            "maxLines": 5000
+          }
+        ],
+        "transformations": [
+          {
+            "id": "extractFields",
+            "options": {
+              "source": "body",
+              "format": "json",
+              "replace": true,
+              "keepTime": false,
+              "jsonPaths": [
+                {
+                  "path": "time",
+                  "alias": "Time"
+                },
+                {
+                  "path": "slot",
+                  "alias": "Slot"
+                },
+                {
+                  "path": "previous_item_name",
+                  "alias": "Previously equipped"
+                },
+                {
+                  "path": "item_name",
+                  "alias": "Now equipped"
+                },
+                {
+                  "path": "previous_item_id",
+                  "alias": "Previous ID"
+                },
+                {
+                  "path": "item_id",
+                  "alias": "New ID"
+                },
+                {
+                  "path": "session_id",
+                  "alias": "Session"
+                }
+              ]
+            }
+          },
+          {
+            "id": "convertFieldType",
+            "options": {
+              "conversions": [
+                {
+                  "targetField": "Time",
+                  "destinationType": "time"
+                }
+              ]
+            }
+          }
+        ],
+        "options": {
+          "showHeader": true
+        }
+      }
+    ]
+  }
+}
