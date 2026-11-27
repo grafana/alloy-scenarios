@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#0a1012" />
+    <link rel="icon" href="data:," />
+    <title>Crawlcast · World Dungeon broadcast</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script defer src="/faro.js"></script>
+    <script type="module" src="/broadcast.js"></script>
+  </head>
+  <body>
+    <header class="top">
+      <a class="wordmark" href="/" aria-label="Crawlcast home"
+        ><span class="wave" aria-hidden="true">◖◉◗</span> CRAWLCAST</a
+      >
+      <nav aria-label="Viewer navigation">
+        <button class="active" id="map-nav">Live map</button
+        ><button id="list-nav" aria-haspopup="dialog">
+          Favourites <span id="count">0</span>
+        </button>
+      </nav>
+      <a class="control" id="dashboard" href="#">Broadcast control ↗</a>
+    </header>
+    <main>
+      <div class="kicker">
+        <span class="live-dot"></span> EARTH BROADCAST
+        <span class="slash">/</span> SEASON 01
+      </div>
+      <div class="mast">
+        <h1>World Dungeon<span>.</span></h1>
+        <div class="version">
+          <span>Website v2</span
+          ><button
+            id="version"
+            role="switch"
+            aria-label="Website v2"
+            aria-checked="false"
+          >
+            <i></i>
+          </button>
+        </div>
+      </div>
+      <div class="grid">
+        <section class="map-panel" aria-label="Live floor map">
+          <div class="panel-head">
+            <h2>Floor 01 <span>/</span> Crawler map</h2>
+            <span class="live"><i></i> ON AIR</span>
+          </div>
+          <div class="map" id="map">
+            <img
+              src="/art/floor-map.webp"
+              alt="First-floor map with four connected chambers around a loop"
+            />
+            <div class="coordinate">F01 &nbsp; / &nbsp; SECTOR MAP</div>
+            <button class="marker carl" id="pin-carl" aria-label="Watch Carl">
+              <i></i><b>Carl</b>
+            </button>
+            <button
+              class="marker donut"
+              id="pin-donut"
+              aria-label="Watch Princess Donut"
+            >
+              <i></i><b>Donut</b>
+            </button>
+            <div class="map-caption" id="map-caption">
+              Select a crawler signal to watch
+            </div>
+          </div>
+          <div class="transport">
+            <span class="signal-icon">▥</span
+            ><span
+              ><small>NOW TRANSMITTING</small
+              ><strong id="scene-title">Goblin motor pool</strong></span
+            ><button id="pause" aria-label="Pause broadcast">Ⅱ</button
+            ><button id="next" aria-label="Next scene">›</button>
+          </div>
+        </section>
+        <section class="camera" aria-label="Crawler camera">
+          <div class="panel-head">
+            <h2>Crawler camera</h2>
+            <span id="camera-no">CAM / 01</span>
+          </div>
+          <div class="still">
+            <button id="expand" aria-label="Enlarge camera still">⛶</button>
+            <img id="still" src="/art/goblins.webp" alt="" /><span id="cam-tag"
+              >WIDE FEED</span
+            >
+          </div>
+          <div class="report">
+            <small id="byline">FLOOR 01 · WIDE FEED</small>
+            <h2 id="who">Tune in to a crawler</h2>
+            <p id="commentary">
+              Select Carl or Princess Donut on the map to follow their camera.
+            </p>
+            <div class="actions">
+              <button class="save" id="save" hidden></button
+              ><button id="profile" class="plain" hidden>
+                Open full profile →
+              </button>
+            </div>
+            <p id="feedback" role="status"></p>
+          </div>
+        </section>
+      </div>
+      <section class="rundown">
+        <div class="rundown-head">
+          <h2>Broadcast rundown</h2>
+          <span>FLOOR 01 &nbsp; / &nbsp; LOOPING HIGHLIGHTS</span>
+        </div>
+        <div class="chapters" id="chapters"></div>
+      </section>
+      <footer>
+        <span>Borant Broadcast Network</span
+        ><span
+          >Unofficial fan broadcast · Based on Matt Dinniman’s
+          <em>Dungeon Crawler Carl</em></span
+        >
+      </footer>
+    </main>
+    <dialog id="drawer" aria-labelledby="dialog-title">
+      <div class="dialog-head">
+        <small>CRAWLCAST</small
+        ><button id="close" aria-label="Close dialog">×</button>
+      </div>
+      <h2 id="dialog-title"></h2>
+      <div id="dialog-body"></div>
+    </dialog>
+  </body>
+</html>

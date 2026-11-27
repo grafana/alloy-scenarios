@@ -1,0 +1,35 @@
+services:
+  alloy:
+    image: grafana/alloy:${GRAFANA_ALLOY_VERSION:-v1.19.2}
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    ports:
+      - ${ALLOY_PORT:-12345}:12345
+      - ${FARO_PORT:-12347}:12347
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy:ro
+      - positions:/var/lib/alloy/data
+    depends_on: [loki]
+  loki:
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.7.8}
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - storage:/loki
+      - ./loki-config.yaml:/etc/loki/local-config.yaml:ro
+    ports:
+      - ${LOKI_PORT:-3100}:3100
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-13.1.0}
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/dungeon/audience.json
+    ports:
+      - ${GRAFANA_PORT:-3000}:3000
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/dungeon:ro
+    depends_on: [loki]
+volumes:
+  positions:
+  storage:

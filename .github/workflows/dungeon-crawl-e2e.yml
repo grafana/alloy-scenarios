@@ -1,0 +1,44 @@
+name: Dungeon crawl browser journeys
+
+on:
+  pull_request:
+    paths:
+      - 'dungeon-crawl-live/**'
+      - '.github/workflows/dungeon-crawl-e2e.yml'
+      - 'image-versions.env'
+
+permissions:
+  contents: read
+
+jobs:
+  play:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: dungeon-crawl-live
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Start game and observability stack
+        run: docker compose --env-file ../image-versions.env -f docker-compose.yml -f docker-compose.coda.yml up -d --build
+      - name: Install Chromium
+        working-directory: dungeon-crawl-live/app
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Wait for the dashboard and Loki
+        run: |
+          curl --fail --silent --retry 40 --retry-delay 2 --retry-all-errors http://localhost:3000/api/dashboards/uid/crawlcast-audience --output /dev/null
+          curl --fail --silent --retry 40 --retry-delay 2 --retry-all-errors http://localhost:3100/ready
+      - name: Watch desktop and touch journeys
+        working-directory: dungeon-crawl-live/app
+        run: npm run test:e2e
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.yml -f docker-compose.coda.yml logs --tail=100

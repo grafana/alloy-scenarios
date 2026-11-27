@@ -1,0 +1,525 @@
+{
+  "uid": "crawlcast-audience",
+  "title": "Crawlcast \u00b7 Broadcast control",
+  "tags": [
+    "broadcast",
+    "faro",
+    "frontend"
+  ],
+  "schemaVersion": 39,
+  "version": 4,
+  "editable": false,
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "refresh": "5s",
+  "timezone": "browser",
+  "templating": {
+    "list": [
+      {
+        "type": "textbox",
+        "name": "session",
+        "label": "Focus viewer session",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "dungeon-loki"
+      },
+      "transparent": true,
+      "options": {
+        "mode": "html",
+        "content": "<div style=\"border-left:4px solid #d6f86b;background:#152325;padding:10px 16px;color:#eef4ee\"><div style=\"font:11px monospace;letter-spacing:2px;color:#d6f86b\">\u25c9 &nbsp; BORANT BROADCAST NETWORK &nbsp; / &nbsp; EARTH SEASON 01</div><div style=\"font-size:23px;font-weight:600\">Crawlcast audience control</div><div>Can viewers save the crawler they came to watch?</div></div>"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Viewers tuning in",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 6,
+        "h": 5
+      },
+      "description": "Distinct Faro sessions selecting a crawler signal per website version.",
+      "datasource": {
+        "type": "loki",
+        "uid": "dungeon-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count by (edition) (sum by (edition, viewer) (count_over_time({service_name=\"borant-broadcast\"} | json edition=\"event_data_site_version\", journey=\"event_data_journey\", event=\"event_name\", route=\"event_data_route\", viewer=\"session_id\", ms=\"event_data_duration_ms\" | event=\"crawler_opened\" | viewer!=\"\" [$__range])))",
+          "queryType": "instant",
+          "legendFormat": "{{edition}}"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "textMode": "value_and_name",
+        "graphMode": "none",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "text": {
+          "titleSize": 13,
+          "valueSize": 28
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "light-blue"
+          },
+          "displayName": "Site ${__field.name}"
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "rowsToFields",
+          "options": {
+            "mappings": [
+              {
+                "fieldName": "edition",
+                "handlerKey": "field.name"
+              },
+              {
+                "fieldName": "Value #A",
+                "handlerKey": "field.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Favourite journeys",
+      "type": "stat",
+      "gridPos": {
+        "x": 6,
+        "y": 3,
+        "w": 6,
+        "h": 5
+      },
+      "description": "Distinct journeys started. Retrying the same save counts once.",
+      "datasource": {
+        "type": "loki",
+        "uid": "dungeon-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count by (edition) (sum by (edition, journey) (count_over_time({service_name=\"borant-broadcast\"} | json edition=\"event_data_site_version\", journey=\"event_data_journey\", event=\"event_name\", route=\"event_data_route\", viewer=\"session_id\", ms=\"event_data_duration_ms\" | event=\"favourite_started\" | journey!=\"\" [$__range])))",
+          "queryType": "instant",
+          "legendFormat": "{{edition}}"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "textMode": "value_and_name",
+        "graphMode": "none",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "text": {
+          "titleSize": 13,
+          "valueSize": 28
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "super-light-yellow"
+          },
+          "displayName": "Site ${__field.name}"
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "rowsToFields",
+          "options": {
+            "mappings": [
+              {
+                "fieldName": "edition",
+                "handlerKey": "field.name"
+              },
+              {
+                "fieldName": "Value #A",
+                "handlerKey": "field.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Save completion",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 6,
+        "h": 5
+      },
+      "description": "Percentage of started journeys completing via either route during this time window.",
+      "datasource": {
+        "type": "loki",
+        "uid": "dungeon-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * ((count by (edition) ((sum by (edition, journey) (count_over_time({service_name=\"borant-broadcast\"} | json edition=\"event_data_site_version\", journey=\"event_data_journey\", event=\"event_name\" | event=\"favourite_saved\" | journey!=\"\" [$__range]))) and on (edition, journey) (sum by (edition, journey) (count_over_time({service_name=\"borant-broadcast\"} | json edition=\"event_data_site_version\", journey=\"event_data_journey\", event=\"event_name\" | event=\"favourite_started\" | journey!=\"\" [$__range]))))) or ((count by (edition) (sum by (edition, journey) (count_over_time({service_name=\"borant-broadcast\"} | json edition=\"event_data_site_version\", journey=\"event_data_journey\", event=\"event_name\" | event=\"favourite_started\" | journey!=\"\" [$__range])))) * 0)) / (count by (edition) (sum by (edition, journey) (count_over_time({service_name=\"borant-broadcast\"} | json edition=\"event_data_site_version\", journey=\"event_data_journey\", event=\"event_name\" | event=\"favourite_started\" | journey!=\"\" [$__range]))))",
+          "queryType": "instant",
+          "legendFormat": "{{edition}}"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "textMode": "value_and_name",
+        "graphMode": "none",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "text": {
+          "titleSize": 13,
+          "valueSize": 28
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "displayName": "Site ${__field.name}"
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "rowsToFields",
+          "options": {
+            "mappings": [
+              {
+                "fieldName": "edition",
+                "handlerKey": "field.name"
+              },
+              {
+                "fieldName": "Value #A",
+                "handlerKey": "field.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Affected journeys",
+      "type": "stat",
+      "gridPos": {
+        "x": 18,
+        "y": 3,
+        "w": 6,
+        "h": 5
+      },
+      "description": "Distinct journeys with a failed favourite save, including those later recovered.",
+      "datasource": {
+        "type": "loki",
+        "uid": "dungeon-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "((count by (edition) ((sum by (edition, journey) (count_over_time({service_name=\"borant-broadcast\"} | json edition=\"event_data_site_version\", journey=\"event_data_journey\", event=\"event_name\" | event=\"favourite_failed\" | journey!=\"\" [$__range]))) and on (edition, journey) (sum by (edition, journey) (count_over_time({service_name=\"borant-broadcast\"} | json edition=\"event_data_site_version\", journey=\"event_data_journey\", event=\"event_name\" | event=\"favourite_started\" | journey!=\"\" [$__range]))))) or ((count by (edition) (sum by (edition, journey) (count_over_time({service_name=\"borant-broadcast\"} | json edition=\"event_data_site_version\", journey=\"event_data_journey\", event=\"event_name\" | event=\"favourite_started\" | journey!=\"\" [$__range])))) * 0))",
+          "queryType": "instant",
+          "legendFormat": "{{edition}}"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "textMode": "value_and_name",
+        "graphMode": "none",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "text": {
+          "titleSize": 13,
+          "valueSize": 28
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "light-red"
+          },
+          "displayName": "Site ${__field.name}"
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "rowsToFields",
+          "options": {
+            "mappings": [
+              {
+                "fieldName": "edition",
+                "handlerKey": "field.name"
+              },
+              {
+                "fieldName": "Value #A",
+                "handlerKey": "field.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Favourite save failures over time",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 14,
+        "h": 7
+      },
+      "description": "Distinct affected journeys per rolling minute, split by website version.",
+      "datasource": {
+        "type": "loki",
+        "uid": "dungeon-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(count by (edition) (sum by (edition, journey) (count_over_time({service_name=\"borant-broadcast\"} | json edition=\"event_data_site_version\", journey=\"event_data_journey\", event=\"event_name\", route=\"event_data_route\", viewer=\"session_id\", ms=\"event_data_duration_ms\" | event=\"favourite_failed\" | journey!=\"\" [1m])))) or ((count by (edition) (sum by (edition, journey) (count_over_time({service_name=\"borant-broadcast\"} | json edition=\"event_data_site_version\", journey=\"event_data_journey\", event=\"event_name\", route=\"event_data_route\", viewer=\"session_id\", ms=\"event_data_duration_ms\" | event=\"favourite_started\" | journey!=\"\" [1m])))) * 0)",
+          "queryType": "range",
+          "legendFormat": "Site {{edition}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "decimals": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 18,
+            "showPoints": "auto"
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "Time to favourite \u00b7 p95",
+      "type": "stat",
+      "gridPos": {
+        "x": 14,
+        "y": 8,
+        "w": 10,
+        "h": 7
+      },
+      "description": "From first save click to confirmed favourite. Includes retries and full-profile recovery. Only completed journeys have a duration.",
+      "datasource": {
+        "type": "loki",
+        "uid": "dungeon-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "quantile_over_time(0.95, {service_name=\"borant-broadcast\"} | json edition=\"event_data_site_version\", journey=\"event_data_journey\", event=\"event_name\", route=\"event_data_route\", viewer=\"session_id\", ms=\"event_data_duration_ms\" | event=\"favourite_saved\" | unwrap ms | __error__=\"\" [$__range]) by (edition)",
+          "queryType": "instant",
+          "legendFormat": "{{edition}}"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "textMode": "value_and_name",
+        "graphMode": "none",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "light-purple"
+          },
+          "displayName": "Site ${__field.name}"
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "rowsToFields",
+          "options": {
+            "mappings": [
+              {
+                "fieldName": "edition",
+                "handlerKey": "field.name"
+              },
+              {
+                "fieldName": "Value #A",
+                "handlerKey": "field.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Where viewers finish saving",
+      "type": "bargauge",
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 8,
+        "h": 8
+      },
+      "description": "Completed journeys by website version and save route.",
+      "datasource": {
+        "type": "loki",
+        "uid": "dungeon-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "instant",
+          "expr": "count by (path) (sum by (path, journey) (count_over_time({service_name=\"borant-broadcast\"} | json edition=\"event_data_site_version\", journey=\"event_data_journey\", event=\"event_name\", route=\"event_data_route\" | event=\"favourite_saved\" | journey!=\"\" | label_format path=`{{.edition}} / {{.route}}` [$__range])))"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "displayName": "${__field.name}"
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "rowsToFields",
+          "options": {
+            "mappings": [
+              {
+                "fieldName": "path",
+                "handlerKey": "field.name"
+              },
+              {
+                "fieldName": "Value #A",
+                "handlerKey": "field.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Viewer session \u00b7 event timeline",
+      "type": "logs",
+      "gridPos": {
+        "x": 8,
+        "y": 15,
+        "w": 16,
+        "h": 8
+      },
+      "description": "The website link selects one Faro session. Clear the session field to see all viewers. Expand an error for its browser stack.",
+      "datasource": {
+        "type": "loki",
+        "uid": "dungeon-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "range",
+          "expr": "{service_name=\"borant-broadcast\"} |= \"$session\" | json | event_domain=\"broadcast\" or kind=\"exception\" | line_format `{{if eq .kind \"exception\"}}ERROR \u00b7 {{.context_site_version}} \u00b7 {{.value}}{{else}}{{.event_data_site_version}} \u00b7 {{.event_name}} \u00b7 {{.event_data_crawler}} {{.event_data_route}} {{.event_data_reason}} \u00b7 {{.event_data_scene}}{{end}}`"
+        }
+      ],
+      "options": {
+        "sortOrder": "Ascending",
+        "showTime": true,
+        "enableLogDetails": true,
+        "wrapLogMessage": true
+      }
+    }
+  ]
+}
