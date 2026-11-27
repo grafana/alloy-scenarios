@@ -58,7 +58,7 @@ services:
   # golang image, so it runs natively on amd64 and arm64 (Apple Silicon)
   # and the flame graph shows real frames rather than QEMU emulation.
   stress-cpu:
-    image: golang:1.26@sha256:670bb5aa5349ae03b8516764718486f4f16399134bdc9acd0c46a23f043ab05c
+    image: golang:1.26@sha256:6e59e17a20f13c102e49d82dffab66d41cffe6c266b225d82794328aea859ab5
     container_name: stress-cpu
     volumes:
       - ./app:/app
@@ -71,7 +71,7 @@ services:
   # so its flame graph splits between main.memLoop and the Go runtime's
   # allocation/memclr paths and looks visibly different from stress-cpu.
   stress-mem:
-    image: golang:1.26@sha256:670bb5aa5349ae03b8516764718486f4f16399134bdc9acd0c46a23f043ab05c
+    image: golang:1.26@sha256:6e59e17a20f13c102e49d82dffab66d41cffe6c266b225d82794328aea859ab5
     container_name: stress-mem
     volumes:
       - ./app:/app
