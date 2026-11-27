@@ -39,7 +39,7 @@ class DeliveryJournal(Workspace):
         def tail(size):
             positions.write_text(f'positions:\n  ? path: /exports/{file.name}\n    labels: test\n  : "{size}"\n')
             with patch.object(export_signals, "urlopen", side_effect=ConnectionRefusedError):
-                export_signals.observe_collector(db, positions, "http://alloy")
+                export_signals.observe_collector(db, positions, "http://alloy", folder)
             return next(s for s in app.status()["sessions"] if s["key"] == file.stem)
         with patch.object(export_signals, "post", side_effect=OSError("private error details")):
             export_signals.scan(db, folder, "http://alloy")

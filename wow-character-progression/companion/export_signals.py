@@ -311,7 +311,7 @@ def delivery_tables(db):
     db.execute("CREATE TABLE IF NOT EXISTS health (id INTEGER PRIMARY KEY, at REAL, ready INTEGER)")
 
 
-def observe_collector(db, positions, endpoint):
+def observe_collector(db, positions, endpoint, folder):
     try:
         with urlopen(endpoint, timeout=2) as response:
             ready = response.status == 200
@@ -324,7 +324,11 @@ def observe_collector(db, positions, endpoint):
     # Alloy file tailer persists YAML complex keys with exact path, label set and byte offset.
     offsets = re.findall(r'^  \? path: /exports/([0-9a-f]{64})\.jsonl\n    labels: [^\n]+\n  : "(\d+)"$', data, re.M)
     with db:
-        db.executemany("INSERT OR REPLACE INTO tail VALUES (?,?)", offsets)
+        live = {p.stem for p in folder.glob("*.jsonl")}
+        stale = [r for r in db.execute("SELECT session FROM tail") if r[0] not in live]
+        db.executemany("DELETE FROM tail WHERE session=?", stale)
+        db.executemany("INSERT OR REPLACE INTO tail VALUES (?,?)",
+                       ((key, size) for key, size in offsets if key in live))
         db.execute("INSERT OR REPLACE INTO health VALUES (1,?,?)", (time.time(), ready))
 
 
@@ -368,6 +372,6 @@ if __name__ == "__main__":
     db.execute("CREATE TABLE IF NOT EXISTS checkpoint (session TEXT PRIMARY KEY, stamp INTEGER)")
     delivery_tables(db)
     while True:
-        observe_collector(db, Path("/alloy-data/loki.source.file.recordings/positions.yml"), "http://alloy:12345/-/ready")
+        observe_collector(db, Path("/alloy-data/loki.source.file.recordings/positions.yml"), "http://alloy:12345/-/ready", Path("/exports"))
         scan(db, Path("/exports"), "http://alloy:4318")
         time.sleep(10)
