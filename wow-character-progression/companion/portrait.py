@@ -68,9 +68,9 @@ class Portraits:
                     return {"url":url,"kind":kind}
         raise ValueError("Blizzard has not published a portrait yet.")
 
-    def lookup(self, header, key, name=None):
-        names = self.config.setdefault("names", {})
-        name = (name or names.get(key) or header["character"]).strip()
+    def lookup(self, header, key, name):
+        if not name:
+            return {"message":"Waiting for a real character save with a full name."}
         cached = self.cache.get((key, name))
         if cached and cached[0] > time.monotonic():
             return cached[1]
@@ -84,8 +84,5 @@ class Portraits:
             result = {"message":"Battle.net is unavailable. Try again later."}
         except ValueError as exc:
             result = {"message":str(exc)}
-        if result.get("url") and names.get(key) != name:
-            names[key] = name
-            save_private(self.path,json.dumps(self.config))
         self.cache[key,name] = time.monotonic()+(3600 if result.get("url") else 60),result
         return result

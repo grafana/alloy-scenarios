@@ -13,6 +13,7 @@ def connect(folder):
     db = sqlite3.connect(folder / ".journal.sqlite", timeout=5)
     db.execute("CREATE TABLE IF NOT EXISTS entry (key TEXT PRIMARY KEY, header TEXT, stats TEXT, origin TEXT)")
     db.execute("CREATE TABLE IF NOT EXISTS latest (id INTEGER PRIMARY KEY, report TEXT)")
+    db.execute("CREATE TABLE IF NOT EXISTS character_name (character_key TEXT PRIMARY KEY, full_name TEXT)")
     return db
 
 
@@ -54,7 +55,20 @@ def index(db, key, header, rows, origin):
                (key, json.dumps(summary), json.dumps(stats), origin))
 
 
-def note_read(folder, sessions, events, new, origin):
+def saved_name(character, directory):
+    parts = character.split()
+    if len(parts) == 2:
+        first, surname = parts
+    else:
+        first, _, surname = (directory or "").partition("-")
+        if first.casefold() != character.casefold():
+            return None
+    if not surname or not all(c.isalpha() or c in "-’'" for c in surname):
+        return None
+    return first + " " + surname
+
+
+def note_read(folder, sessions, events, new, origin, directory=None):
     if not sessions:
         return
     latest = max(sessions, key=lambda h: h["ts"])
@@ -65,6 +79,9 @@ def note_read(folder, sessions, events, new, origin):
         offset = 0
         for header in sessions:
             key = session_key(header)
+            name = saved_name(header["character"], directory)
+            if name and origin == "real":
+                db.execute("INSERT OR REPLACE INTO character_name VALUES (?,?)", (character_key(header), name))
             if not db.execute("SELECT 1 FROM entry WHERE key=? AND origin IS NOT NULL", (key,)).fetchone():
                 index(db, key, header, events[offset:offset+header["rows"]], origin)
             offset += header["rows"]
@@ -85,11 +102,12 @@ def history(folder, mode="real", selected=None):
                 continue
         last = db.execute("SELECT report FROM latest WHERE id=?", (1 if mode == "real" else 2,)).fetchone()
         report = json.loads(last[0]) if last else None
+        full_names = dict(db.execute("SELECT character_key,full_name FROM character_name"))
         characters = []
         for raw, origin in db.execute("SELECT header,origin FROM entry GROUP BY json_extract(header,'$.character_key') "
                                      "ORDER BY max(json_extract(header,'$.ts')) DESC"):
             h = json.loads(raw)
-            characters.append({k: h[k] for k in ("character_key","character","realm","region")} | {"origin":origin})
+            characters.append({k: h[k] for k in ("character_key","character","realm","region")} | {"origin":origin, "full_name":full_names.get(h["character_key"])})
         if selected not in {c["character_key"] for c in characters}:
             selected = None
         if selected is None and report:
@@ -97,7 +115,7 @@ def history(folder, mode="real", selected=None):
             selected = ref[0] if ref else None
         if not selected and characters:
             selected = characters[0]["character_key"]
-        entries = [dict(json.loads(header), key=key, stats=json.loads(stats), origin=origin)
+        entries = [dict(json.loads(header), key=key, stats=json.loads(stats), origin=origin, full_name=full_names.get(selected))
                    for key, header, stats, origin in db.execute(
                        "SELECT key,header,stats,origin FROM entry WHERE json_extract(header,'$.character_key')=? "
                        "ORDER BY json_extract(header,'$.ts') DESC LIMIT 40", (selected,))]

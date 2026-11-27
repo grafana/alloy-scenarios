@@ -19,7 +19,7 @@ def scan(root, output, seen):
                 continue
             sessions, events = read_file(path, allow_empty=True)
             published = write_sessions(output, sessions, events)
-            note_read(output, sessions, events, published, "real")
+            note_read(output, sessions, events, published, "real", path.parents[1].name)
             seen[path] = signature
             if sessions:
                 print(f"Exported {len(published)} new saved sessions for {sessions[0]['character']}.", flush=True)

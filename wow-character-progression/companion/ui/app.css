@@ -585,25 +585,14 @@ input {
 .receipt-heading {
   margin-top: 18px;
 }
-#portrait-controls summary {
-  display: list-item;
-  font:
-    italic 15px Georgia,
-    serif;
-}
-#portrait-controls summary::before {
-  content: none;
-}
-#portrait-controls p,
+#portrait-note,
 #battle-state {
   font-size: 13px;
   color: var(--muted);
+  margin-top: 8px;
 }
 #portrait img {
   height: 200px;
   width: 100%;
   object-fit: contain;
-}
-#portrait-controls form {
-  max-width: 340px;
 }

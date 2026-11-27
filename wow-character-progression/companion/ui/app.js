@@ -140,6 +140,7 @@ function drawRoute(stats, show) {
 }
 let selected = localStorage.getItem("chronicle-character") || "";
 let portraitSession,
+  portraitNext = 0,
   portraitRequest = 0,
   refreshRequest = 0;
 function renderCharacter(s, last) {
@@ -150,7 +151,12 @@ function renderCharacter(s, last) {
       ...s.characters.map((c) => {
         const opt = node(
           "option",
-          c.character + " · " + c.realm + " (" + c.region.toUpperCase() + ")",
+          (c.full_name || c.character) +
+            " · " +
+            c.realm +
+            " (" +
+            c.region.toUpperCase() +
+            ")",
         );
         opt.value = c.character_key;
         return opt;
@@ -164,7 +170,7 @@ function renderCharacter(s, last) {
     return;
   }
   const v = last.stats;
-  const title = node("h3", last.character),
+  const title = node("h3", last.full_name || last.character),
     identity = node(
       "p",
       [
@@ -206,21 +212,33 @@ function renderCharacter(s, last) {
     if (value) notes.append(node("p", label + " · " + value));
   }
   el("character-sheet").replaceChildren(title, identity, values, notes);
-  const portraitKey = last.key + ":" + s.portrait_configured;
+  const portraitKey = [last.key, last.full_name, s.portrait_configured].join(
+    "/",
+  );
   if (portraitSession !== portraitKey) {
     portraitSession = portraitKey;
+    portraitNext = 0;
     portraitRequest++;
     el("portrait").hidden = true;
     el("character-image").removeAttribute("src");
-    el("portrait-controls").hidden = last.origin !== "real";
-    el("portrait-name").value = last.character;
+    el("portrait-note").hidden = last.origin !== "real";
     el("portrait-note").textContent = s.portrait_configured
-      ? "Blizzard may publish a render after a level 10 logout."
-      : "Add Battle.net application credentials in Settings to enable portraits.";
-    if (s.portrait_configured && last.origin === "real") loadPortrait(last);
+      ? last.full_name
+        ? "Checking Battle.net portrait…"
+        : "Waiting for the character’s full name in a WoW save."
+      : "Automatic Battle.net portraits are available once application credentials are set in Settings.";
+  }
+  if (
+    s.portrait_configured &&
+    last.origin === "real" &&
+    last.full_name &&
+    Date.now() >= portraitNext
+  ) {
+    portraitNext = Date.now() + 5 * 60 * 1000;
+    loadPortrait(last);
   }
 }
-async function loadPortrait(last, name) {
+async function loadPortrait(last) {
   const request = ++portraitRequest;
   try {
     const r = await fetch("/portrait", {
@@ -229,7 +247,6 @@ async function loadPortrait(last, name) {
       body: JSON.stringify({
         session: last.key,
         character: last.character_key,
-        name,
       }),
     });
     const result = await r.json();
@@ -238,7 +255,9 @@ async function loadPortrait(last, name) {
       result.error || result.message || "Official Battle.net portrait.";
     el("portrait").hidden = !result.url;
     if (result.url) {
-      el("character-image").alt = last.character + " · Battle.net render";
+      portraitNext = Date.now() + 3600000;
+      el("character-image").alt =
+        (last.full_name || last.character) + " · Battle.net render";
       el("character-image").src = result.url;
     }
   } catch {
@@ -256,11 +275,6 @@ el("character-select").onchange = () => {
   refresh().catch((e) => {
     el("notice").textContent = e.message;
   });
-};
-el("portrait-form").onsubmit = (e) => {
-  e.preventDefault();
-  if (state.sessions[0])
-    loadPortrait(state.sessions[0], el("portrait-name").value);
 };
 el("battle-form").onsubmit = async (e) => {
   e.preventDefault();

@@ -115,7 +115,7 @@ class Companion:
                 with (self.folder / (key + ".jsonl")).open() as stream:
                     header = json.loads(next(stream))
             with self.portrait_lock:
-                return self.portraits.lookup(header, item["character_key"], data.get("name"))
+                return self.portraits.lookup(header, item["character_key"], item["full_name"])
         elif route == "/settings":
             self.settings(data)
         elif route == "/simulate":

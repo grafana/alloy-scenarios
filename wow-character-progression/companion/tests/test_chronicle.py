@@ -120,9 +120,32 @@ class DeliveryJournal(Workspace):
         with patch("portrait.urlopen", side_effect=[stream({"access_token":"fake","expires_in":600}),stream(media)]) as api:
             result = portraits.lookup(header,"recorded-character","River Stone")
             self.assertEqual(result["kind"], "avatar")
-            self.assertEqual(portraits.lookup(header,"recorded-character"), result)
+            self.assertEqual(portraits.lookup(header,"recorded-character","River Stone"), result)
             self.assertEqual(api.call_count, 2)
         media["character"]["id"] = 44
         with patch("portrait.urlopen",return_value=stream(media)):
             mismatch = portraits.lookup(header,"different-recording","River Stone")
         self.assertNotIn("url",mismatch)
+
+    def test_full_name_comes_from_matching_character_save(self):
+        from journal import saved_name
+        self.assertEqual(saved_name("River", "River-Stone"), "River Stone")
+        self.assertEqual(saved_name("River Stone", None), "River Stone")
+        self.assertIsNone(saved_name("River", "Someone-Stone"))
+        self.assertIsNone(saved_name("River", "River"))
+
+    def test_portrait_uses_selected_save_without_user_entered_name(self):
+        client = self.tmp / "client"
+        path = client / "WTF/Account/test/Realm/Morrow-Stone/SavedVariables/AlloyRoute.lua"
+        path.parent.mkdir(parents=True)
+        shutil.copyfile(FIXTURES / "undead_warrior.lua", path)
+        output = self.tmp / "exports"
+        app = Companion(output, client, scan)
+        scan(client, output, {})
+        status = app.status()
+        item = status["sessions"][0]
+        self.assertEqual(item["full_name"], "Morrow Stone")
+        self.assertEqual(status["characters"][0]["full_name"], "Morrow Stone")
+        with patch.object(app.portraits, "lookup", return_value={"message":"Waiting"}) as lookup:
+            app.action("/portrait", {"character":item["character_key"],"session":item["key"]})
+            self.assertEqual(lookup.call_args.args[2], "Morrow Stone")
