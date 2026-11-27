@@ -23,7 +23,7 @@ services:
       - prometheus
 
   loki:
-    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.7.8}
+    image: grafana/loki:${GRAFANA_LOKI_VERSION:-3.7.10}
     ports:
       - 3100:3100/tcp
     volumes:
