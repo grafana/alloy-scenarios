@@ -229,6 +229,8 @@ Confirm the following items before you submit your scenario:
   - Expected output and what to look for
   - Explanation of key configuration elements
 - Add the scenario to `scenarios.yml`, then run `python3 .github/scripts/generate_scenarios_docs.py` to update the tables in this `README.md` and the Grafana Alloy documentation
+- Set `ci: smoke` for scenarios supported by the Linux Compose smoke-test workflow, or `ci: {skip: "reason"}` for an explicit exclusion. The generator also updates `.github/scenario-list.txt`; don't edit that file directly. Existing exclusions marked as not yet validated need a successful boot test before being enabled.
+- Smoke tests check startup, not telemetry correctness. PRs affecting more than eight enabled scenarios sample eight; a manual `validate-scenarios` run checks the full enabled list. Kubernetes has a separate workflow.
 - Ensure the scenario works with the centralized image management system
 - Verify all components start correctly with `docker compose up -d`
 
