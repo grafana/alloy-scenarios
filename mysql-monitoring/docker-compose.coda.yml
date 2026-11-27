@@ -1,6 +1,6 @@
 services:
   mysql:
-    image: mysql:9.7@sha256:257388edf9c84dbc04c763625446d5f3fa6ed60d1b0873bc552c614ba0a7ab4e
+    image: mysql:9.7@sha256:1f2ca53a9e94ff9f1f313099fa7dc7fb2f72e180ca5b2ef83574031e451bbbf1
     environment:
       - MYSQL_ROOT_PASSWORD=alloy
       - MYSQL_DATABASE=alloy
